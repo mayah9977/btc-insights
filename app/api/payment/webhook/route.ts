@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db"; // Prisma or DB 연결 파일
+
+export const runtime = "nodejs"; // 🔥 Stripe는 Edge 런타임 불가
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
@@ -8,7 +9,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const sig = req.headers.get("stripe-signature")!;
+  const sig = req.headers.get("stripe-signature");
+
+  if (!sig) {
+    return new NextResponse("Missing Stripe signature", { status: 400 });
+  }
 
   let event: Stripe.Event;
 
@@ -18,25 +23,26 @@ export async function POST(req: Request) {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-  } catch {
+  } catch (err) {
+    console.error("[STRIPE WEBHOOK ERROR]", err);
     return new NextResponse("Webhook Error", { status: 400 });
   }
 
+  // ✅ 결제 완료 이벤트 수신 확인용
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    const email = session.customer_email;
 
-    if (email) {
-      await db.user.update({
-        where: { email },
-        data: {
-          isPaid: true,
-          paidUntil: new Date(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
-          ),
-        },
-      });
-    }
+    console.log("[STRIPE] Checkout completed", {
+      email: session.customer_email,
+      id: session.id,
+    });
+
+    /**
+     * 🔒 DB 연동은 2단계에서 추가
+     * - Prisma
+     * - Firebase
+     * - Supabase
+     */
   }
 
   return NextResponse.json({ received: true });
