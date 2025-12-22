@@ -19,12 +19,14 @@ type Churn = {
   at: number;
 };
 
-export default function VIPUserDetailPage({
-  params,
-}: {
-  params: { userId: string };
-}) {
-  const { userId } = params;
+type PageProps = {
+  params: {
+    userId: string;
+  };
+};
+
+export default function VIPUserDetailPage(props: PageProps) {
+  const { userId } = props.params;
 
   const [audit, setAudit] = useState<Audit[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -35,24 +37,29 @@ export default function VIPUserDetailPage({
     fetch(`/api/admin/vip/user/${userId}`)
       .then((r) => r.json())
       .then((d) => {
-        setAudit(d.audit);
-        setUsage(d.usage);
-        setChurn(d.churn);
-        setRetention(d.retention);
+        setAudit(d.audit ?? []);
+        setUsage(d.usage ?? []);
+        setChurn(d.churn ?? []);
+        setRetention(d.retention ?? 'UNKNOWN');
       });
   }, [userId]);
 
   return (
     <main style={{ padding: 24 }}>
       <h1>👤 VIP User Detail</h1>
-      <p>User: <b>{userId}</b></p>
-      <p>Retention Signal: <b>{retention}</b></p>
+      <p>
+        User: <b>{userId}</b>
+      </p>
+      <p>
+        Retention Signal: <b>{retention}</b>
+      </p>
 
       <h2>📜 Audit</h2>
       <ul>
         {audit.map((a, i) => (
           <li key={i}>
-            {new Date(a.at).toLocaleString()} — {a.reason} ({a.before} → {a.after})
+            {new Date(a.at).toLocaleString()} — {a.reason} ({a.before} →{' '}
+            {a.after})
           </li>
         ))}
       </ul>

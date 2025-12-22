@@ -1,11 +1,7 @@
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // 🔥 Stripe는 Edge 런타임 불가
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2023-10-16",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -24,25 +20,14 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err) {
-    console.error("[STRIPE WEBHOOK ERROR]", err);
+    console.error("Stripe webhook error:", err);
     return new NextResponse("Webhook Error", { status: 400 });
   }
 
-  // ✅ 결제 완료 이벤트 수신 확인용
+  // TODO: 결제 완료 후 DB 처리 (다음 단계에서 추가)
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-
-    console.log("[STRIPE] Checkout completed", {
-      email: session.customer_email,
-      id: session.id,
-    });
-
-    /**
-     * 🔒 DB 연동은 2단계에서 추가
-     * - Prisma
-     * - Firebase
-     * - Supabase
-     */
+    console.log("✅ Payment completed:", session.id);
   }
 
   return NextResponse.json({ received: true });
