@@ -20,13 +20,11 @@ type Churn = {
 };
 
 type PageProps = {
-  params: {
-    userId: string;
-  };
+  params: Promise<{ userId: string }>;
 };
 
-export default function VIPUserDetailPage(props: PageProps) {
-  const { userId } = props.params;
+export default function VIPUserDetailPage({ params }: PageProps) {
+  const [userId, setUserId] = useState<string>('');
 
   const [audit, setAudit] = useState<Audit[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -34,15 +32,21 @@ export default function VIPUserDetailPage(props: PageProps) {
   const [retention, setRetention] = useState<string>('UNKNOWN');
 
   useEffect(() => {
-    fetch(`/api/admin/vip/user/${userId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setAudit(d.audit ?? []);
-        setUsage(d.usage ?? []);
-        setChurn(d.churn ?? []);
-        setRetention(d.retention ?? 'UNKNOWN');
-      });
-  }, [userId]);
+    params.then(({ userId }) => {
+      setUserId(userId);
+
+      fetch(`/api/admin/vip/user/${userId}`)
+        .then((r) => r.json())
+        .then((d) => {
+          setAudit(d.audit ?? []);
+          setUsage(d.usage ?? []);
+          setChurn(d.churn ?? []);
+          setRetention(d.retention ?? 'UNKNOWN');
+        });
+    });
+  }, [params]);
+
+  if (!userId) return null;
 
   return (
     <main style={{ padding: 24 }}>
@@ -58,8 +62,7 @@ export default function VIPUserDetailPage(props: PageProps) {
       <ul>
         {audit.map((a, i) => (
           <li key={i}>
-            {new Date(a.at).toLocaleString()} — {a.reason} ({a.before} →{' '}
-            {a.after})
+            {new Date(a.at).toLocaleString()} — {a.reason} ({a.before} → {a.after})
           </li>
         ))}
       </ul>
