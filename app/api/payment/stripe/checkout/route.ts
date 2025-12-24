@@ -1,38 +1,36 @@
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-04-10",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-export async function POST() {
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "AI Casino PRO Access",
-            },
-            unit_amount: 1999, // $19.99
-            recurring: { interval: "month" },
-          },
-          quantity: 1,
-        },
-      ],
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/casino?paid=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/casino`,
-    });
+export async function POST(req: Request) {
+  const body = await req.text();
+  const sig = req.headers.get("stripe-signature");
 
-    return NextResponse.json({ url: session.url });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: "Stripe checkout failed" },
-      { status: 500 }
-    );
+  if (!sig) {
+    return new NextResponse("Missing stripe signature", { status: 400 });
   }
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    console.error("[Stripe Webhook Error]", err);
+    return new NextResponse("Webhook Error", { status: 400 });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const email = session.customer_email;
+
+    // ✅ TODO: DB 연동은 나중에
+    console.log("[Stripe] Payment completed for:", email);
+  }
+
+  return NextResponse.json({ received: true });
 }
