@@ -1,17 +1,16 @@
+// app/api/vip/sse/route.ts
+
 import { NextRequest } from 'next/server';
+import { addVIPClient } from '@/lib/vip/vipSSEHub';
 
 export const dynamic = 'force-dynamic';
-
-let clients: ReadableStreamDefaultController[] = [];
+export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const stream = new ReadableStream({
+  const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      clients.push(controller);
-
-      req.signal.addEventListener('abort', () => {
-        clients = clients.filter((c) => c !== controller);
-      });
+      const cleanup = addVIPClient(controller);
+      req.signal.addEventListener('abort', cleanup);
     },
   });
 
@@ -22,10 +21,4 @@ export async function GET(req: NextRequest) {
       Connection: 'keep-alive',
     },
   });
-}
-
-/** 🔥 VIP 변경 시 호출 */
-export function pushVIPUpdate(userId: string, vipLevel: string) {
-  const payload = `data: ${JSON.stringify({ userId, vipLevel })}\n\n`;
-  clients.forEach((c) => c.enqueue(payload));
 }
