@@ -1,14 +1,22 @@
+// app/api/admin/vip/user/[userId]/route.ts
+
 import { NextResponse } from 'next/server';
 import { readAudits } from '@/lib/vip/vipAuditStore';
 import { readUsageLogs } from '@/lib/vip/vipUsageLog';
 import { readChurnLogs } from '@/lib/vip/vipChurn';
 import { inferRetentionReason } from '@/lib/vip/vipRetention';
 
+type Context = {
+  params: Promise<{
+    userId: string;
+  }>;
+};
+
 export async function GET(
-  _: Request,
-  { params }: { params: { userId: string } }
+  _req: Request,
+  { params }: Context
 ) {
-  const { userId } = params;
+  const { userId } = await params;
 
   return NextResponse.json({
     audit: readAudits().filter((a) => a.userId === userId),
