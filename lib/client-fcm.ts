@@ -1,32 +1,28 @@
 // lib/client-fcm.ts
-import { getToken } from "firebase/messaging";
-import { messaging } from "./firebase-client";
+import { getToken } from 'firebase/messaging';
+import { messaging } from './firebase-client';
 
 export async function subscribeTopic(topic: string) {
-  if (!messaging) throw new Error("Messaging not supported on this browser.");
+  if (!messaging) {
+    throw new Error('Messaging not supported on this browser.');
+  }
 
   const token = await getToken(messaging, {
-    vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+    vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY!,
   });
 
-  const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_SITE_URL || "";
+  if (!token) {
+    throw new Error('Failed to get FCM token');
+  }
 
-  const res = await fetch(`${baseUrl}/api/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, topics: [topic] }),
+  // 서버에 토큰 전달 (예시)
+  await fetch('/api/fcm/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, topic }),
   });
 
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return token;
 }
-
-export async function subscribeSymbol(symbol: string) {
-  return subscribeTopic(`sym-${symbol}`);
-}
-
 
 
