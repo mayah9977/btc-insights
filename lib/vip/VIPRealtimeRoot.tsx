@@ -1,20 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import { ReactNode, useState } from 'react';
+import type { VIPLevel } from './vipTypes';
 import { VIPProvider } from './vipClient';
 import { useVipRealtime } from './useVipRealtime';
-import { VIPLevel } from './vipTypes';
 
-export function VIPRealtimeRoot({
+type Props = {
+  initialLevel: VIPLevel;
+  children: ReactNode;
+};
+
+export default function VIPRealtimeRoot({
   initialLevel,
   children,
-}: {
-  initialLevel: VIPLevel;
-  children: React.ReactNode;
-}) {
+}: Props) {
   const [vip, setVip] = useState<VIPLevel>(initialLevel);
 
-  useVipRealtime(setVip);
+  const userId = 'dev-user'; // TODO: 실제 로그인 유저 ID
 
-  return <VIPProvider vipLevel={vip}>{children}</VIPProvider>;
+  // ✅ 반드시 2개 인자
+  useVipRealtime(userId, setVip);
+
+  return (
+    <VIPProvider vipLevel={vip}>
+      {children}
+    </VIPProvider>
+  );
 }
