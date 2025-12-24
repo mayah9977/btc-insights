@@ -1,13 +1,18 @@
 // app/[locale]/casino/vip/page.tsx
+
 import { redirect } from 'next/navigation';
 import VIPClientPage from './vipClientPage';
 import { calcVIPLevel } from '../lib/vipAccess';
 
 type PageProps = {
-  params: { locale: string };
+  params: Promise<{
+    locale: string;
+  }>;
 };
 
 export default async function VIPPage({ params }: PageProps) {
+  const { locale } = await params;
+
   const vipLevel = calcVIPLevel({
     hasPayment: true,
     daysUsed: 20,
@@ -15,7 +20,7 @@ export default async function VIPPage({ params }: PageProps) {
   });
 
   if (vipLevel === 'FREE') {
-    redirect(`/${params.locale}/login`);
+    redirect(`/${locale}/login`);
   }
 
   return <VIPClientPage vipLevel={vipLevel} />;

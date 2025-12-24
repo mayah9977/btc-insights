@@ -23,8 +23,8 @@ type PageProps = {
   params: Promise<{ userId: string }>;
 };
 
-export default function VIPUserDetailPage({ params }: PageProps) {
-  const [userId, setUserId] = useState<string>('');
+export default function VIPUserDetailPage(props: PageProps) {
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [audit, setAudit] = useState<Audit[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -32,31 +32,27 @@ export default function VIPUserDetailPage({ params }: PageProps) {
   const [retention, setRetention] = useState<string>('UNKNOWN');
 
   useEffect(() => {
-    params.then(({ userId }) => {
+    props.params.then(({ userId }) => {
       setUserId(userId);
 
       fetch(`/api/admin/vip/user/${userId}`)
         .then((r) => r.json())
         .then((d) => {
-          setAudit(d.audit ?? []);
-          setUsage(d.usage ?? []);
-          setChurn(d.churn ?? []);
-          setRetention(d.retention ?? 'UNKNOWN');
+          setAudit(d.audit);
+          setUsage(d.usage);
+          setChurn(d.churn);
+          setRetention(d.retention);
         });
     });
-  }, [params]);
+  }, [props.params]);
 
-  if (!userId) return null;
+  if (!userId) return <div>Loading...</div>;
 
   return (
     <main style={{ padding: 24 }}>
       <h1>👤 VIP User Detail</h1>
-      <p>
-        User: <b>{userId}</b>
-      </p>
-      <p>
-        Retention Signal: <b>{retention}</b>
-      </p>
+      <p>User: <b>{userId}</b></p>
+      <p>Retention Signal: <b>{retention}</b></p>
 
       <h2>📜 Audit</h2>
       <ul>
