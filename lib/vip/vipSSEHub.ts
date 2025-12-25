@@ -1,4 +1,4 @@
-// lib/vip/vipSseHub.ts
+// lib/vip/vipSSEHub.ts
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>;
 };

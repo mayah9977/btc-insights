@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest } from 'next/server';
-import { addVipClient } from '@/lib/vip/vipSseHub';
+import { addVipClient } from '@/lib/vip/vipSSEHub';
 
 type VipPayload =
   | { type: 'vip'; vipLevel: string }

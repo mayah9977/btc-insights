@@ -6,7 +6,7 @@ import {
   forceExpireVIP,
 } from './vipDB';
 import { appendAudit } from './vipAuditStore';
-import { pushVipUpdate } from './vipSseHub';
+import { pushVipUpdate } from './vipSSEHub';
 import { notifyVipUpgrade } from './vipNotifier';
 
 /* =========================
