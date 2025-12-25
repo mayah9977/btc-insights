@@ -1,16 +1,48 @@
-// app/api/vip/sse/route.ts
-
-import { NextRequest } from 'next/server';
-import { addVIPClient } from '@/lib/vip/vipSSEHub';
-
-export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+import { NextRequest } from 'next/server';
+import { addVipClient } from '@/lib/vip/vipSseHub';
+
+type VipPayload =
+  | { type: 'vip'; vipLevel: string }
+  | { type: 'heartbeat' };
+
+const encoder = new TextEncoder();
+
 export async function GET(req: NextRequest) {
+  const userId = req.nextUrl.searchParams.get('userId');
+  if (!userId) {
+    return new Response('Missing userId', { status: 400 });
+  }
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const cleanup = addVIPClient(controller);
-      req.signal.addEventListener('abort', cleanup);
+      const removeClient = addVipClient(userId, controller);
+
+      // 초기 상태
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'vip',
+            vipLevel: 'FREE',
+          })}\n\n`
+        )
+      );
+
+      // heartbeat
+      const heartbeat = setInterval(() => {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`
+          )
+        );
+      }, 10_000);
+
+      req.signal.addEventListener('abort', () => {
+        clearInterval(heartbeat);
+        removeClient();
+        controller.close();
+      });
     },
   });
 

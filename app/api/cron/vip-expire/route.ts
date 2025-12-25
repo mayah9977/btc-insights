@@ -1,33 +1,49 @@
+// app/api/cron/vip-expire/route.ts
 import { NextResponse } from 'next/server';
 import {
   getUserVIPState,
   applyAutoExtendIfEnabled,
 } from '@/lib/vip/vipDB';
-
-import { resolveVIPWithGrace } from '@/lib/vip/vipGrace';
+import { expireUserVip } from '@/lib/vip/vipService';
+import { isVIPInGracePeriod } from '@/lib/vip/vipGrace';
 
 /**
- * DEV 기준: mem Map 전체 순회
- * 운영 시: DB 쿼리
+ * ⏰ VIP 만료 Cron
+ * AutoExtend → Grace → Expire
  */
 export async function GET() {
   const now = Date.now();
 
-  // ⚠️ DEV 전용 접근 (mem 직접 접근 불가 → 구조상 예시)
+  /**
+   * DEV ONLY
+   * PROD: DB 쿼리로 교체
+   */
   const users = (global as any).__VIP_USERS__ as string[] | undefined;
-  if (!users) return NextResponse.json({ skipped: true });
+  if (!users) {
+    return NextResponse.json({ skipped: true });
+  }
 
   for (const userId of users) {
-    const state = await getUserVIPState(userId);
+    let state = await getUserVIPState(userId);
     if (!state) continue;
 
-    if (state.expiredAt < now) {
-      // 1️⃣ 자동 연장 옵션 적용
-      await applyAutoExtendIfEnabled(userId);
+    // 아직 유효
+    if (state.expiredAt > now) continue;
 
-      // 2️⃣ Grace 이후 FREE 판단은 SSOT에서 처리
-      resolveVIPWithGrace(state);
-    }
+    // 1️⃣ 자동 연장
+    await applyAutoExtendIfEnabled(userId);
+
+    // 재조회
+    state = await getUserVIPState(userId);
+    if (!state) continue;
+
+    if (state.expiredAt > now) continue;
+
+    // 2️⃣ Grace Period
+    if (isVIPInGracePeriod(state)) continue;
+
+    // 3️⃣ 최종 만료
+    await expireUserVip(userId);
   }
 
   return NextResponse.json({ ok: true });

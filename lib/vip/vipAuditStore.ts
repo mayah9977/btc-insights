@@ -1,4 +1,5 @@
-// lib/vip/vipAuditStore.ts
+'use server';
+
 import fs from 'fs';
 import path from 'path';
 import { VIPLevel } from './vipTypes';
@@ -27,15 +28,16 @@ export type VIPAuditLog = {
 };
 
 /**
- * 파일 기반 영구 저장 (DEV)
+ * 파일 기반 영구 저장 (DEV 전용)
  */
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FILE = path.join(DATA_DIR, 'vip-audit.json');
 
-function ensure() {
+async function ensure() {
   if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR);
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
+
   if (!fs.existsSync(FILE)) {
     fs.writeFileSync(FILE, '[]', 'utf-8');
   }
@@ -44,12 +46,14 @@ function ensure() {
 /**
  * Audit Log 추가
  */
-export function appendAudit(log: VIPAuditLog) {
-  ensure();
-  const arr: VIPAuditLog[] = JSON.parse(
-    fs.readFileSync(FILE, 'utf-8')
-  );
+export async function appendAudit(log: VIPAuditLog): Promise<void> {
+  await ensure();
+
+  const raw = fs.readFileSync(FILE, 'utf-8');
+  const arr: VIPAuditLog[] = JSON.parse(raw);
+
   arr.unshift(log);
+
   fs.writeFileSync(
     FILE,
     JSON.stringify(arr, null, 2),
@@ -60,10 +64,13 @@ export function appendAudit(log: VIPAuditLog) {
 /**
  * Audit Log 조회
  */
-export function readAudits(limit = 200): VIPAuditLog[] {
-  ensure();
-  const arr: VIPAuditLog[] = JSON.parse(
-    fs.readFileSync(FILE, 'utf-8')
-  );
+export async function readAudits(
+  limit = 200
+): Promise<VIPAuditLog[]> {
+  await ensure();
+
+  const raw = fs.readFileSync(FILE, 'utf-8');
+  const arr: VIPAuditLog[] = JSON.parse(raw);
+
   return arr.slice(0, limit);
 }

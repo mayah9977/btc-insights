@@ -1,27 +1,19 @@
-// app/api/admin/vip/user/[userId]/route.ts
-
 import { NextResponse } from 'next/server';
 import { readAudits } from '@/lib/vip/vipAuditStore';
-import { readUsageLogs } from '@/lib/vip/vipUsageLog';
-import { readChurnLogs } from '@/lib/vip/vipChurn';
-import { inferRetentionReason } from '@/lib/vip/vipRetention';
-
-type Context = {
-  params: Promise<{
-    userId: string;
-  }>;
-};
+import type { VIPAuditLog } from '@/lib/vip/vipAuditStore';
 
 export async function GET(
   _req: Request,
-  { params }: Context
+  { params }: { params: { userId: string } }
 ) {
-  const { userId } = await params;
+  const audits = await readAudits(500);
+
+  const filtered = audits.filter(
+    (a: VIPAuditLog) => a.userId === params.userId
+  );
 
   return NextResponse.json({
-    audit: readAudits().filter((a) => a.userId === userId),
-    usage: readUsageLogs(userId),
-    churn: readChurnLogs().filter((c) => c.userId === userId),
-    retention: inferRetentionReason(userId),
+    userId: params.userId,
+    audits: filtered,
   });
 }

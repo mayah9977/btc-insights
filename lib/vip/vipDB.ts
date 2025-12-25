@@ -3,17 +3,17 @@ import type { VIPLevel, VIPAddon } from './vipTypes';
 import { appendAudit } from './vipAuditStore';
 
 /**
- * VIP 상태 타입
+ * VIP 상태 타입 (SSOT)
  */
 export type VIPState = {
   level: VIPLevel;
-  expiredAt: number;        // timestamp(ms)
-  updatedAt: number;        // timestamp(ms)
+  expiredAt: number; // timestamp(ms)
+  updatedAt: number; // timestamp(ms)
   priceId?: string;
 
   /**
    * VIP Add-ons
-   * - addonKey -> expireAt timestamp(ms)
+   * addonKey -> expireAt timestamp(ms)
    */
   addons?: {
     [key in VIPAddon]?: number;
@@ -22,13 +22,13 @@ export type VIPState = {
 
 /**
  * DEV 전용 인메모리 DB
- * - 운영 시 DB/Firebase/Prisma로 교체
- * - 함수 시그니처 유지 권장
+ * - 운영 시 DB / Prisma / Redis 교체
+ * - 시그니처 유지
  */
 const mem = new Map<string, VIPState>();
 
 /**
- * VIP 자동 연장 옵션 (유료)
+ * VIP 자동 연장 옵션
  */
 const autoExtendOption = new Map<string, number>();
 
@@ -44,29 +44,60 @@ function priceIdToLevel(priceId: string): VIPLevel {
   if (vip2 && priceId === vip2) return 'VIP2';
   if (vip1 && priceId === vip1) return 'VIP1';
 
-  // dev fallback
-  return 'VIP1';
+  return 'VIP1'; // dev fallback
 }
 
 /**
- * ✅ 결제 성공 → VIP 저장
- * - 기본 30일
+ * 🔍 VIP 상태 조회 (SSOT)
+ */
+export async function getUserVIPState(
+  userId: string
+): Promise<VIPState | null> {
+  return mem.get(userId) ?? null;
+}
+
+/**
+ * ✅ VIP 상태 직접 설정 (SSOT Setter)
+ * - vipService / webhook에서 사용
+ */
+export async function setUserVIPState(
+  userId: string,
+  next: VIPState,
+  reason: 'PAYMENT' | 'ADMIN' | 'RECOVER'
+) {
+  const prev = mem.get(userId);
+  const before = prev?.level ?? 'FREE';
+
+  mem.set(userId, next);
+
+  appendAudit({
+    userId,
+    before,
+    after: next.level,
+    reason,
+    at: Date.now(),
+  });
+}
+
+/**
+ * ✅ 결제 성공 → VIP 저장 (30일)
  */
 export async function saveUserVIP(userId: string, priceId: string) {
   const now = Date.now();
   const level = priceIdToLevel(priceId);
+  const prev = mem.get(userId);
 
   mem.set(userId, {
     level,
     priceId,
-    expiredAt: now + 1000 * 60 * 60 * 24 * 30,
+    expiredAt: now + 30 * 86400000,
     updatedAt: now,
-    addons: mem.get(userId)?.addons, // 🔥 Add-on 유지
+    addons: prev?.addons,
   });
 
   appendAudit({
     userId,
-    before: 'FREE',
+    before: prev?.level ?? 'FREE',
     after: level,
     reason: 'PAYMENT',
     at: now,
@@ -74,7 +105,7 @@ export async function saveUserVIP(userId: string, priceId: string) {
 }
 
 /**
- * 🔥 구독 취소 / 다운그레이드
+ * 🔥 구독 취소 / 즉시 만료
  */
 export async function downgradeUserVIP(userId: string) {
   const prev = mem.get(userId);
@@ -98,7 +129,7 @@ export async function downgradeUserVIP(userId: string) {
 }
 
 /**
- * ♻️ VIP 연장
+ * ♻️ VIP 기간 연장
  */
 export async function extendVIP(userId: string, days: number) {
   const prev = mem.get(userId);
@@ -170,28 +201,20 @@ export async function recoverVIP(
   days: number
 ) {
   const now = Date.now();
+  const prev = mem.get(userId);
 
   mem.set(userId, {
     level,
     expiredAt: now + days * 86400000,
     updatedAt: now,
-    addons: mem.get(userId)?.addons, // 🔥 Add-on 유지
+    addons: prev?.addons,
   });
 
   appendAudit({
     userId,
-    before: 'FREE',
+    before: prev?.level ?? 'FREE',
     after: level,
     reason: 'ADMIN',
     at: now,
   });
-}
-
-/**
- * 🔍 VIP 상태 조회 (SSOT)
- */
-export async function getUserVIPState(
-  userId: string
-): Promise<VIPState | null> {
-  return mem.get(userId) ?? null;
 }
