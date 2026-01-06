@@ -1,170 +1,190 @@
-"use client";
+'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   calcWhaleIntensity,
   type WhaleIntensity,
-} from "../lib/ai/calcWhaleIntensity";
-import { useWhaleTrigger } from "../lib/whaleTriggerStore";
+} from '../lib/ai/calcWhaleIntensity'
+import { useWhaleTrigger } from '../lib/whaleTriggerStore'
+import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
 
 type BannerState = {
-  symbol: string;
-  intensity: WhaleIntensity;
-  oiDelta: number;
-  volumeDelta: number;
-  updatedAt: number;
-};
+  symbol: string
+  intensity: WhaleIntensity
+  oiDelta: number
+  volumeDelta: number
+  updatedAt: number
+}
 
 function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
+  return Math.max(min, Math.min(max, n))
 }
 
 export default function WhaleBanner() {
   const symbol = useMemo(
     () =>
-      (process.env.NEXT_PUBLIC_BINANCE_SYMBOL || "BTCUSDT").toUpperCase(),
+      (
+        process.env.NEXT_PUBLIC_BINANCE_SYMBOL ??
+        'BTCUSDT'
+      ).toUpperCase(),
     []
-  );
+  )
 
-  const { whaleActive, triggerWhale } = useWhaleTrigger();
+  const { whaleActive, triggerWhale } =
+    useWhaleTrigger()
 
-  const [state, setState] = useState<BannerState | null>(null);
+  // ✅ SSE 기반 실시간 데이터
+  const { openInterest } = useRealtimeMarket()
 
-  // OI tracking
-  const prevOIRef = useRef<number | null>(null);
+  const [state, setState] =
+    useState<BannerState | null>(null)
 
-  // Volume tracking (최근 60초 quote volume 합)
-  const tradesRef = useRef<Array<{ t: number; q: number }>>([]);
-  const volumeEmaRef = useRef<number>(0);
-
-  // HIGH 트리거 쿨다운
-  const cooldownRef = useRef<number>(0);
+  /** refs */
+  const prevOIRef = useRef<number | null>(null)
+  const tradesRef = useRef<
+    Array<{ t: number; q: number }>
+  >([])
+  const volumeEmaRef = useRef<number>(0)
+  const cooldownRef = useRef<number>(0)
 
   useEffect(() => {
-    let alive = true;
+    if (openInterest == null) return
 
-    // 1️⃣ 실시간 거래량 (aggTrade)
+    const prevOI = prevOIRef.current
+    prevOIRef.current = openInterest
+    const oiDelta =
+      prevOI == null ? 0 : openInterest - prevOI
+
+    const arr = tradesRef.current
+    const vol60s = arr.reduce(
+      (sum, x) => sum + x.q,
+      0
+    )
+
+    if (volumeEmaRef.current <= 0) {
+      volumeEmaRef.current = vol60s
+    } else {
+      volumeEmaRef.current =
+        volumeEmaRef.current * 0.9 +
+        vol60s * 0.1
+    }
+
+    const baseline = Math.max(
+      1,
+      volumeEmaRef.current
+    )
+    const volumeDelta = clamp(
+      vol60s / baseline,
+      0,
+      50
+    )
+
+    const intensity = calcWhaleIntensity({
+      oiDelta: Math.abs(oiDelta),
+      volumeDelta,
+    })
+
+    const now = Date.now()
+
+    if (
+      intensity === 'HIGH' &&
+      now > cooldownRef.current
+    ) {
+      cooldownRef.current = now + 6000
+      triggerWhale()
+    }
+
+    setState({
+      symbol,
+      intensity,
+      oiDelta,
+      volumeDelta,
+      updatedAt: now,
+    })
+  }, [openInterest, symbol, triggerWhale])
+
+  /** 거래량 WebSocket (유지) */
+  useEffect(() => {
     const ws = new WebSocket(
       `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@aggTrade`
-    );
+    )
 
-    ws.onmessage = (ev) => {
+    ws.onmessage = ev => {
       try {
-        const msg = JSON.parse(ev.data);
-        const p = Number(msg?.p ?? 0);
-        const qBase = Number(msg?.q ?? 0);
-        if (!Number.isFinite(p) || !Number.isFinite(qBase)) return;
+        const msg = JSON.parse(ev.data)
+        const p = Number(msg?.p ?? 0)
+        const qBase = Number(msg?.q ?? 0)
+        if (!Number.isFinite(p) || !Number.isFinite(qBase))
+          return
 
-        const quoteVol = p * qBase;
-        const now = Date.now();
+        const quoteVol = p * qBase
+        const now = Date.now()
 
-        const arr = tradesRef.current;
-        arr.push({ t: now, q: quoteVol });
+        const arr = tradesRef.current
+        arr.push({ t: now, q: quoteVol })
 
-        const cutoff = now - 60_000;
-        while (arr.length && arr[0].t < cutoff) arr.shift();
+        const cutoff = now - 60_000
+        while (arr.length && arr[0].t < cutoff)
+          arr.shift()
       } catch {}
-    };
-
-    // 2️⃣ OI 폴링
-    const tick = async () => {
-      try {
-        const r = await fetch(
-          `/api/market/oi?symbol=${encodeURIComponent(symbol)}`,
-          { cache: "no-store" }
-        );
-        const j = await r.json();
-        if (!j?.ok) return;
-
-        const oi = Number(j.openInterest ?? 0);
-        if (!Number.isFinite(oi)) return;
-
-        const prevOI = prevOIRef.current;
-        prevOIRef.current = oi;
-        const oiDelta = prevOI == null ? 0 : oi - prevOI;
-
-        const arr = tradesRef.current;
-        const vol60s = arr.reduce((sum, x) => sum + x.q, 0);
-
-        if (volumeEmaRef.current <= 0) volumeEmaRef.current = vol60s;
-        volumeEmaRef.current =
-          volumeEmaRef.current * 0.9 + vol60s * 0.1;
-
-        const baseline = Math.max(1, volumeEmaRef.current);
-        const volumeDelta = clamp(vol60s / baseline, 0, 50);
-
-        const intensity = calcWhaleIntensity({
-          oiDelta: Math.abs(oiDelta),
-          volumeDelta,
-        });
-
-        const now = Date.now();
-
-        // 🔥 HIGH → 공용 트리거 발동 (쿨다운 6초)
-        if (intensity === "HIGH" && now > cooldownRef.current) {
-          cooldownRef.current = now + 6000;
-          triggerWhale();
-        }
-
-        if (!alive) return;
-
-        setState({
-          symbol,
-          intensity,
-          oiDelta,
-          volumeDelta,
-          updatedAt: now,
-        });
-      } catch {}
-    };
-
-    const id = setInterval(tick, 2500);
-    tick();
+    }
 
     return () => {
-      alive = false;
-      clearInterval(id);
       try {
-        ws.close();
+        ws.close()
       } catch {}
-    };
-  }, [symbol, triggerWhale]);
+    }
+  }, [symbol])
 
-  const show = state && (whaleActive || state.intensity === "HIGH");
-  if (!show) return null;
+  const show =
+    state &&
+    (whaleActive || state.intensity === 'HIGH')
 
-  const isHigh = state.intensity === "HIGH";
+  if (!show || !state) return null
+
+  const isHigh = state.intensity === 'HIGH'
 
   return (
     <div
       className={[
-        "w-full rounded-xl px-4 py-3 border",
-        "bg-neutral-950 text-white transition-all",
-        isHigh ? "border-yellow-400 animate-pulse" : "border-neutral-700",
-      ].join(" ")}
+        'w-full rounded-xl px-4 py-3 border',
+        'bg-neutral-950 text-white transition-all',
+        isHigh
+          ? 'border-yellow-400 animate-pulse'
+          : 'border-neutral-700',
+      ].join(' ')}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className={isHigh ? "animate-pulse" : ""}>🐋</span>
+          <span className={isHigh ? 'animate-pulse' : ''}>
+            🐋
+          </span>
           <div className="font-bold">
-            Whale Activity:{" "}
-            <span className={isHigh ? "text-yellow-300" : "text-white"}>
+            Whale Activity:{' '}
+            <span
+              className={
+                isHigh
+                  ? 'text-yellow-300'
+                  : 'text-white'
+              }
+            >
               {state.intensity}
             </span>
           </div>
         </div>
 
         <div className="text-xs opacity-80">
-          {state.symbol} | OI Δ {state.oiDelta.toFixed(2)} | Vol x{" "}
+          {state.symbol} | OI Δ{' '}
+          {state.oiDelta.toFixed(2)} | Vol x{' '}
           {state.volumeDelta.toFixed(2)}
         </div>
       </div>
 
       <div className="mt-2 text-sm opacity-90">
         {isHigh
-          ? "Mass trading detected — stay sharp."
-          : "Whale heat rising..."}
+          ? 'Mass trading detected — stay sharp.'
+          : 'Whale heat rising...'}
       </div>
     </div>
-  );
+  )
 }

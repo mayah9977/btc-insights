@@ -1,26 +1,26 @@
 /* =========================================================
-   Firebase Cloud Messaging – Web Push Service Worker
+   Firebase / Web Push Service Worker
    - notification + data payload 완전 지원
    - image / badge / actions / requireInteraction
    - clickUrl 딥링크 처리
-   ========================================================= */
+========================================================= */
 
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
-self.addEventListener('activate', () => {
-  self.clients.claim()
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
 })
 
 /* =========================
    PUSH EVENT
-   ========================= */
+========================= */
 self.addEventListener('push', (event) => {
   let payload = {}
 
   try {
-    payload = event.data?.json?.() ?? {}
+    payload = event.data ? event.data.json() : {}
   } catch (e) {
     console.error('[SW] Push payload parse error:', e)
     payload = {}
@@ -57,16 +57,14 @@ self.addEventListener('push', (event) => {
 
   /* ---------- Behavior ---------- */
   const requireInteraction =
-    String(d.requireInteraction)
-      .toLowerCase() === 'true'
+    String(d.requireInteraction).toLowerCase() === 'true'
+
+  const renotify =
+    String(d.renotify).toLowerCase() === 'true'
 
   const tag =
     d.tag ||
-    'btc-signal'
-
-  const renotify =
-    String(d.renotify)
-      .toLowerCase() === 'true'
+    `signal-${Date.now()}`
 
   /* ---------- Click URL ---------- */
   const clickUrl =
@@ -75,13 +73,7 @@ self.addEventListener('push', (event) => {
     d.url ||
     '/'
 
-  /* ---------- Actions ---------- */
-  const actionOpenTitle =
-    d.actionOpenTitle || 'Open'
-
-  const actionCloseTitle =
-    d.actionCloseTitle || 'Close'
-
+  /* ---------- Options ---------- */
   const options = {
     body,
     icon,
@@ -94,98 +86,62 @@ self.addEventListener('push', (event) => {
       clickUrl,
       raw: d,
     },
-    actions: [
+  }
+
+  /* ---------- Actions (지원 브라우저만) ---------- */
+  if ('actions' in Notification.prototype) {
+    options.actions = [
       {
         action: 'open',
-        title: actionOpenTitle,
+        title: d.actionOpenTitle || 'Open',
       },
       {
         action: 'close',
-        title: actionCloseTitle,
+        title: d.actionCloseTitle || 'Close',
       },
-    ],
+    ]
   }
 
   event.waitUntil(
-    self.registration.showNotification(
-      title,
-      options
-    )
+    self.registration.showNotification(title, options)
   )
 })
 
 /* =========================
    NOTIFICATION CLICK
-   ========================= */
-self.addEventListener(
-  'notificationclick',
-  (event) => {
-    event.notification.close()
+========================= */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
 
-    const action = event.action
-    const data =
-      event.notification.data || {}
+  const action = event.action
+  const data = event.notification.data || {}
+  const targetUrl = data.clickUrl || '/'
 
-    const targetUrl =
-      data.clickUrl || '/'
+  // Close 버튼 → 아무 동작 없음
+  if (action === 'close') return
 
-    // Close 버튼 → 아무 동작 없음
-    if (action === 'close') {
-      return
-    }
+  event.waitUntil(
+    self.clients
+      .matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      .then((clientList) => {
+        for (const client of clientList) {
+          try {
+            const clientUrl = new URL(client.url)
 
-    event.waitUntil(
-      self.clients
-        .matchAll({
-          type: 'window',
-          includeUncontrolled: true,
-        })
-        .then((clientList) => {
-          for (const client of clientList) {
-            try {
-              const url = new URL(
-                client.url
-              )
-
-              if (
-                url.origin ===
-                self.location.origin
-              ) {
-                // 이미 열린 탭 → 포커스
-                if (
-                  client.url !==
-                  targetUrl
-                ) {
-                  if (
-                    'navigate' in
-                    client
-                  ) {
-                    client.navigate(
-                      targetUrl
-                    )
-                  } else {
-                    client.postMessage({
-                      type: 'FROM_SW_OPEN_URL',
-                      url: targetUrl,
-                    })
-                  }
-                }
-
-                return client.focus()
+            if (clientUrl.origin === self.location.origin) {
+              if (client.url !== targetUrl && 'navigate' in client) {
+                client.navigate(targetUrl)
               }
-            } catch (e) {
-              // ignore
+              return client.focus()
             }
-          }
+          } catch (_) {}
+        }
 
-          // 열린 탭이 없으면 새 창
-          return self.clients.openWindow(
-            targetUrl
-          )
-        })
-    )
-  }
-)
-
-
-
+        // 열린 탭이 없으면 새 창
+        return self.clients.openWindow(targetUrl)
+      })
+  )
+})

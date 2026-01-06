@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 import React, {
   createContext,
@@ -6,52 +6,58 @@ import React, {
   useMemo,
   useState,
   useCallback,
-} from 'react';
+} from 'react'
 
 export type WhaleLog = {
-  time: string;
-  intensity: 'LOW' | 'MEDIUM' | 'HIGH';
-  ts?: number;
-  symbol?: string; // ✅ 심볼 분리용
-};
+  intensity: 'LOW' | 'MEDIUM' | 'HIGH'
+  ts: number
+  symbol?: string
+}
 
 type WhaleHistoryContextType = {
-  logs: WhaleLog[];
-  pushLog: (log: Omit<WhaleLog, 'ts'>) => void;
-};
+  logs: WhaleLog[]
+  pushLog: (log: Omit<WhaleLog, 'ts'>) => void
+}
 
 const WhaleHistoryContext =
-  createContext<WhaleHistoryContextType | undefined>(undefined);
+  createContext<WhaleHistoryContextType | undefined>(undefined)
+
+const MAX_LOGS = 100
 
 export function WhaleHistoryProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const [logs, setLogs] = useState<WhaleLog[]>([]);
+  const [logs, setLogs] = useState<WhaleLog[]>([])
 
   const pushLog = useCallback((log: Omit<WhaleLog, 'ts'>) => {
-    setLogs((prev) => [
-      {
-        ...log,
-        ts: Date.now(),
-      },
-      ...prev,
-    ]);
-  }, []);
+    setLogs((prev) =>
+      [
+        {
+          ...log,
+          ts: Date.now(),
+        },
+        ...prev,
+      ].slice(0, MAX_LOGS),
+    )
+  }, [])
 
-  const value = useMemo(() => ({ logs, pushLog }), [logs, pushLog]);
+  const value = useMemo(() => ({ logs, pushLog }), [logs, pushLog])
 
   return (
     <WhaleHistoryContext.Provider value={value}>
       {children}
     </WhaleHistoryContext.Provider>
-  );
+  )
 }
 
 export function useWhaleHistory() {
-  const ctx = useContext(WhaleHistoryContext);
-  if (!ctx)
-    throw new Error('useWhaleHistory must be used inside WhaleHistoryProvider');
-  return ctx;
+  const ctx = useContext(WhaleHistoryContext)
+  if (!ctx) {
+    throw new Error(
+      'useWhaleHistory must be used inside WhaleHistoryProvider',
+    )
+  }
+  return ctx
 }

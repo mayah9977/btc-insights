@@ -1,24 +1,17 @@
-"use client";
-
-
-type TrendType = "Bullish" | "Bearish" | "Neutral";
-
-interface TrendBadgeProps {
-  trend: TrendType;
+type TrendBadgeProps = {
+  text: string
+  className?: string
 }
 
-export default function TrendBadge({ trend }: TrendBadgeProps) {
-  const styleMap: Record<TrendType, string> = {
-    Bullish: "bg-red-500 text-white",
-    Bearish: "bg-blue-500 text-white",
-    Neutral: "bg-gray-500 text-white",
-  };
-
+export default function TrendBadge({
+  text,
+  className = '',
+}: TrendBadgeProps) {
   return (
     <span
-      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${styleMap[trend]}`}
+      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${className}`}
     >
-      {trend}
+      {text}
     </span>
-  );
+  )
 }

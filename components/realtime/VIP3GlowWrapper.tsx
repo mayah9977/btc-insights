@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'
 
 export function VIP3GlowWrapper({
   active,
   children,
 }: {
-  active: boolean;
-  children: React.ReactNode;
+  active: boolean
+  children: React.ReactNode
 }) {
-  if (!active) return <>{children}</>;
+  if (!active) return <>{children}</>
 
   return (
     <motion.div
@@ -25,9 +25,12 @@ export function VIP3GlowWrapper({
         repeat: Infinity,
         ease: 'easeInOut',
       }}
-      className="rounded-xl"
+      className="
+        relative z-0
+        rounded-xl
+      "
     >
       {children}
     </motion.div>
-  );
+  )
 }

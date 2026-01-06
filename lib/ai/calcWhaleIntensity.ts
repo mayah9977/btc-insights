@@ -1,13 +1,19 @@
-// lib/ai/calcWhaleIntensity.ts
+export type WhaleIntensity = 'LOW' | 'MEDIUM' | 'HIGH'
 
-export type WhaleIntensity = "LOW" | "MEDIUM" | "HIGH";
+type Input = {
+  oiDelta: number        // 절대값 기준
+  volumeDelta: number   // EMA 대비 배수
+}
 
 /**
- * OI 변화량 기반 Whale Intensity 계산
- * @param oiDelta % 단위 변화량 (예: 3.2)
+ * Whale Intensity 계산
+ * - OI 변화 + 거래량 동시 급증에만 HIGH
  */
-export function calcWhaleIntensity(oiDelta: number): WhaleIntensity {
-  if (oiDelta >= 8) return "HIGH";
-  if (oiDelta >= 3) return "MEDIUM";
-  return "LOW";
+export function calcWhaleIntensity({
+  oiDelta,
+  volumeDelta,
+}: Input): WhaleIntensity {
+  if (oiDelta >= 8 && volumeDelta >= 2.2) return 'HIGH'
+  if (oiDelta >= 3 && volumeDelta >= 1.3) return 'MEDIUM'
+  return 'LOW'
 }

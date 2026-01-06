@@ -1,96 +1,107 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { RealtimeStatusBadge } from './RealtimeStatusBadge';
-import { StreamQualityBadge } from './StreamQualityBadge';
-import { playHaptic, HapticLevel } from '@/lib/haptics/haptic';
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { RealtimeStatusBadge } from './RealtimeStatusBadge'
+import { StreamQualityBadge } from './StreamQualityBadge'
+import { playHaptic, HapticLevel } from '@/lib/haptics/haptic'
+
+type Status = 'connecting' | 'open' | 'error' | 'closed'
 
 export function MobileRealtimeHUD({
   sseStatus,
   wsStatus,
 }: {
-  sseStatus: 'connecting' | 'open' | 'error' | 'closed';
-  wsStatus?: 'connecting' | 'open' | 'error' | 'closed';
+  sseStatus: Status
+  wsStatus?: Status
 }) {
-  const [open, setOpen] = useState(false);
-  const [haptic, setHaptic] =
-    useState<HapticLevel>('SOFT');
+  const [open, setOpen] = useState(false)
+  const [haptic, setHaptic] = useState<HapticLevel>('SOFT')
 
   return (
+    /* ❗ pointer-events-none 제거 */
     <div className="md:hidden">
+      {/* ===============================
+        Floating Button
+      ================================ */}
       {!open && (
-        <motion.div
+        <motion.button
+          type="button"
           onTap={() => {
-            playHaptic(haptic);
-            setOpen(true);
+            playHaptic(haptic)
+            setOpen(true)
           }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           className="
             fixed bottom-4 left-1/2 -translate-x-1/2
-            px-4 py-2 rounded-full shadow-lg
-            bg-black text-white text-xs
+            px-4 py-2 rounded-full
+            shadow-lg
+            bg-[#0B0F1A]/90 backdrop-blur
+            text-[#D1D4DC] text-xs
             flex gap-3 items-center
             z-50
           "
         >
           <RealtimeStatusBadge sse={sseStatus} ws={wsStatus} />
-        </motion.div>
+        </motion.button>
       )}
 
+      {/* ===============================
+        Bottom Sheet
+      ================================ */}
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ y: 200 }}
+            initial={{ y: 240 }}
             animate={{ y: 0 }}
-            exit={{ y: 200 }}
+            exit={{ y: 240 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
             drag="y"
-            dragConstraints={{ top: 0, bottom: 200 }}
+            dragConstraints={{ top: 0, bottom: 240 }}
             onDragEnd={(_, info) => {
-              if (info.offset.y > 80) {
-                playHaptic(haptic);
-                setOpen(false);
+              if (info.offset.y > 100) {
+                playHaptic(haptic)
+                setOpen(false)
               }
             }}
             className="
               fixed bottom-0 left-0 right-0
-              bg-black text-white
-              rounded-t-xl p-4
+              bg-[#0B0F1A]
+              text-[#D1D4DC]
+              rounded-t-2xl
+              p-4
               z-50
             "
           >
-            <div className="text-xs opacity-60 mb-2">
+            <div className="text-xs opacity-60 mb-3">
               아래로 스와이프하여 닫기
             </div>
 
-            <div className="flex justify-between items-center mb-3">
-              <RealtimeStatusBadge
-                sse={sseStatus}
-                ws={wsStatus}
-              />
+            <div className="flex justify-between items-center mb-4">
+              <RealtimeStatusBadge sse={sseStatus} ws={wsStatus} />
               <StreamQualityBadge />
             </div>
 
-            {/* 햅틱 강도 선택 */}
             <div className="flex gap-2 text-xs">
-              {(['OFF', 'SOFT', 'STRONG'] as HapticLevel[]).map(
-                (lv) => (
-                  <button
-                    key={lv}
-                    onClick={() => setHaptic(lv)}
-                    className={`px-2 py-1 rounded ${
-                      haptic === lv
-                        ? 'bg-white text-black'
-                        : 'bg-gray-700'
-                    }`}
-                  >
-                    {lv}
-                  </button>
-                )
-              )}
+              {(['OFF', 'SOFT', 'STRONG'] as HapticLevel[]).map(lv => (
+                <button
+                  key={lv}
+                  type="button"
+                  onClick={() => setHaptic(lv)}
+                  className={`px-3 py-1 rounded-md transition ${
+                    haptic === lv
+                      ? 'bg-white text-black'
+                      : 'bg-white/10 text-[#D1D4DC]'
+                  }`}
+                >
+                  {lv}
+                </button>
+              ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
-  );
+  )
 }

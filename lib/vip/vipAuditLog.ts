@@ -1,5 +1,5 @@
 // lib/vip/vipAuditLog.ts
-import { VIPLevel } from './vipTypes';
+import { VIPLevel } from './vipTypes'
 
 export type VIPAuditReason =
   | 'ADMIN'
@@ -8,22 +8,24 @@ export type VIPAuditReason =
   | 'EXPIRE'
   | 'EXTEND'
   | 'ABUSE'
-  | 'RECOVER';
+  | 'RECOVER'
 
 export type VIPAuditLog = {
-  userId: string;
-  before: VIPLevel;
-  after: VIPLevel;
-  reason: VIPAuditReason;
-  at: number;
-};
-
-const logs: VIPAuditLog[] = [];
-
-export function recordVIPChange(log: VIPAuditLog) {
-  logs.unshift(log);
+  userId: string
+  before: VIPLevel
+  after: VIPLevel
+  reason: VIPAuditReason
+  at: number
 }
 
-export function getVIPAuditLogs() {
-  return logs;
+const MAX_LOG = 500
+const logs: VIPAuditLog[] = []
+
+export function recordVIPChange(log: VIPAuditLog) {
+  logs.unshift(log)
+  if (logs.length > MAX_LOG) logs.pop()
+}
+
+export function getVIPAuditLogs(limit = 100): VIPAuditLog[] {
+  return logs.slice(0, limit)
 }

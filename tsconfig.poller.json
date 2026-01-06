@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "outDir": "dist-poller",
+    "rootDir": ".",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "scripts/**/*.ts",                
+    "lib/poller/**/*.ts",
+    "lib/alerts/alertStore.server.ts",
+    "lib/redis/**/*.ts"
+  ],
+  "exclude": [
+    "app",
+    "components",
+    "worker",
+    "lib/alerts/alertEngine.ts",
+    "lib/alerts/alertNotifier.ts",
+    "lib/push",
+    "lib/fcm",
+    "lib/firebase-admin"
+  ]
+}

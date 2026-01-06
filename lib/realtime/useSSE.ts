@@ -1,48 +1,47 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'
 
 export function useSSE(
-  url: string,
-  onData: (data: any) => void
+  url?: string,
+  onData?: (data: any) => void
 ) {
   const [status, setStatus] = useState<
     'connecting' | 'open' | 'error'
-  >('connecting');
+  >('connecting')
 
   useEffect(() => {
-    if (!url) return;
+    // 🔒 alertsStore가 SSE 단일 책임 → 여기서는 no-op
+    if (!url) return
 
-    console.log('[SSE] connecting to:', url);
+    // ⚠️ alerts 페이지에서는 사용 금지
+    if (location.pathname.includes('/alerts')) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[useSSE] disabled in alerts context')
+      }
+      return
+    }
 
-    const es = new EventSource(url);
+    const es = new EventSource(url)
 
-    es.onopen = () => {
-      console.log('[SSE] connection opened');
-      setStatus('open');
-    };
+    es.onopen = () => setStatus('open')
 
     es.onmessage = (event) => {
-      console.log('[SSE] raw message:', event.data);
       try {
-        const data = JSON.parse(event.data);
-        onData(data);
-      } catch (e) {
-        console.warn('[SSE] JSON parse error', e);
-      }
-    };
+        const data = JSON.parse(event.data)
+        onData?.(data)
+      } catch {}
+    }
 
-    es.onerror = (err) => {
-      console.warn('[SSE] error', err);
-      setStatus('error');
-      es.close();
-    };
+    es.onerror = () => {
+      setStatus('error')
+      es.close()
+    }
 
     return () => {
-      console.log('[SSE] connection closed');
-      es.close();
-    };
-  }, [url, onData]);
+      es.close()
+    }
+  }, [url, onData])
 
-  return { status };
+  return { status }
 }

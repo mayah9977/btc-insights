@@ -1,56 +1,79 @@
-export const runtime = 'nodejs';
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
-import { NextRequest } from 'next/server';
-import { addVipClient } from '@/lib/vip/vipSSEHub';
+import { NextRequest } from 'next/server'
+import { addVipClient } from '@/lib/vip/vipSSEHub'
 
 type VipPayload =
   | { type: 'vip'; vipLevel: string }
-  | { type: 'heartbeat' };
+  | { type: 'heartbeat' }
 
-const encoder = new TextEncoder();
+const encoder = new TextEncoder()
 
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get('userId');
+  const userId = req.nextUrl.searchParams.get('userId')
   if (!userId) {
-    return new Response('Missing userId', { status: 400 });
+    return new Response('Missing userId', { status: 400 })
   }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const removeClient = addVipClient(userId, controller);
+      let closed = false
 
-      // 초기 상태
+      const removeClient = addVipClient(userId, controller)
+
+      /* ✅ comment ping (SSE 안정성) */
+      controller.enqueue(encoder.encode(`: vip sse connected\n\n`))
+
+      /* 초기 상태 */
+      const init: VipPayload = {
+        type: 'vip',
+        vipLevel: 'FREE',
+      }
+
       controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify({
-            type: 'vip',
-            vipLevel: 'FREE',
-          })}\n\n`
-        )
-      );
+        encoder.encode(`data: ${JSON.stringify(init)}\n\n`)
+      )
 
-      // heartbeat
+      /* heartbeat */
       const heartbeat = setInterval(() => {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`
+        if (closed) return
+        try {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`
+            )
           )
-        );
-      }, 10_000);
+        } catch {
+          closed = true
+        }
+      }, 10_000)
 
-      req.signal.addEventListener('abort', () => {
-        clearInterval(heartbeat);
-        removeClient();
-        controller.close();
-      });
+      /* cleanup */
+      req.signal.addEventListener(
+        'abort',
+        () => {
+          if (closed) return
+          closed = true
+
+          clearInterval(heartbeat)
+          removeClient()
+
+          try {
+            controller.close()
+          } catch {}
+        },
+        { once: true }
+      )
     },
-  });
+  })
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
-  });
+  })
 }

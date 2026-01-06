@@ -1,74 +1,66 @@
-// lib/firebase-admin.ts
+import { getApps, initializeApp, cert, App } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getMessaging } from 'firebase-admin/messaging'
 
-import { getApps, initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { getMessaging } from 'firebase-admin/messaging';
+/* =========================================================
+   Firebase Admin 초기화 (Local / Vercel 공용)
+========================================================= */
 
-// =============================
-// 1) 환경변수 읽기
-// =============================
-const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-
-// =============================
-// 2) Firebase Admin Credential 설정
-// =============================
-let credential: any;
-
-if (serviceAccountJson) {
-  // =============================
-  // 👉 Production (Vercel)
-  // =============================
-  console.log("Using: FIREBASE_SERVICE_ACCOUNT_KEY (Production)");
-
-  credential = cert(JSON.parse(serviceAccountJson));
-} else {
-  // =============================
-  // 👉 Local Development
-  // =============================
-  console.log("Using: FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY (Local)");
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("❌ Missing Firebase Admin ENV for Local Development");
+/* =========================
+   1) Credential 생성
+========================= */
+function createCredential() {
+  // ▶ Production (Vercel: JSON 문자열)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      return cert(
+        JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+      )
+    } catch {
+      throw new Error(
+        '❌ FIREBASE_SERVICE_ACCOUNT_KEY JSON 파싱 실패'
+      )
+    }
   }
 
-  credential = cert({
+  // ▶ Local Development (.env 개별 변수)
+  const projectId = process.env.FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  const privateKey =
+    process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('❌ Firebase Admin ENV 누락 (Local)')
+  }
+
+  return cert({
     projectId,
     clientEmail,
     privateKey,
-  });
+  })
 }
 
-// =============================
-// 3) Firebase Admin 앱 초기화
-// =============================
-const adminApp =
+/* =========================
+   2) Firebase Admin App
+========================= */
+const adminApp: App =
   getApps().length > 0
     ? getApps()[0]
     : initializeApp({
-        credential,
-      });
+        credential: createCredential(),
+      })
 
-// =============================
-// 4) 서비스 export
-// =============================
-export const adminDB = getFirestore(adminApp);
-export const adminMessaging = getMessaging(adminApp);
+/* =========================
+   3) Services Export
+========================= */
+export const adminDB = getFirestore(adminApp)
+export const adminMessaging = getMessaging(adminApp)
 
-// 예전 코드 호환용
-export const adminMsg = adminMessaging;
+// 🔒 하위 호환 (기존 코드 보호)
+export const adminMsg = adminMessaging
 
-// Firestore FieldValue export
-export { FieldValue };
-
-
-
-
-
-
+// 🔧 Firestore util
+export { FieldValue }
 
 
 

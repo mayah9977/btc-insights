@@ -1,46 +1,47 @@
-import type { Metadata } from 'next'
+'use client'
 
-export const metadata: Metadata = {
-  title: 'THE GOD OF BTC',
-  description: 'BTC AI Casino Platform',
-}
+import './styles/globals.css'
+import { useEffect, useRef } from 'react'
+import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
+import { registerPushToken } from '@/lib/notification/registerPushToken'
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  /**
+   * 🔑 ALERTS SSE bootstrap
+   * --------------------------------------------------
+   * - 앱 전체 생명주기에서 단 1회만 실행
+   * - 페이지 이동 / locale 변경 / StrictMode 안전
+   * - SSE 단일 연결 보장
+   */
+  const bootstrapAlertsSSE = useAlertsSSEStore(s => s.bootstrap)
+
+  /**
+   * 🔔 Push token register (1회 보장)
+   */
+  const pushInitRef = useRef(false)
+
+  useEffect(() => {
+    // SSE bootstrap
+    bootstrapAlertsSSE()
+
+    // Push token register (only once)
+    if (!pushInitRef.current) {
+      pushInitRef.current = true
+      registerPushToken().catch(err => {
+        console.warn('[FCM] register failed', err)
+      })
+    }
+  }, [bootstrapAlertsSSE])
+
   return (
     <html lang="ko">
-      <head>
-        {/* ============================= */}
-        {/* PWA / Mobile App Settings */}
-        {/* ============================= */}
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#000000" />
-
-        {/* iOS PWA 대응 (권장) */}
-        <meta
-          name="apple-mobile-web-app-capable"
-          content="yes"
-        />
-        <meta
-          name="apple-mobile-web-app-status-bar-style"
-          content="black-translucent"
-        />
-        <meta
-          name="apple-mobile-web-app-title"
-          content="THE GOD OF BTC"
-        />
-
-        {/* iOS 홈화면 아이콘 (선택) */}
-        <link
-          rel="apple-touch-icon"
-          href="/icon-192.png"
-        />
-      </head>
-
-      <body>{children}</body>
+      <body className="bg-neutral-950 text-white antialiased">
+        {children}
+      </body>
     </html>
   )
 }
