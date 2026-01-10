@@ -22,7 +22,7 @@ export async function handlePriceTick(params: {
 
   for (const alert of alerts) {
     // 비활성 / 이미 트리거된 알림 제외
-    if (!alert.enabled || alert.triggered) continue
+    if (alert.status !== 'WAITING') continue
 
     // targetPrice 없는 알림 제외
     if (typeof alert.targetPrice !== 'number') continue
