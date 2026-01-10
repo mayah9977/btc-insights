@@ -3,15 +3,29 @@
 import { useMemo } from 'react'
 import { useAlertsStore } from './providers/alertsStore.zustand'
 import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
+import { getAlertStatus } from '@/lib/alerts/alertStore.client'
 import AlertStatRow from './AlertStatRow'
 
 export default function AlertsView() {
   const connected = useAlertsSSEStore(s => s.connected)
 
-  const all = useAlertsStore(s => s.getAll().length)
-  const waiting = useAlertsStore(s => s.getWaiting().length)
-  const cooldown = useAlertsStore(s => s.getCooldown().length)
-  const disabled = useAlertsStore(s => s.getDisabled().length)
+  // ✅ 단일 진입: 모든 알림
+  const alerts = useAlertsStore(s => s.getAll())
+
+  // ✅ UI 파생 상태 계산 (store selector 사용 ❌)
+  const all = alerts.length
+
+  const waiting = alerts.filter(
+    a => getAlertStatus(a) === 'WAITING',
+  ).length
+
+  const cooldown = alerts.filter(
+    a => getAlertStatus(a) === 'COOLDOWN',
+  ).length
+
+  const disabled = alerts.filter(
+    a => getAlertStatus(a) === 'DISABLED',
+  ).length
 
   const rows = useMemo(
     () => [
