@@ -1,6 +1,7 @@
 'use client'
 
-import type { RepeatMode } from '@/lib/alerts/alertStore.client'
+import type { RepeatMode }
+from '@/lib/alerts/alertStore.types'
 
 export default function AlertRepeatSelect({
   value,
