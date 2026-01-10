@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
-import type { AlertCondition, RepeatMode } from '@/lib/alerts/alertStore.client'
+import type {
+  AlertCondition,
+  RepeatMode,
+} from '@/lib/alerts/alertStore.types'
 
 type Props = {
   initial?: any
