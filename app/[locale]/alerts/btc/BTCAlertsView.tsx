@@ -20,7 +20,7 @@ import { useCriticalChecklist } from './useCriticalChecklist'
 import { useAlertsStore } from '../providers/alertsStore.zustand'
 import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
 import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
-import type { PriceAlert } from '@/lib/alerts/alertStore.client'
+import type { PriceAlert } from '@/lib/alerts/alertStore.types'
 
 export default function BTCAlertsView() {
   // ✅ SSE 단일 bootstrap
