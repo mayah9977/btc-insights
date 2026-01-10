@@ -24,7 +24,7 @@ export async function autoPruneAlerts(userId: string) {
       a.hitRate < DEFAULT_RULE.minHitRate ||
       a.avgPnL < DEFAULT_RULE.minAvgPnL
     ) {
-      await updateAlert(a.alertId, { enabled: false })
+      await updateAlert(a.alertId, { status: 'TRIGGERED' })
       pruned.push(a.alertId)
     }
   }
