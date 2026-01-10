@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { PriceAlert } from '@/lib/alerts/alertStore.client'
+import type { PriceAlert } from '@/lib/alerts/alertStore.types'
 import type { NotificationSettings } from '@/lib/notification/notificationSettings'
 
 /* =========================
@@ -25,31 +25,32 @@ type AlertsState = {
   orderedIds: string[]
 
   /* =========================
-   * Settings (UI filter)
+   * Settings
    * ========================= */
   notificationSettings?: NotificationSettings
   setNotificationSettings: (s: NotificationSettings) => void
 
   /* =========================
-   * Derived helpers
+   * Selectors (RAW ONLY)
    * ========================= */
   getAll: () => PriceAlert[]
-  getWaiting: () => PriceAlert[]
-  getCooldown: () => PriceAlert[]
-  getDisabled: () => PriceAlert[]
 
   /* =========================
    * Actions
    * ========================= */
   bootstrap: () => Promise<void>
+  addAlert: (alert: PriceAlert) => void
   upsertAlert: (alert: PriceAlert) => void
   removeAlert: (id: string) => void
-  markTriggered: (payload: RealtimeEvent) => void
+
+  /** 🔥 SSE 반영 (status 기반) */
+  applyTriggered: (payload: RealtimeEvent) => void
 }
 
 /* =========================
- * 🔒 SSE listener singleton
+ * SSE listener singleton
  * ========================= */
+
 let sseBound = false
 
 /* =========================
@@ -59,20 +60,18 @@ let sseBound = false
 export const useAlertsStore = create<AlertsState>()(
   subscribeWithSelector((set, get) => {
     /* =========================
-     * SSE → UI Event Listener (ONCE)
+     * SSE → Store 연결 (ONCE)
      * ========================= */
     if (typeof window !== 'undefined' && !sseBound) {
       sseBound = true
 
       window.addEventListener('alerts:sse', (e: any) => {
         const settings = get().notificationSettings
-
-        // 🔕 UI-level SSE filter
-        if (settings && settings.sseEnabled === false) return
+        if (settings?.sseEnabled === false) return
 
         const data = e.detail
         if (data?.type === 'ALERT_TRIGGERED') {
-          get().markTriggered(data)
+          get().applyTriggered(data)
         }
       })
     }
@@ -85,7 +84,7 @@ export const useAlertsStore = create<AlertsState>()(
       /* =========================
        * Settings
        * ========================= */
-      setNotificationSettings: (s) =>
+      setNotificationSettings: s =>
         set({ notificationSettings: s }),
 
       /* =========================
@@ -97,35 +96,8 @@ export const useAlertsStore = create<AlertsState>()(
           .map(id => get().alertsById[id])
           .filter(Boolean),
 
-      getWaiting: () =>
-        get()
-          .getAll()
-          .filter(
-            a =>
-              a.enabled &&
-              (!a.lastTriggeredAt ||
-                (a.cooldownMs &&
-                  Date.now() - a.lastTriggeredAt >= a.cooldownMs)),
-          ),
-
-      getCooldown: () =>
-        get()
-          .getAll()
-          .filter(
-            a =>
-              a.enabled &&
-              a.lastTriggeredAt &&
-              a.cooldownMs &&
-              Date.now() - a.lastTriggeredAt < a.cooldownMs,
-          ),
-
-      getDisabled: () =>
-        get()
-          .getAll()
-          .filter(a => !a.enabled),
-
       /* =========================
-       * Bootstrap (initial load)
+       * Bootstrap
        * ========================= */
       bootstrap: async () => {
         const res = await fetch('/api/alerts', { cache: 'no-store' })
@@ -153,6 +125,15 @@ export const useAlertsStore = create<AlertsState>()(
       /* =========================
        * CRUD
        * ========================= */
+      addAlert: alert =>
+        set(state => ({
+          alertsById: {
+            ...state.alertsById,
+            [alert.id]: alert,
+          },
+          orderedIds: [alert.id, ...state.orderedIds],
+        })),
+
       upsertAlert: alert =>
         set(state => {
           const exists = !!state.alertsById[alert.id]
@@ -178,14 +159,14 @@ export const useAlertsStore = create<AlertsState>()(
         }),
 
       /* =========================
-       * Realtime Trigger
+       * 🔥 Realtime Trigger (SSOT)
        * ========================= */
-      markTriggered: ({ alertId, symbol, price, ts }) =>
+      applyTriggered: ({ alertId, symbol, price, ts }) =>
         set(state => {
           const alert = state.alertsById[alertId]
           if (!alert) return state
 
-          // 🔔 UI effect (toast / sound)
+          // UI 이벤트 (toast 등)
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('alert:triggered', {
@@ -199,10 +180,10 @@ export const useAlertsStore = create<AlertsState>()(
               ...state.alertsById,
               [alertId]: {
                 ...alert,
-                triggered:
+                status:
                   alert.repeatMode === 'ONCE'
-                    ? true
-                    : alert.triggered,
+                    ? 'TRIGGERED'
+                    : 'WAITING',
                 lastTriggeredAt: ts,
               },
             },

@@ -1,3 +1,6 @@
+// 🔥 Binance WebSocket 강제 실행 (사이드 이펙트 import)
+import '@/lib/market/binanceStream'
+
 import { NextRequest } from 'next/server'
 import { addSSEClient } from '@/lib/realtime/sseHub'
 
@@ -9,10 +12,13 @@ export async function GET(req: NextRequest) {
     start(controller) {
       const encoder = new TextEncoder()
 
-      // comment frame (SSE 안정화)
+      // ✅ SSE keep-alive / initial frame
       controller.enqueue(encoder.encode(`: connected\n\n`))
 
-      // 🔥 ALERTS scope로 등록
+      /**
+       * 🔥 ALERTS 전용 SSE 등록
+       * - ALERT_TRIGGERED 이벤트를 수신하기 위한 scope
+       */
       const cleanup = addSSEClient(controller, {
         scope: 'ALERTS',
       })

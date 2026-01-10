@@ -3,7 +3,7 @@ import { createRedisSubscriber } from '@/lib/redis'
 /* =========================
  * Types
  * ========================= */
-type SSEScope = 'ALERTS' | 'REALTIME' | 'VIP'
+export type SSEScope = 'ALERTS' | 'REALTIME' | 'VIP'
 
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>
@@ -15,7 +15,7 @@ type Client = {
  * ========================= */
 const encoder = new TextEncoder()
 
-// scope별 클라이언트 관리
+// scope별 SSE client 관리
 const clientsByScope: Record<SSEScope, Set<Client>> = {
   ALERTS: new Set(),
   REALTIME: new Set(),
@@ -31,37 +31,30 @@ export function addSSEClient(
 ) {
   const scope: SSEScope = options?.scope ?? 'REALTIME'
   const client: Client = { controller, scope }
-  const set = clientsByScope[scope]
 
-  set.add(client)
+  clientsByScope[scope].add(client)
 
   console.log(
-    `[SSE][${scope}] client connected. total:`,
-    set.size,
+    `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
   )
 
-  // 연결 ACK (프론트 LIVE 표시용)
+  // 연결 ACK (브라우저 안정화)
   controller.enqueue(
     encoder.encode(`event: connected\ndata: {}\n\n`),
   )
 
   return () => {
-    set.delete(client)
+    clientsByScope[scope].delete(client)
     console.log(
-      `[SSE][${scope}] client disconnected. total:`,
-      set.size,
+      `[SSE][${scope}] client disconnected. total=${clientsByScope[scope].size}`,
     )
   }
 }
 
 /* =========================
  * 🔥 Redis → SSE Bridge
+ * - 전역 싱글톤 보장 (Next dev / HMR 안전)
  * ========================= */
-
-/**
- * 🔒 진짜 전역 싱글톤 subscribe 보장
- * - Next dev / HMR / Turbopack 대응
- */
 const g = globalThis as any
 
 if (!g.__SSE_REDIS_SUBSCRIBED__) {
@@ -77,41 +70,62 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
   })
 
-  sub.on('message', (_, message) => {
-    const payload = encoder.encode(`data: ${message}\n\n`)
+  sub.on('message', (_channel, message) => {
+    let event: any
 
-    // 🔁 scope별 fan-out
-    ;(Object.keys(clientsByScope) as SSEScope[]).forEach(scope => {
-      const set = clientsByScope[scope]
-      if (!set.size) return
+    try {
+      event = JSON.parse(message)
+    } catch (e) {
+      console.error('[SSE] JSON parse error', e)
+      return
+    }
 
-      for (const client of set) {
-        try {
-          client.controller.enqueue(payload)
-        } catch {
-          set.delete(client)
-          console.warn(`[SSE][${scope}] drop closed client`)
-        }
+    /* =========================
+     * 이벤트 타입 → scope 매핑
+     * ========================= */
+    let targetScope: SSEScope | null = null
+
+    if (event.type === 'ALERT_TRIGGERED') {
+      targetScope = 'ALERTS'
+    } else if (event.type === 'PRICE_TICK') {
+      targetScope = 'REALTIME'
+    } else if (event.type === 'VIP_UPDATE') {
+      targetScope = 'VIP'
+    }
+
+    // ❌ OI_TICK 등은 여기서 자연스럽게 drop
+    if (!targetScope) return
+
+    const set = clientsByScope[targetScope]
+    if (!set.size) return
+
+    const payload = encoder.encode(
+      `data: ${JSON.stringify(event)}\n\n`,
+    )
+
+    for (const client of set) {
+      try {
+        client.controller.enqueue(payload)
+      } catch {
+        set.delete(client)
+        console.warn(`[SSE][${targetScope}] drop closed client`)
       }
-    })
+    }
   })
 }
 
 /* =========================
- * 💓 Heartbeat (선택)
+ * 💓 Heartbeat (optional)
  * ========================= */
 export function pushHeartbeat() {
   const ping = encoder.encode(`event: ping\ndata: {}\n\n`)
 
   ;(Object.keys(clientsByScope) as SSEScope[]).forEach(scope => {
-    const set = clientsByScope[scope]
-    if (!set.size) return
-
-    for (const client of set) {
+    for (const client of clientsByScope[scope]) {
       try {
         client.controller.enqueue(ping)
       } catch {
-        set.delete(client)
+        clientsByScope[scope].delete(client)
       }
     }
   })

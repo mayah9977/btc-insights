@@ -1,6 +1,6 @@
 'use client'
 
-import type { PriceAlert } from '@/lib/alerts/alertStore.client'
+import type { PriceAlert } from '@/lib/alerts/alertStore.types'
 
 export default function AlertItem({ alert }: { alert: PriceAlert }) {
   async function testTrigger() {

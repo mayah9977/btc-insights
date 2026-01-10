@@ -1,7 +1,10 @@
 'use client'
 
-import type { AlertCondition } from '@/lib/alerts/alertStore.client'
+import type { AlertCondition } from '@/lib/alerts/alertStore.types'
 
+/* =========================
+ * Options
+ * ========================= */
 const OPTIONS: { value: AlertCondition; label: string }[] = [
   {
     value: 'ABOVE',
@@ -13,14 +16,17 @@ const OPTIONS: { value: AlertCondition; label: string }[] = [
   },
   {
     value: 'PERCENT_UP',
-    label: '🚀 현재가 대비 % 이상 상승',
+    label: '🚀 기준가 대비 % 이상 상승',
   },
   {
     value: 'PERCENT_DOWN',
-    label: '🔻 현재가 대비 % 이상 하락',
+    label: '🔻 기준가 대비 % 이상 하락',
   },
 ]
 
+/* =========================
+ * Component
+ * ========================= */
 export default function AlertConditionSelect({
   value,
   onChange,

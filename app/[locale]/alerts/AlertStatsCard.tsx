@@ -3,18 +3,40 @@
 import clsx from 'clsx'
 import { useAlertsStore } from './providers/alertsStore.zustand'
 import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
+import { getAlertStatus } from '@/lib/alerts/alertStore.client'
 import AlertStatRow from './AlertStatRow'
-import AlertStatusBadge from './AlertStatusBadge'
 import SystemRiskBadge from './SystemRiskBadge'
 
 export default function AlertStatsCard() {
   const connected = useAlertsSSEStore(s => s.connected)
 
+  // ✅ primitive만 selector로 가져오기
   const all = useAlertsStore(s => s.getAll().length)
-  const waiting = useAlertsStore(s => s.getWaiting().length)
-  const cooldown = useAlertsStore(s => s.getCooldown().length)
-  const disabled = useAlertsStore(s => s.getDisabled().length)
 
+  const waiting = useAlertsStore(
+    s =>
+      s.getAll().filter(
+        a => getAlertStatus(a) === 'WAITING',
+      ).length,
+  )
+
+  const cooldown = useAlertsStore(
+    s =>
+      s.getAll().filter(
+        a => getAlertStatus(a) === 'COOLDOWN',
+      ).length,
+  )
+
+  const disabled = useAlertsStore(
+    s =>
+      s.getAll().filter(
+        a => getAlertStatus(a) === 'DISABLED',
+      ).length,
+  )
+
+  /* =========================
+   * System Risk 계산
+   * ========================= */
   const systemRiskScore =
     (!connected ? 2 : 0) +
     (waiting >= 3 ? 2 : waiting > 0 ? 1 : 0) +
@@ -31,7 +53,7 @@ export default function AlertStatsCard() {
   return (
     <div
       className={clsx(
-        'relative w-full max-w-[420px] rounded-3xl bg-yellow-400 p-6',
+        'relative w-full max-w-[420px] rounded-3xl p-6',
         systemRiskLevel === 'SAFE'
           ? 'border-4 border-emerald-500'
           : systemRiskLevel === 'WARNING'
@@ -40,7 +62,6 @@ export default function AlertStatsCard() {
       )}
     >
       <SystemRiskBadge level={systemRiskLevel} />
-      <AlertStatusBadge status={connected ? 'SAFE' : 'RISK'} />
 
       <div className="mt-4 grid gap-2">
         <AlertStatRow label="전체 알림" value={all} />

@@ -1,102 +1,94 @@
-// lib/market/pricePolling.ts
 import { handlePriceTick } from '@/lib/alerts/alertEngine'
-import { redis, createRedisSubscriber } from '@/lib/redis'
+import { fetchCurrentMarketPrice } from '@/lib/market/fetchCurrentMarketPrice'
 
 /* =========================
- * Internal State
+ * Internal State (가격 캐시)
  * ========================= */
 
 /**
- * 🔥 마지막 가격 캐시 (symbol 단위)
- * - realtime:market 채널을 구독해서 PRICE_TICK을 받아 lastPriceMap을 채움
- * - 알림 저장 직후 pushPriceTick()에서 즉시 평가에 사용
+ * 🔑 마지막으로 수신된 실시간 가격
+ * - polling / websocket → onPriceUpdate에서만 갱신
+ * - forceEvaluatePrice는 읽기 전용
  */
 const lastPriceMap: Record<string, number> = {}
 
 /* =========================
- * (옵션) 외부에서 가격 주입
- * - admin / backfill / test 용
+ * Cache API (읽기 전용)
  * ========================= */
-export function cacheLastPrice(symbol: string, price: number) {
-  lastPriceMap[symbol.toUpperCase()] = price
+
+export function getLastPrice(symbol: string): number | null {
+  const price = lastPriceMap[symbol.toUpperCase()]
+  return Number.isFinite(price) ? price : null
 }
 
 /* =========================
- * ✅ Price polling(캐시 채움) bootstrap
- * - app/api/_init 에서 1회 호출
- * - 중복 구독 방지
+ * 🔥 REALTIME PRICE FEED (SSOT)
  * ========================= */
-let started = false
 
-export function ensurePricePollingStarted() {
-  if (started) return
-  started = true
+/**
+ * ✅ 모든 실시간 가격 업데이트의 단일 진입점
+ * polling / websocket / stream 은
+ * 반드시 이 함수만 호출해야 함
+ */
+export async function onPriceUpdate(
+  symbol: string,
+  price: number,
+) {
+  if (!symbol || !Number.isFinite(price)) return
 
-  const sub = createRedisSubscriber()
+  const upperSymbol = symbol.toUpperCase()
 
-  sub.subscribe('realtime:market', (err) => {
-    if (err) {
-      console.error('[PRICE_POLLING] subscribe failed', err)
-    } else {
-      console.log('[PRICE_POLLING] subscribed: realtime:market')
-    }
-  })
+  // 1️⃣ 최신 가격 캐시
+  lastPriceMap[upperSymbol] = price
 
-  sub.on('message', (_channel, message) => {
-    // message는 SSE Hub에서도 그대로 data로 보내는 payload라 가정 (JSON)
-    try {
-      const data = JSON.parse(message)
-
-      // ✅ PRICE_TICK 수신 시 캐시 업데이트
-      if (data?.type === 'PRICE_TICK') {
-        const symbol = String(data.symbol ?? '').toUpperCase()
-        const price = Number(data.price)
-
-        if (symbol && Number.isFinite(price)) {
-          lastPriceMap[symbol] = price
-        }
-      }
-    } catch {
-      // JSON이 아니면 무시
-    }
+  // 2️⃣ 🔥 반드시 Alert Engine으로 전달
+  await handlePriceTick({
+    symbol: upperSymbol,
+    price,
+    mode: 'tick',
   })
 }
 
 /* =========================
- * 🔥 알림 저장 직후 강제 평가
+ * 🔥 Alert 생성 직후 즉시 평가
  * ========================= */
-export async function pushPriceTick(params: { symbol: string; reason?: string }) {
+
+/**
+ * - Alert 생성 직후 1회만 호출
+ * - 실시간 루프에서는 절대 사용 금지
+ */
+export async function forceEvaluatePrice(params: {
+  symbol: string
+  reason?: string
+}) {
   const symbol = params.symbol.toUpperCase()
-  const price = lastPriceMap[symbol]
 
-  if (!Number.isFinite(price)) {
-    console.warn('[FORCE_TICK] no cached price', symbol)
-    return
+  let price: number
+
+  const cached = lastPriceMap[symbol]
+
+  // 1️⃣ 실시간 가격이 이미 있으면 사용
+  if (Number.isFinite(cached)) {
+    price = cached
+  } else {
+    // 2️⃣ 없을 때만 fetch (fallback)
+    const fetched = await fetchCurrentMarketPrice(symbol)
+
+    if (typeof fetched !== 'number' || !Number.isFinite(fetched)) {
+      console.warn('[FORCE_EVAL] invalid fetched price', symbol, fetched)
+      return
+    }
+
+    price = fetched
+    lastPriceMap[symbol] = fetched
   }
 
-  console.log('[FORCE_TICK]', symbol, price, params.reason)
+  console.log('[FORCE_EVAL]', symbol, price, params.reason)
 
-  /* =========================
-   * 🔔 ALERT ENGINE 즉시 평가
-   * ========================= */
+  // 🔥 initial 평가 (딱 1회)
   await handlePriceTick({
     symbol,
     price,
     mode: 'initial',
   })
-
-  /* =========================
-   * 🔥 Redis Event (단발)
-   * - SSE Hub가 구독하는 채널과 통일: realtime:market
-   * ========================= */
-  await redis.publish(
-    'realtime:market',
-    JSON.stringify({
-      type: 'PRICE_FORCE',
-      symbol,
-      price,
-      ts: Date.now(),
-      reason: params.reason,
-    }),
-  )
 }

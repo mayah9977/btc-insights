@@ -1,32 +1,16 @@
 'use client'
 
-import type {
-  PriceAlert,
-  AlertStatus,
+import type { PriceAlert } from '@/lib/alerts/alertStore.types'
+import {
+  getAlertStatus,
+  type AlertUIStatus,
 } from '@/lib/alerts/alertStore.client'
 
 /* =========================
- * Client-side status calc
- * ========================= */
-function getClientAlertStatus(alert: PriceAlert): AlertStatus {
-  if (!alert.enabled) return 'DISABLED'
-
-  if (alert.repeatMode === 'ONCE' && alert.triggered) {
-    return 'ALREADY_TRIGGERED'
-  }
-
-  if (alert.lastTriggeredAt) {
-    return 'COOLDOWN'
-  }
-
-  return 'WAITING'
-}
-
-/* =========================
- * Visual Map (Luxury leveled)
+ * Visual Map (UI 전용)
  * ========================= */
 const STATUS_MAP: Record<
-  AlertStatus,
+  AlertUIStatus,
   { label: string; className: string }
 > = {
   WAITING: {
@@ -39,7 +23,7 @@ const STATUS_MAP: Record<
     className:
       'bg-amber-400/20 text-amber-300 border border-amber-400/40',
   },
-  ALREADY_TRIGGERED: {
+  TRIGGERED: {
     label: '완료',
     className:
       'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40',
@@ -56,7 +40,7 @@ export default function AlertStatusBadge({
 }: {
   alert: PriceAlert
 }) {
-  const status = getClientAlertStatus(alert)
+  const status = getAlertStatus(alert)
   const meta = STATUS_MAP[status]
 
   return (

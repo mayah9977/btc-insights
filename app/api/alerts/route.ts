@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createAlert, listAlerts } from '@/lib/alerts/alertStore.server'
-import { handlePriceTick } from '@/lib/alerts/alertEngine'
+import {
+  forceEvaluatePrice,
+  getLastPrice,
+} from '@/lib/market/pricePolling'
+import { fetchCurrentMarketPrice } from '@/lib/market/fetchCurrentMarketPrice'
+import type { AlertCondition } from '@/lib/alerts/alertTypes'
 
 const USER_ID = 'dev-user'
 
@@ -27,47 +32,66 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    const alert = await createAlert({
-      ...body,
-      userId: USER_ID,
-    })
+    const condition = body.condition as AlertCondition
+    const isPercent =
+      condition === 'PERCENT_UP' || condition === 'PERCENT_DOWN'
 
-    /* =========================
-     * 🔥 저장 직후 즉시 1회 평가
-     * - 이미 돌파된 알림도 즉시 트리거
-     * - 서버에서는 절대 URL 필수
-     * ========================= */
-    try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL ||
-        `http://localhost:${process.env.PORT ?? 3000}`
+    /**
+     * 🔥 basePrice는 서버에서만 결정
+     * - null 절대 금지
+     * - number | undefined 만 허용
+     */
+    let basePrice: number | undefined = undefined
 
-      const res = await fetch(
-        `${baseUrl}/api/market/price?symbol=${alert.symbol}`,
-        { cache: 'no-store' },
-      )
-
-      if (res.ok) {
-        const data = await res.json()
-
-        if (Number.isFinite(data?.price)) {
-          await handlePriceTick({
-            symbol: alert.symbol,
-            price: Number(data.price),
-            mode: 'initial', // 👈 핵심
-          })
+    if (isPercent) {
+      const cached = getLastPrice(body.symbol)
+      if (typeof cached === 'number') {
+        basePrice = cached
+      } else {
+        const fetched = await fetchCurrentMarketPrice(body.symbol)
+        if (typeof fetched === 'number') {
+          basePrice = fetched
         }
       }
-    } catch (e) {
-      // ⚠️ 즉시 평가 실패는 치명적이지 않음
-      console.warn('[ALERTS][POST][PRICE]', e)
     }
+
+    // 1️⃣ 알림 생성
+    const alert = await createAlert({
+      userId: USER_ID,
+      exchange: 'BINANCE',
+      symbol: body.symbol,
+      condition,
+
+      // 🔹 절대값 조건
+      targetPrice:
+        condition === 'ABOVE' ||
+        condition === 'BELOW' ||
+        condition === 'REACH'
+          ? body.targetPrice
+          : undefined,
+
+      // 🔹 % 조건
+      basePrice,
+      percent: isPercent ? body.percent : undefined,
+
+      repeatMode: body.repeatMode ?? 'ONCE',
+    })
+
+    // 2️⃣ 🔥 생성 직후 즉시 1회 평가
+    await forceEvaluatePrice({
+      symbol: alert.symbol,
+      reason: 'ALERT_CREATED',
+    })
 
     return NextResponse.json({ ok: true, alert })
   } catch (e: any) {
     console.error('[ALERTS][POST]', e)
     return NextResponse.json(
-      { ok: false, error: 'INTERNAL_ERROR', message: e?.message },
+      {
+        ok: false,
+        error: 'INTERNAL_ERROR',
+        message: e?.message,
+      },
       { status: 500 },
     )
   }

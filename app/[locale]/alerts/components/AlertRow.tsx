@@ -1,11 +1,11 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useState, useMemo } from 'react'
 import clsx from 'clsx'
-import type { PriceAlert } from '@/lib/alerts/alertStore.client'
+import type { PriceAlert } from '@/lib/alerts/alertTypes'
 import {
   getAlertStatus,
-  type AlertStatus,
+  type AlertUIStatus,
 } from '@/lib/alerts/alertStore.client'
 import { useAlertsStore } from '../providers/alertsStore.zustand'
 import PerformanceMiniChart from './PerformanceMiniChart'
@@ -19,61 +19,54 @@ type Props = {
 }
 
 function AlertRow({ alert, onEdit, onDeleted }: Props) {
-  const [enabled, setEnabled] = useState(alert.enabled)
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    setEnabled(alert.enabled)
-  }, [alert.enabled])
+  /** ✅ 단일 기준: UI 상태 */
+  const status: AlertUIStatus = useMemo(
+    () => getAlertStatus(alert),
+    [alert],
+  )
 
-  const status: AlertStatus = useMemo(() => {
-    return getAlertStatus({ ...alert, enabled })
-  }, [
-    enabled,
-    alert.condition,
-    alert.targetPrice,
-    alert.percent,
-    alert.repeatMode,
-    alert.triggered,
-    alert.lastTriggeredAt,
-    alert.cooldownMs,
-  ])
+  const isTriggered = status === 'TRIGGERED'
+  const isDisabled = status === 'DISABLED'
 
   /* =========================
-   * Toggle enabled
+   * Toggle (status 기반)
+   * - TRIGGERED는 잠금
    * ========================= */
   const toggle = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation()
-      if (loading) return
+      if (loading || isTriggered) return
 
-      const next = !enabled
-      setEnabled(next)
+      const nextStatus =
+        status === 'DISABLED' ? 'WAITING' : 'DISABLED'
+
       setLoading(true)
 
       try {
         const res = await fetch(`/api/alerts/${alert.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: next }),
+          body: JSON.stringify({ status: nextStatus }),
         })
+        if (!res.ok) throw new Error('Toggle failed')
 
-        if (!res.ok) {
-          throw new Error('Toggle failed')
-        }
-      } catch {
-        // ❌ 실패 시 롤백
-        setEnabled(!next)
+        /** ✅ zustand는 upsert만 */
+        useAlertsStore.getState().upsertAlert({
+          ...alert,
+          status: nextStatus,
+        })
       } finally {
         setLoading(false)
       }
     },
-    [alert.id, enabled, loading],
+    [alert, loading, status, isTriggered],
   )
 
   /* =========================
-   * 🔥 DELETE (핵심 수정)
+   * DELETE
    * ========================= */
   const remove = useCallback(
     async (e: React.MouseEvent) => {
@@ -85,15 +78,9 @@ function AlertRow({ alert, onEdit, onDeleted }: Props) {
         const res = await fetch(`/api/alerts/${alert.id}`, {
           method: 'DELETE',
         })
+        if (!res.ok) throw new Error('Delete failed')
 
-        if (!res.ok) {
-          throw new Error('Delete failed')
-        }
-
-        // ✅ 서버 삭제 성공 → client store 즉시 반영
         useAlertsStore.getState().removeAlert(alert.id)
-
-        // (옵션) 부모 콜백
         onDeleted()
       } finally {
         setLoading(false)
@@ -110,33 +97,45 @@ function AlertRow({ alert, onEdit, onDeleted }: Props) {
           'relative w-full max-w-[420px] cursor-pointer',
           'rounded-2xl border p-6 transition-all',
           'bg-gradient-to-b from-[#12182a] to-[#0b0f1a]',
-          status === 'WAITING' && 'border-vipBorder hover:border-white/30',
-          status === 'COOLDOWN' && 'border-white/10 opacity-80',
-          status === 'DISABLED' && 'border-white/5 opacity-40',
+
+          status === 'WAITING' &&
+            'border-vipBorder hover:border-white/30',
+          status === 'TRIGGERED' &&
+            'border-emerald-500/40 opacity-90',
+          status === 'DISABLED' &&
+            'border-white/5 opacity-40',
         )}
       >
         {/* Toggle */}
         <button
           onClick={toggle}
+          disabled={isTriggered}
           className={clsx(
             'absolute top-4 left-4 w-10 h-5 rounded-full',
-            enabled ? 'bg-emerald-500' : 'bg-zinc-600',
+            status !== 'DISABLED'
+              ? 'bg-emerald-500'
+              : 'bg-zinc-600',
+            isTriggered && 'opacity-60 cursor-not-allowed',
           )}
         >
           <span
             className={clsx(
               'absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform',
-              enabled ? 'translate-x-5' : 'translate-x-1',
+              status !== 'DISABLED'
+                ? 'translate-x-5'
+                : 'translate-x-1',
             )}
           />
         </button>
 
-        {/* Status */}
+        {/* Status Badge */}
         <div className="absolute top-4 right-4">
           <AlertStatusBadge alert={alert} />
         </div>
 
-        <div className="mt-8 text-sm text-slate-300">{alert.symbol}</div>
+        <div className="mt-8 text-sm text-slate-300">
+          {alert.symbol}
+        </div>
 
         <div className="mt-2 text-3xl font-bold text-white">
           {alert.targetPrice
@@ -145,7 +144,7 @@ function AlertRow({ alert, onEdit, onDeleted }: Props) {
         </div>
 
         <div className="mt-1 text-xs text-slate-400">
-          {alert.condition.replace('_', ' ')}
+          {alert.condition.replaceAll('_', ' ')}
         </div>
 
         <div className="mt-4">
@@ -162,7 +161,9 @@ function AlertRow({ alert, onEdit, onDeleted }: Props) {
 
         <div className="mt-6 flex justify-between text-xs text-slate-500">
           <span>
-            {alert.repeatMode === 'ONCE' ? '1회 알림' : '반복 알림'}
+            {alert.repeatMode === 'ONCE'
+              ? '1회 알림'
+              : '반복 알림'}
           </span>
 
           <div className="flex gap-4">

@@ -1,12 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-
-/**
- * ======================================================
- * 🔒 ALERTS SSE SINGLETON (SSE 인프라 전용 Store)
- * ======================================================
- */
+import { toast } from 'react-hot-toast'
 
 let sse: EventSource | null = null
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
@@ -26,25 +21,25 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
   systemRisk: 'SAFE',
   lastEventAt: null,
 
+  /* =========================
+   * 🔥 SSE Bootstrap
+   * ========================= */
   bootstrap: () => {
-    // 🚫 SSR 방어
     if (typeof window === 'undefined') return
 
-    // 🔒 중복 생성 방지
+    // HMR / Fast Refresh 안전 처리
     if (sse) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[alerts-sse] bootstrap skipped (already exists)')
-      }
-      return
+      try {
+        sse.close()
+      } catch {}
+      sse = null
     }
 
     console.log('[alerts-sse] bootstrap start')
 
     sse = new EventSource('/api/alerts/sse')
 
-    /** ✅ 연결 성공 */
     sse.onopen = () => {
-      console.log('[SSE][ALERTS] connected')
       set({
         connected: true,
         systemRisk: 'SAFE',
@@ -52,50 +47,60 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
       })
     }
 
-    /**
-     * ⚠️ onerror는 실제 disconnect 아님
-     * - 자동 재연결됨
-     * - 상태 변경 ❌
-     */
-    sse.onerror = (err) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[SSE][ALERTS] error (ignored)', err)
-      }
+    sse.onerror = err => {
+      console.warn('[SSE][ALERTS] error (ignored)', err)
     }
 
-    /** 📩 메시지 수신 */
-    sse.onmessage = (event) => {
+    sse.onmessage = event => {
       try {
         const data = JSON.parse(event.data)
 
         set({
-          lastEventAt: Date.now(),
           connected: true,
           systemRisk: 'SAFE',
+          lastEventAt: Date.now(),
         })
 
-        // 🔥 ALERT_TRIGGERED fan-out
         if (data?.type === 'ALERT_TRIGGERED') {
+          /* =========================
+           * 🔔 Toast
+           * ========================= */
+          toast.success(
+            `🔔 ${data.symbol} 알림 발생\n가격: ${data.price}`,
+            {
+              position: 'bottom-right',
+              duration: 5000,
+            },
+          )
+
+          /* =========================
+           * 🔥 Method 1 핵심
+           * - Alert 카드 Store로 전달
+           * ========================= */
+          window.dispatchEvent(
+            new CustomEvent('alerts:sse', { detail: data }),
+          )
+
+          /* =========================
+           * 기존 UI/호환 이벤트 (유지)
+           * ========================= */
           window.dispatchEvent(
             new CustomEvent('alert:triggered', { detail: data }),
           )
         }
-      } catch (err) {
-        console.error('[SSE][ALERTS] message parse error', err)
+      } catch (e) {
+        console.error('[SSE] parse error', e)
       }
     }
 
-    /**
-     * 🕒 Watchdog
-     * - 5~10s 무응답 → WARNING
-     * - 10s 초과 → CRITICAL
-     */
+    /* =========================
+     * 💓 Watchdog
+     * ========================= */
     watchdogTimer = setInterval(() => {
       const last = get().lastEventAt
       if (!last) return
 
       const gap = Date.now() - last
-
       if (gap > 10_000) {
         set({ connected: false, systemRisk: 'CRITICAL' })
       } else if (gap > 5_000) {
@@ -104,13 +109,14 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
     }, 5_000)
   },
 
-  /**
-   * 🔚 앱 완전 종료 시에만 사용
-   */
+  /* =========================
+   * 🔌 Shutdown
+   * ========================= */
   shutdown: () => {
     if (sse) {
-      console.log('[alerts-sse] shutdown')
-      sse.close()
+      try {
+        sse.close()
+      } catch {}
       sse = null
     }
 

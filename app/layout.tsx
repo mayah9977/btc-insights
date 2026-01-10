@@ -2,6 +2,7 @@
 
 import './styles/globals.css'
 import { useEffect, useRef } from 'react'
+import { Toaster } from 'react-hot-toast' // ✅ 추가
 import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
 import { registerPushToken } from '@/lib/notification/registerPushToken'
 
@@ -40,6 +41,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="bg-neutral-950 text-white antialiased">
+        {/* ✅ Toast 렌더러 (이게 없으면 절대 안 뜸) */}
+        <Toaster position="bottom-right" />
+
         {children}
       </body>
     </html>

@@ -1,93 +1,63 @@
 import { redis } from '../redis'
+import type {
+  AlertCondition,
+  AlertRepeatMode,
+  PriceAlert,
+} from './alertTypes'
 
 /* =========================
- * Types (Server)
+ * Create Input
  * ========================= */
-export type AlertCondition =
-  | 'ABOVE'
-  | 'BELOW'
-  | 'REACH'
-  | 'PERCENT_UP'
-  | 'PERCENT_DOWN'
-
-export type RepeatMode = 'ONCE' | 'REPEAT'
-
-export type PriceAlert = {
-  id: string
-  userId: string
-  exchange: 'BINANCE'
-  symbol: string
-
-  /* =========================
-   * Condition
-   * ========================= */
-  condition: AlertCondition
-
-  // 가격 기반
-  targetPrice?: number
-
-  // % 기반
-  basePrice?: number
-  percent?: number
-
-  // 🔥 트레일링 % (익절/손절용)
-  trailingPercent?: number
-
-  /* =========================
-   * State
-   * ========================= */
-  enabled: boolean
-  repeatMode: RepeatMode
-  cooldownMs: number
-  triggered: boolean
-  lastTriggeredAt?: number
-
-  /* =========================
-   * Meta
-   * ========================= */
-  createdAt: number
-  memo?: string
-}
-
 export type CreateAlertInput = {
   userId: string
   exchange: 'BINANCE'
   symbol: string
   condition: AlertCondition
 
+  // 절대값 조건
   targetPrice?: number
+
+  // % 조건
   basePrice?: number
   percent?: number
-  trailingPercent?: number
 
-  repeatMode?: RepeatMode
+  repeatMode?: AlertRepeatMode
   cooldownMs?: number
   memo?: string
 }
 
+/* =========================
+ * Redis Key
+ * ========================= */
 const ALERT_KEY = 'alerts'
 
 /* =========================
- * 조회
+ * 조회 (UI)
  * ========================= */
-export async function listAlerts(userId: string): Promise<PriceAlert[]> {
+export async function listAlerts(
+  userId: string,
+): Promise<PriceAlert[]> {
   const raw = await redis.hgetall(ALERT_KEY)
+
   return Object.values(raw)
     .map(v => JSON.parse(v) as PriceAlert)
     .filter(a => a.userId === userId)
 }
 
 /* =========================
- * 엔진용 조회
+ * 조회 (Engine)
+ * ✅ SSOT: status === 'WAITING' 만 평가
  * ========================= */
-export async function getActiveAlerts(symbol: string): Promise<PriceAlert[]> {
+export async function getActiveAlerts(
+  symbol: string,
+): Promise<PriceAlert[]> {
   const raw = await redis.hgetall(ALERT_KEY)
+
   return Object.values(raw)
     .map(v => JSON.parse(v) as PriceAlert)
     .filter(a => {
-      if (!a.enabled) return false
       if (a.symbol !== symbol.toUpperCase()) return false
-      if (a.repeatMode === 'ONCE' && a.triggered) return false
+      if (a.status !== 'WAITING') return false
       return true
     })
 }
@@ -95,47 +65,63 @@ export async function getActiveAlerts(symbol: string): Promise<PriceAlert[]> {
 /* =========================
  * 생성
  * ========================= */
-export async function createAlert(input: CreateAlertInput) {
+export async function createAlert(
+  input: CreateAlertInput,
+): Promise<PriceAlert> {
   const now = Date.now()
 
   const alert: PriceAlert = {
+    /* identity */
     id: crypto.randomUUID(),
     userId: input.userId,
     exchange: input.exchange,
     symbol: input.symbol.toUpperCase(),
 
+    /* condition */
     condition: input.condition,
     targetPrice: input.targetPrice,
     basePrice: input.basePrice,
     percent: input.percent,
-    trailingPercent: input.trailingPercent,
 
-    enabled: true,
+    /* state (SSOT) */
+    status: 'WAITING',
     repeatMode: input.repeatMode ?? 'ONCE',
     cooldownMs: input.cooldownMs ?? 0,
+    lastTriggeredAt: undefined,
 
-    triggered: false,
+    /* meta */
     createdAt: now,
     memo: input.memo,
   }
+
+  console.log('[CREATE_ALERT][REDIS_WRITE]', alert)
 
   await redis.hset(ALERT_KEY, alert.id, JSON.stringify(alert))
   return alert
 }
 
 /* =========================
- * 수정
+ * 수정 (PATCH)
+ * ✅ status SSOT 보호
  * ========================= */
 export async function updateAlert(
   id: string,
   patch: Partial<PriceAlert>,
-) {
+): Promise<PriceAlert | null> {
   const raw = await redis.hget(ALERT_KEY, id)
   if (!raw) return null
 
+  const prev = JSON.parse(raw) as PriceAlert
+
   const next: PriceAlert = {
-    ...(JSON.parse(raw) as PriceAlert),
+    ...prev,
     ...patch,
+
+    // 🔒 이미 TRIGGERED 된 알림은 되돌리지 않음
+    status:
+      prev.status === 'TRIGGERED'
+        ? 'TRIGGERED'
+        : patch.status ?? prev.status,
   }
 
   await redis.hset(ALERT_KEY, id, JSON.stringify(next))
@@ -150,7 +136,8 @@ export async function deleteAlert(id: string) {
 }
 
 /* =========================
- * 트리거 처리
+ * 트리거 처리 (Engine 전용)
+ * ✅ status만 변경 (SSOT)
  * ========================= */
 export async function markAlertTriggered(id: string) {
   const raw = await redis.hget(ALERT_KEY, id)
@@ -161,11 +148,13 @@ export async function markAlertTriggered(id: string) {
 
   const next: PriceAlert = {
     ...alert,
-    lastTriggeredAt: now,
-    triggered:
+
+    status:
       alert.repeatMode === 'ONCE'
-        ? true
-        : alert.triggered,
+        ? 'TRIGGERED'
+        : 'WAITING',
+
+    lastTriggeredAt: now,
   }
 
   await redis.hset(ALERT_KEY, id, JSON.stringify(next))

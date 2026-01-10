@@ -1,83 +1,42 @@
-/* =========================
- * Alert Conditions
- * ========================= */
-export type AlertCondition =
-  | 'ABOVE'         // 가격 이상 상승
-  | 'BELOW'         // 가격 이하 하락
-  | 'REACH'         // 정확히 도달
-  | 'PERCENT_UP'    // % 이상 상승
-  | 'PERCENT_DOWN'  // % 이상 하락
+/* =====================================================
+ * ⚠️ CLIENT ONLY
+ * - 서버 상태를 절대 변경하지 않음
+ * - UI 파생 상태 계산 전용
+ * ===================================================== */
+
+import type { PriceAlert } from './alertTypes'
 
 /* =========================
- * Repeat Mode
+ * UI Status (Derived Only)
+ * ❗ 서버에 저장 금지
  * ========================= */
-export type RepeatMode = 'ONCE' | 'REPEAT'
-
-/* =========================
- * Core Alert Type (CLIENT)
- * 👉 UI / Engine / API 공통
- * ========================= */
-export type PriceAlert = {
-  /* identity */
-  id: string
-  userId: string
-
-  /* market */
-  exchange: 'BINANCE'
-  symbol: string
-
-  /* condition */
-  condition: AlertCondition
-
-  // 가격 기반
-  targetPrice?: number
-
-  // % 기반
-  basePrice?: number
-  percent?: number
-
-  /* behavior */
-  enabled: boolean
-  repeatMode: RepeatMode
-  cooldownMs: number
-
-  /* state */
-  triggered: boolean
-  lastTriggeredAt?: number
-
-  /* meta */
-  createdAt: number
-  memo?: string
-}
-
-/* =========================
- * UI Status
- * ========================= */
-export type AlertStatus =
+export type AlertUIStatus =
   | 'WAITING'
   | 'COOLDOWN'
-  | 'ALREADY_TRIGGERED'
+  | 'TRIGGERED'
   | 'DISABLED'
 
 /* =========================
  * Status Resolver (UI 전용)
- * ⚠️ 단일 기준 (중복 구현 금지)
+ * ✅ SSOT = alert.status
  * ========================= */
-export function getAlertStatus(alert: PriceAlert): AlertStatus {
-  // 1️⃣ 완전 비활성
-  if (!alert.enabled) {
+export function getAlertStatus(
+  alert: PriceAlert,
+): AlertUIStatus {
+  // 1️⃣ 서버에서 비활성화된 상태
+  if (alert.status === 'DISABLED') {
     return 'DISABLED'
   }
 
-  // 2️⃣ 1회성 + 이미 발동
-  if (alert.repeatMode === 'ONCE' && alert.triggered) {
-    return 'ALREADY_TRIGGERED'
+  // 2️⃣ 1회성 알림 완료
+  if (alert.status === 'TRIGGERED') {
+    return 'TRIGGERED'
   }
 
-  // 3️⃣ 반복 알림 + 쿨타임 중
+  // 3️⃣ 반복 알림 + 쿨다운 중
   if (
     alert.repeatMode === 'REPEAT' &&
-    alert.cooldownMs > 0 &&
+    alert.cooldownMs &&
     alert.lastTriggeredAt &&
     Date.now() - alert.lastTriggeredAt < alert.cooldownMs
   ) {
@@ -89,22 +48,22 @@ export function getAlertStatus(alert: PriceAlert): AlertStatus {
 }
 
 /* =========================
- * UI Helper (밀도 & 비율용)
+ * UI Helper
  * ========================= */
 
 /**
- * 알림 중요도 (Row 정렬 / 강조용)
- * 값이 높을수록 시각적 우선순위 ↑
+ * 알림 우선순위
+ * - 리스트 정렬 / 강조도 계산용
  */
-export function getAlertPriority(alert: PriceAlert): number {
-  const status = getAlertStatus(alert)
-
-  switch (status) {
+export function getAlertPriority(
+  alert: PriceAlert,
+): number {
+  switch (getAlertStatus(alert)) {
     case 'WAITING':
       return 3
     case 'COOLDOWN':
       return 2
-    case 'ALREADY_TRIGGERED':
+    case 'TRIGGERED':
       return 1
     case 'DISABLED':
       return 0
@@ -114,9 +73,12 @@ export function getAlertPriority(alert: PriceAlert): number {
 }
 
 /**
- * 모바일/리스트 밀도 계산용
+ * 비활성 알림 여부
+ * - 리스트 숨김 / 밀도 조절용
  */
-export function isInactiveAlert(alert: PriceAlert) {
+export function isInactiveAlert(
+  alert: PriceAlert,
+): boolean {
   const status = getAlertStatus(alert)
-  return status === 'DISABLED' || status === 'ALREADY_TRIGGERED'
+  return status === 'DISABLED' || status === 'TRIGGERED'
 }

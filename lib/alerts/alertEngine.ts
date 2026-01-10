@@ -2,8 +2,10 @@ import {
   getActiveAlerts,
   markAlertTriggered,
   updateAlert,
-  type PriceAlert,
 } from './alertStore.server'
+
+import type { PriceAlert } from './alertTypes'
+
 import { sendAlertNotification } from './alertNotifier'
 import { addAlertHistory } from './alertHistoryStore'
 import { redis } from '../redis'
@@ -15,33 +17,34 @@ import { pushAlertTriggered } from '@/lib/push/pushOnAlert'
 export type PriceTick = {
   symbol: string
   price: number
-  mode?: 'tick' | 'initial'
+  mode?: 'tick' | 'initial' | 'realtime'
 }
 
-/** 심볼 단위 중복 방지 (동시 tick 보호) */
+/**
+ * 심볼 단위 동시 처리 방지
+ */
 const processing = new Set<string>()
 
 /* =========================
- * 🔔 Alert Engine Core
+ * 🔔 Alert Engine Core (SSOT)
  * ========================= */
 export async function handlePriceTick(tick: PriceTick) {
-  const symbol = tick.symbol.toUpperCase()
+  const symbol = String(tick.symbol ?? '').toUpperCase()
+  const price = Number(tick.price)
   const mode = tick.mode ?? 'tick'
 
+  if (!symbol || !Number.isFinite(price)) return
   if (processing.has(symbol)) return
+
   processing.add(symbol)
 
   try {
+    // ✅ 엔진 평가는 status === 'WAITING' 인 알림만
     const alerts: PriceAlert[] = await getActiveAlerts(symbol)
     if (!alerts.length) return
 
     for (const alert of alerts) {
-      /* =========================
-       * 🔒 Guard
-       * ========================= */
-      if (!alert?.id) continue
-      if (!alert.enabled) continue
-      if (alert.repeatMode === 'ONCE' && alert.triggered) continue
+      const cooldownMs = alert.cooldownMs ?? 0
 
       /* =========================
        * ⏱ Cooldown (REPEAT)
@@ -49,14 +52,18 @@ export async function handlePriceTick(tick: PriceTick) {
       if (
         mode === 'tick' &&
         alert.repeatMode === 'REPEAT' &&
-        alert.cooldownMs &&
+        cooldownMs > 0 &&
         alert.lastTriggeredAt &&
-        Date.now() - alert.lastTriggeredAt < alert.cooldownMs
+        Date.now() - alert.lastTriggeredAt < cooldownMs
       ) {
         continue
       }
 
-      const basePrice = alert.basePrice ?? tick.price
+      const basePrice =
+        typeof alert.basePrice === 'number'
+          ? alert.basePrice
+          : price
+
       let hit = false
 
       /* =========================
@@ -66,14 +73,21 @@ export async function handlePriceTick(tick: PriceTick) {
         alert.condition === 'ABOVE' &&
         typeof alert.targetPrice === 'number'
       ) {
-        hit = tick.price >= alert.targetPrice
+        hit = price >= alert.targetPrice
       }
 
       if (
         alert.condition === 'BELOW' &&
         typeof alert.targetPrice === 'number'
       ) {
-        hit = tick.price <= alert.targetPrice
+        hit = price <= alert.targetPrice
+      }
+
+      if (
+        alert.condition === 'REACH' &&
+        typeof alert.targetPrice === 'number'
+      ) {
+        hit = price === alert.targetPrice
       }
 
       /* =========================
@@ -81,30 +95,31 @@ export async function handlePriceTick(tick: PriceTick) {
        * ========================= */
       if (
         alert.condition === 'PERCENT_UP' &&
-        typeof alert.percent === 'number'
+        typeof alert.percent === 'number' &&
+        basePrice > 0
       ) {
-        const change =
-          ((tick.price - basePrice) / basePrice) * 100
+        const change = ((price - basePrice) / basePrice) * 100
         hit = change >= alert.percent
       }
 
       if (
         alert.condition === 'PERCENT_DOWN' &&
-        typeof alert.percent === 'number'
+        typeof alert.percent === 'number' &&
+        basePrice > 0
       ) {
-        const change =
-          ((basePrice - tick.price) / basePrice) * 100
+        const change = ((basePrice - price) / basePrice) * 100
         hit = change >= alert.percent
       }
 
       if (!hit) continue
 
       const ts = Date.now()
+      console.log('[ENGINE][HIT]', alert.id, symbol, price, mode)
 
       /* =========================
        * 🔔 External Notification
        * ========================= */
-      await sendAlertNotification(alert, tick.price)
+      await sendAlertNotification(alert, price)
 
       /* =========================
        * 📜 History
@@ -114,48 +129,54 @@ export async function handlePriceTick(tick: PriceTick) {
         userId: alert.userId,
         symbol: alert.symbol,
         condition: alert.condition,
-        price: tick.price,
+        price,
         basePrice,
         percent:
           alert.percent ??
-          ((tick.price - basePrice) / basePrice) * 100,
+          ((price - basePrice) / basePrice) * 100,
       })
 
       /* =========================
-       * 🔁 Alert State Update
+       * 🔁 Alert State Update (SSOT)
        * ========================= */
-      if (alert.repeatMode === 'REPEAT' && alert.trailingPercent) {
+      if (alert.repeatMode === 'REPEAT') {
+        // 🔁 반복 알림은 상태를 WAITING 유지
         await updateAlert(alert.id, {
-          basePrice: tick.price,
+          status: 'WAITING',
           lastTriggeredAt: ts,
+          basePrice:
+            typeof alert.basePrice === 'number'
+              ? alert.basePrice
+              : price,
         })
       } else {
+        // ✅ 1회성 알림은 TRIGGERED 로 종료
         await markAlertTriggered(alert.id)
       }
 
       /* =========================
-       * 🔥 Redis Event (SSE fan-out)
+       * 🔥 Redis → SSE
        * ========================= */
       await redis.publish(
-        'realtime',
+        'realtime:market',
         JSON.stringify({
           type: 'ALERT_TRIGGERED',
           alertId: alert.id,
           userId: alert.userId,
           symbol: alert.symbol,
-          price: tick.price,
+          price,
           ts,
         }),
       )
 
       /* =========================
-       * 🔥 FCM PUSH (User target)
+       * 🔥 FCM Push
        * ========================= */
       await pushAlertTriggered({
         userId: alert.userId,
         alertId: alert.id,
         symbol: alert.symbol,
-        price: tick.price,
+        price,
         ts,
       })
     }

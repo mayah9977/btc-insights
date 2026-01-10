@@ -1,13 +1,31 @@
-import { useEffect } from 'react'
+import { useEffect } from "react";
 
-export function usePushNotification(onAlertTriggered: () => void) {
+type AlertMessage = {
+  type: "ALERT_TRIGGERED";
+  alertId?: string;
+};
+
+export function usePushNotification(
+  onAlertTriggered: (payload?: AlertMessage) => void
+) {
   useEffect(() => {
-    if (!navigator.serviceWorker) return
+    if (typeof window === "undefined") return;
+    if (!("serviceWorker" in navigator)) return;
 
-    navigator.serviceWorker.addEventListener('message', event => {
-      if (event.data?.type === 'ALERT_TRIGGERED') {
-        onAlertTriggered()
-      }
-    })
-  }, [onAlertTriggered])
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.type !== "ALERT_TRIGGERED") return;
+
+      onAlertTriggered({
+        type: "ALERT_TRIGGERED",
+        alertId: data.alertId,
+      });
+    };
+
+    navigator.serviceWorker.addEventListener("message", handler);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    };
+  }, [onAlertTriggered]);
 }
