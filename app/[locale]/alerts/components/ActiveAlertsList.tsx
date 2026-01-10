@@ -3,7 +3,7 @@
 import { memo, useMemo } from 'react'
 import AlertRow from './AlertRow'
 import { useAlertsStore } from '../providers/alertsStore.zustand'
-import type { PriceAlert } from '@/lib/alerts/alertStore.client'
+import type { PriceAlert } from '@/lib/alerts/alertStore.types'
 
 type Props = {
   onEdit: (alert: PriceAlert) => void
