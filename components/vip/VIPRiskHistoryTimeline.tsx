@@ -2,17 +2,14 @@
 
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useVipRiskHistoryStore } from '@/lib/vip/riskHistoryStore'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
 
 type RiskHistoryItem = {
   level: RiskLevel
-  at: string
+  time: string
   reason?: string
-}
-
-type Props = {
-  history: RiskHistoryItem[]
 }
 
 const levelStyle: Record<
@@ -37,22 +34,33 @@ const levelStyle: Record<
   },
 }
 
-export default function VIPRiskHistoryTimeline({ history }: Props) {
+/**
+ * Presenter-only
+ * - props ❌
+ * - 계산 ❌
+ * - SSOT(store)에서 리스크 히스토리 직접 구독
+ */
+export default function VIPRiskHistoryTimeline() {
+  const { history } = useVipRiskHistoryStore()
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history.length])
 
+  if (!history || history.length === 0) {
+    return null
+  }
+
   return (
     <div className="max-h-72 overflow-y-auto space-y-4 pr-2">
       <AnimatePresence initial={false}>
-        {history.map((h, i) => {
+        {history.map((h: RiskHistoryItem, i: number) => {
           const s = levelStyle[h.level]
 
           return (
             <motion.div
-              key={`${h.at}-${i}`}
+              key={`${h.time}-${i}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -80,7 +88,7 @@ export default function VIPRiskHistoryTimeline({ history }: Props) {
                     Risk {h.level}
                   </span>
                   <span className="text-xs text-zinc-400">
-                    {h.at}
+                    {h.time}
                   </span>
                 </div>
 

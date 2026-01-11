@@ -5,7 +5,14 @@ type Props = {
   cooldownMinutes?: number
 }
 
-const riskConfig = {
+const riskConfig: Record<
+  RiskLevel,
+  {
+    text: string
+    label: string
+    action: string
+  }
+> = {
   LOW: {
     text: 'text-emerald-300',
     label: '리스크 낮음',
@@ -26,7 +33,7 @@ const riskConfig = {
     label: '과열 구간',
     action: '신규 진입 비추천',
   },
-} as const
+}
 
 export default function VIPRiskPanel({
   riskLevel,
@@ -51,7 +58,8 @@ export default function VIPRiskPanel({
 
       {cooldownMinutes !== undefined && (
         <div className="text-sm text-zinc-400">
-          다음 재평가까지 <b className="text-zinc-300">{cooldownMinutes}</b>분
+          다음 재평가까지{' '}
+          <b className="text-zinc-300">{cooldownMinutes}</b>분
         </div>
       )}
     </section>

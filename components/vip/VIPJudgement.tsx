@@ -1,18 +1,13 @@
-import { judgeVipMarketState } from '@/lib/vip/vipJudgementEngine'
-import { generateVipSentence } from '@/lib/vip/vipSentence'
+import { useVipJudgementStore } from '@/lib/vip/judgementStore'
 
-type Props = {
-  ai: number
-  whale: number
-  vol: number
-}
-
-export function VIPJudgement({ ai, whale, vol }: Props) {
-  const state = judgeVipMarketState({
-    aiScore: ai,
-    whaleIntensity: whale,
-    volatility: vol,
-  })
+/**
+ * Presenter-only component
+ * - props ❌
+ * - 계산 / 엔진 호출 ❌
+ * - store에 저장된 판단 결과만 표시
+ */
+export function VIPJudgement() {
+  const { judgementSentence, confidence } = useVipJudgementStore()
 
   return (
     <div className="space-y-1">
@@ -21,7 +16,14 @@ export function VIPJudgement({ ai, whale, vol }: Props) {
       </div>
 
       <div className="text-xl font-semibold text-white leading-snug">
-        {generateVipSentence(state)}
+        {judgementSentence}
+      </div>
+
+      <div className="text-xs text-zinc-400">
+        신뢰도{' '}
+        <b className="text-zinc-200">
+          {Math.round(confidence * 100)}%
+        </b>
       </div>
     </div>
   )

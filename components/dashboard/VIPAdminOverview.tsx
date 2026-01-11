@@ -1,22 +1,37 @@
-'use client';
+'use client'
 
-import { useVIP } from '@/lib/vip/vipClient';
-import {
-  getAverageReliability,
-} from '@/lib/extreme/extremeHistoryStore';
-import { VIP3StableZoneBadge } from '@/components/vip/VIP3StableZoneBadge';
-import { getNotificationStats } from '@/lib/notification/notificationHistoryStore';
+/**
+ * ⚠️ VIPAdminOverview
+ * --------------------------------------------------
+ * 관리자 / 내부 운영용 대시보드 전용 컴포넌트
+ *
+ * - Casino 메인 ❌
+ * - VIP 사용자 화면 ❌
+ *
+ * ⚠️ 주의:
+ * 이 컴포넌트는 SSOT(store) 기반이 아님
+ * 분석/통계/히스토리 함수를 직접 호출함
+ *
+ * → 운영 모니터링 / 관리자 판단용으로만 사용
+ * → Casino / VIP 영역에서는 절대 import 금지
+ * --------------------------------------------------
+ */
 
-export function VIPOverviewDashboard() {
-  const { vipLevel } = useVIP();
-  const avg = getAverageReliability();
-  const stable = avg < 0.35;
-  const notif = getNotificationStats();
+import { useVIP } from '@/lib/vip/vipClient'
+import { getAverageReliability } from '@/lib/extreme/extremeHistoryStore'
+import { getNotificationStats } from '@/lib/notification/notificationHistoryStore'
+import { VIP3StableZoneBadge } from '@/components/vip/VIP3StableZoneBadge'
+
+export function VIPAdminOverview() {
+  const { vipLevel } = useVIP()
+  const avg = getAverageReliability()
+  const stable = avg < 0.35
+  const notif = getNotificationStats()
 
   return (
     <section className="p-4 space-y-4">
       <h2 className="text-lg font-bold">
-        Overview
+        VIP Admin Overview
       </h2>
 
       {/* VIP 상태 */}
@@ -58,5 +73,5 @@ export function VIPOverviewDashboard() {
         </div>
       </div>
     </section>
-  );
+  )
 }

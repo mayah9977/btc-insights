@@ -1,17 +1,26 @@
-'use client';
+'use client'
 
-import { useVIP } from '@/lib/vip/vipClient';
-import { getAverageReliability } from '@/lib/extreme/extremeHistoryStore';
-import { VIP3StableZoneBadge } from './VIP3StableZoneBadge';
+import { useVipOverviewStore } from '@/lib/vip/overviewStore'
+import { VIP3StableZoneBadge } from './VIP3StableZoneBadge'
 
-export function VIPDashboard() {
-  const { vipLevel } = useVIP();
-  const avg = getAverageReliability();
-  const stable = avg < 0.35;
+/**
+ * VIP Overview Dashboard
+ * - props ❌
+ * - 계산 ❌
+ * - VIP 상태 요약은 SSOT(store)에서만 읽기
+ */
+export function VIPOverviewDashboard() {
+  const {
+    vipLevel,
+    averageReliability,
+    stableZoneActive,
+  } = useVipOverviewStore()
 
   return (
     <section className="p-4 space-y-3">
-      <h2 className="text-lg font-bold">VIP Dashboard</h2>
+      <h2 className="text-lg font-bold">
+        VIP Dashboard
+      </h2>
 
       <div className="text-sm">
         현재 등급: <strong>{vipLevel}</strong>
@@ -22,11 +31,11 @@ export function VIPDashboard() {
           <div className="text-sm">
             Extreme 평균 신뢰도:{' '}
             <strong>
-              {(avg * 100).toFixed(1)}%
+              {(averageReliability * 100).toFixed(1)}%
             </strong>
           </div>
 
-          <VIP3StableZoneBadge active={stable} />
+          <VIP3StableZoneBadge active={stableZoneActive} />
 
           <ul className="text-xs text-gray-600 mt-2 space-y-1">
             <li>• 안정 구간에서는 알림이 최소화됩니다</li>
@@ -35,5 +44,5 @@ export function VIPDashboard() {
         </>
       )}
     </section>
-  );
+  )
 }
