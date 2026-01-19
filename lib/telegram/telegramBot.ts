@@ -1,49 +1,59 @@
-import TelegramBot, {
-  Message,
-  CallbackQuery,
-} from 'node-telegram-bot-api';
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
-const token = process.env.TELEGRAM_BOT_TOKEN!;
+import TelegramBot, { Message, CallbackQuery } from 'node-telegram-bot-api'
+import { generateTelegramVipReportPdf } from './generateTelegramVipReport.ts'
+import { sendVipReportPdf } from './sendVipReportPdf.ts'
+
+/**
+ * =====================================================
+ * Telegram Bot Entry (Node / Worker 전용)
+ * 실행:
+ *   npx tsx lib/telegram/telegramBot.ts
+ * =====================================================
+ */
+
+const token = process.env.TELEGRAM_BOT_TOKEN
+
 if (!token) {
-  throw new Error('Missing TELEGRAM_BOT_TOKEN');
+  console.error('[Telegram] ❌ TELEGRAM_BOT_TOKEN is undefined')
+  process.exit(1)
 }
 
-// polling = Worker / Node 전용
-export const telegramBot = new TelegramBot(token, {
-  polling: true,
-});
+/**
+ * 🤖 Bot 생성 (Polling)
+ */
+const bot = new TelegramBot(token, { polling: true })
+console.log('[Telegram] 🤖 Bot polling started')
 
 /**
- * 📩 기본 메시지 수신
+ * 📩 기본 메시지
  */
-telegramBot.on('message', (msg: Message) => {
-  const chatId = msg.chat.id;
-  const text = msg.text ?? '';
+bot.on('message', async (msg: Message) => {
+  console.log('[Telegram] 📩 message:', msg.chat.id, msg.text)
 
-  console.log('[Telegram]', chatId, text);
-
-  if (text === '/start') {
-    telegramBot.sendMessage(
-      chatId,
+  if (msg.text === '/start') {
+    await bot.sendMessage(
+      msg.chat.id,
       '🚀 알림 봇이 연결되었습니다.'
-    );
+    )
   }
-});
+})
 
 /**
- * 🔘 버튼 콜백
+ * 🔘 콜백 (PDF 재전송)
  */
-telegramBot.on(
-  'callback_query',
-  (query: CallbackQuery) => {
-    if (!query.message) return;
+bot.on('callback_query', async (query: CallbackQuery) => {
+  if (!query.message) return
 
-    const chatId = query.message.chat.id;
-    const data = query.data;
+  const pdf = await generateTelegramVipReportPdf({
+    date: new Date().toISOString().slice(0, 10),
+    summary: '시장 리스크 HIGH — EXTREME 회피 권장',
+  })
 
-    telegramBot.sendMessage(
-      chatId,
-      `선택됨: ${data}`
-    );
-  }
-);
+  await sendVipReportPdf(
+    query.message.chat.id,
+    pdf,
+    'VIP_Report_Today.pdf'
+  )
+})

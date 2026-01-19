@@ -6,12 +6,12 @@ import { MobileRealtimeHUD } from '@/components/realtime/MobileRealtimeHUD'
 import { VIP3GlowWrapper } from '@/components/realtime/VIP3GlowWrapper'
 import { VIP3MiniStats } from '@/components/realtime/VIP3MiniStats'
 import { getStreamQuality } from '@/lib/realtime/streamQualityMonitor'
+import { useVIP } from '@/lib/vip/vipClient'
 
-export function CasinoRealtimeUI({
-  vipLevel,
-}: {
-  vipLevel: 'FREE' | 'VIP1' | 'VIP2' | 'VIP3'
-}) {
+export function CasinoRealtimeUI() {
+  // ✅ VIP Context에서 직접 읽기
+  const { vipLevel } = useVIP()
+
   // ✅ SSE: stream 엔드포인트 단일 사용
   const { status: sseStatus } = useSSE(
     '/api/realtime/stream',

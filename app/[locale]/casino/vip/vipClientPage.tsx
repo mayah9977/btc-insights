@@ -1,6 +1,21 @@
 'use client'
 
-import type { VIPLevel } from '../lib/vipAccess'
+import { useEffect } from 'react'
+import { useVIP } from '@/lib/vip/vipClient'
+
+/* =========================
+   KPI (TOP)
+========================= */
+import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
+
+/* =========================
+   Value / Compare / Summary
+========================= */
+import VIPValueSummary from '@/components/vip/VIPValueSummary'
+import VIPCompareTable from '@/components/vip/VIPCompareTable'
+import VIP30DayEvasionBadge from '@/components/vip/VIP30DayEvasionBadge'
+import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
+import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
 
 /* =========================
    Mobile Layout
@@ -20,35 +35,110 @@ import VIPNoEntryReason from '@/components/vip/VIPNoEntryReason'
 import VIPLossAvoidanceLog from '@/components/vip/VIPLossAvoidanceLog'
 import { NotificationHistoryView } from '@/components/notifications/NotificationHistoryView'
 
-type Props = {
-  vipLevel: VIPLevel
-}
+/* =========================
+   Phase 2 Cards
+========================= */
+import VIPTodayJudgementCard from '@/components/vip/VIPTodayJudgementCard'
+import VIPRiskAvoidanceCard from '@/components/vip/VIPRiskAvoidanceCard'
+import VIPDailySnapshot from '@/components/vip/VIPDailySnapshot'
 
 /* =========================
-   TEMP TYPES (빌드 안정화용)
+   Types
 ========================= */
 type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
 
-export default function VIPClientPage({ vipLevel }: Props) {
-  /* =========================
-     TEMP DATA (전환기용)
-     ⚠️ container화 진행되며 제거
-  ========================= */
-  const riskLevel: RiskLevel = 'HIGH'
+type Summary = {
+  period: '7d' | '30d'
+  avoidedLossUSD: number
+  avoidedExtremeCount: number
+}
 
-  // 아직 props 기반 컴포넌트들이므로 임시 any 허용
-  const riskHistory = [] as any[]
-  const scenarioData = [] as any[]
-  const lossCases = [] as any[]
+type VIP3Metrics = {
+  extremeAccuracy: number
+  avgAvoidedLoss30d: number
+  stableZoneRatio: number
+  confidenceScore: number
+}
+
+type VIPClientPageProps = {
+  avoidedExtremeCount: number
+  avoidedLossUSD: number
+  weeklySummary: Summary
+  monthlySummary: Summary
+
+  /** ✅ 추가: VIP3 고급 지표 */
+  vip3Metrics: VIP3Metrics
+}
+
+/* =========================
+   Component (FINAL)
+========================= */
+export default function VIPClientPage({
+  avoidedExtremeCount,
+  avoidedLossUSD,
+  weeklySummary,
+  monthlySummary,
+  vip3Metrics,
+}: VIPClientPageProps) {
+  const { vipLevel } = useVIP()
+
+  const riskLevel: RiskLevel = 'HIGH'
+  const btcPrice = 62338
+  const avg30dAvoidedLossUSD = monthlySummary.avoidedLossUSD
+
+  useEffect(() => {
+    return () => {
+      // realtime cleanup placeholder
+    }
+  }, [])
 
   return (
     <>
-      {/* =========================
-          Mobile
-      ========================= */}
-      <VIPMobileLayout>
-        <VIPOverviewDashboard />
+      {/* ========================= TOP KPI (ALL) ========================= */}
+      <VIPTopKPIBar
+        btcPrice={btcPrice}
+        avoidedExtremeCount={avoidedExtremeCount}
+        avoidedLossUSD={avoidedLossUSD}
+      />
 
+      {/* ========================= Mobile ========================= */}
+      <VIPMobileLayout>
+        <VIPValueSummary
+          btcPrice={btcPrice}
+          avoidedExtremeCount={avoidedExtremeCount}
+          avoidedLossUSD={avoidedLossUSD}
+        />
+
+        <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
+
+        {/* ⭐ VIP3 고급 지표 (Mobile) */}
+        <VIP3AdvancedMetrics
+          extremeAccuracy={vip3Metrics.extremeAccuracy}
+          avgAvoidedLoss30d={vip3Metrics.avgAvoidedLoss30d}
+          stableZoneRatio={vip3Metrics.stableZoneRatio}
+          confidenceScore={vip3Metrics.confidenceScore}
+        />
+
+        <VIP30DayEvasionBadge avgAvoidedLossUSD={avg30dAvoidedLossUSD} />
+
+        <VIPCompareTable />
+
+        <section className="space-y-2 mt-6">
+          <h1 className="text-xl font-extrabold text-white">
+            오늘 시장에서 피해야 했던 이유들
+          </h1>
+          <p className="text-sm text-zinc-400">
+            이 리포트는 수익을 약속하지 않습니다.
+            <br />
+            위험 구조와 진입 제한 근거를 설명합니다.
+          </p>
+        </section>
+
+        <VIPTodayJudgementCard />
+        <VIPRiskAvoidanceCard />
+        <VIPDailySnapshot />
+
+        <VIPOverviewDashboard />
         <VIPJudgement />
         <VIPJudgementTimeline />
 
@@ -56,24 +146,46 @@ export default function VIPClientPage({ vipLevel }: Props) {
         <VIPRiskHistoryTimeline />
         <VIPRiskScenarioHeatmap />
         <VIPNoEntryReason riskLevel={riskLevel} />
+
+        <VIPLossAvoidanceLog />
       </VIPMobileLayout>
 
-      {/* =========================
-          Desktop
-      ========================= */}
+      {/* ========================= Desktop ========================= */}
       <main className="hidden md:block space-y-10">
-        <header className="space-y-1">
+        <VIPValueSummary
+          btcPrice={btcPrice}
+          avoidedExtremeCount={avoidedExtremeCount}
+          avoidedLossUSD={avoidedLossUSD}
+        />
+
+        <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
+
+        {/* ⭐ VIP3 고급 지표 (Desktop) */}
+        <VIP3AdvancedMetrics
+          extremeAccuracy={vip3Metrics.extremeAccuracy}
+          avgAvoidedLoss30d={vip3Metrics.avgAvoidedLoss30d}
+          stableZoneRatio={vip3Metrics.stableZoneRatio}
+          confidenceScore={vip3Metrics.confidenceScore}
+        />
+
+        <VIP30DayEvasionBadge avgAvoidedLossUSD={avg30dAvoidedLossUSD} />
+
+        <VIPCompareTable />
+
+        <header className="space-y-3">
           <h1 className="text-3xl font-extrabold text-white">
-            👑 VIP 위험 판단 리포트
+            오늘 시장에서 피해야 했던 이유들
           </h1>
           <p className="text-sm text-zinc-400">
-            현재 등급:{' '}
-            <b className="text-zinc-200">{vipLevel}</b>
+            현재 등급: <b className="text-zinc-200">{vipLevel}</b>
           </p>
         </header>
 
-        <VIPOverviewDashboard />
+        <VIPTodayJudgementCard />
+        <VIPRiskAvoidanceCard />
+        <VIPDailySnapshot />
 
+        <VIPOverviewDashboard />
         <VIPJudgement />
         <VIPJudgementTimeline />
 
@@ -82,7 +194,8 @@ export default function VIPClientPage({ vipLevel }: Props) {
         <VIPRiskScenarioHeatmap />
         <VIPNoEntryReason riskLevel={riskLevel} />
 
-        <VIPLossAvoidanceLog cases={lossCases} />
+        <VIPLossAvoidanceLog />
+
         <NotificationHistoryView />
       </main>
     </>

@@ -1,31 +1,34 @@
-'use client';
+'use client'
 
-import { createContext, useContext, useMemo } from 'react';
-import { useVIPLevel } from './vipLevelStore';
+import { createContext, useContext, useMemo } from 'react'
+import { useVIP } from '@/lib/vip/vipClient'
 
 const Ctx = createContext<{
-  extreme: boolean;
-} | null>(null);
+  extreme: boolean
+} | null>(null)
 
 export function ExtremeThemeProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const { extremeForced } = useVIPLevel();
+  const { vipLevel } = useVIP()
 
   const value = useMemo(
     () => ({
-      extreme: extremeForced, // 🔥 서버 강제 우선
+      // 🔥 VIP3 이상일 때만 Extreme 테마 허용
+      extreme: vipLevel === 'VIP3',
     }),
-    [extremeForced]
-  );
+    [vipLevel]
+  )
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export function useExtremeTheme() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error('ExtremeThemeProvider missing');
-  return ctx;
+  const ctx = useContext(Ctx)
+  if (!ctx) {
+    throw new Error('ExtremeThemeProvider missing')
+  }
+  return ctx
 }

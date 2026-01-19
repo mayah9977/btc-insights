@@ -3,6 +3,11 @@
 import { getStreamQuality } from '@/lib/realtime/streamQualityMonitor'
 
 export function StreamQualityBadge() {
+  // ✅ Dev Only
+  if (process.env.NODE_ENV !== 'development') {
+    return null
+  }
+
   const { dropRate } = getStreamQuality()
 
   const colorClass =

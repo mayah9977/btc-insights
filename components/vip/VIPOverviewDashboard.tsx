@@ -16,8 +16,10 @@ export function VIPOverviewDashboard() {
     stableZoneActive,
   } = useVipOverviewStore()
 
+  const canDownloadReport = vipLevel === 'VIP3'
+
   return (
-    <section className="p-4 space-y-3">
+    <section className="p-4 space-y-4">
       <h2 className="text-lg font-bold">
         VIP Dashboard
       </h2>
@@ -42,6 +44,17 @@ export function VIPOverviewDashboard() {
             <li>• 신뢰도 상승 시 자동으로 고급 알림 활성화</li>
           </ul>
         </>
+      )}
+
+      {canDownloadReport && (
+        <button
+          onClick={() => {
+            window.open('/api/cron/vip-report', '_blank')
+          }}
+          className="mt-4 w-full rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 py-3 text-sm font-bold text-black shadow-lg active:scale-[0.98]"
+        >
+          📄 오늘의 VIP 리포트 다운로드
+        </button>
       )}
     </section>
   )

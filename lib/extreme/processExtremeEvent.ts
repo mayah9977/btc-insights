@@ -1,34 +1,30 @@
-import { safeExtremeScore } from './extremeScoreSafe';
-import { extremeToNotification } from './extremeToNotification';
+import { safeExtremeScore } from './extremeScoreSafe'
+import { extremeToNotification } from './extremeToNotification'
 import {
   pushExtremeHistory,
   getAverageReliability,
-} from './extremeHistoryStore';
-import { checkAndLogStableZone } from './stableZoneLogStore';
+} from './extremeHistoryStore'
+import { checkAndLogStableZone } from './stableZoneLogStore'
 
-import { canSendNotification } from '@/lib/notification/notificationCooldown';
-import { pushNotification } from '@/lib/notification/notificationQueue';
+import { canSendNotification } from '@/lib/notification/notificationCooldown'
+import { pushNotification } from '@/lib/notification/notificationQueue'
 
-import type { ExtremeEvent } from './extremeToNotification';
+import { saveRiskEvent } from '@/lib/vip/redis/saveRiskEvent'
+import type { ExtremeEvent } from './extremeToNotification'
 
 /**
  * 🔥 Extreme 이벤트 처리 메인 함수 (SSOT)
  *
- * 책임:
- * 1. 점수 안정화
- * 2. Extreme → Notification 변환
- * 3. Extreme 신뢰도 히스토리 기록
- * 4. Stable Zone 자동 진입 로그 기록 (중요)
- * 5. 쿨다운 검사 후 Notification 발행
+ * 이 함수에 들어왔다는 것 자체가
+ * 시스템이 EXTREME 후보로 판단했다는 의미
  */
-export function processExtremeEvent(
+export async function processExtremeEvent(
   rawEvent: ExtremeEvent
 ) {
   /**
    * 1️⃣ 점수 안정화
-   * - NaN / Infinity / 이상치 방어
    */
-  const score = safeExtremeScore(rawEvent.score);
+  const score = safeExtremeScore(rawEvent.score)
 
   /**
    * 2️⃣ Notification 후보 생성
@@ -36,26 +32,46 @@ export function processExtremeEvent(
   const notif = extremeToNotification({
     ...rawEvent,
     score,
-  });
+  })
 
   /**
-   * 3️⃣ Extreme 신뢰도 히스토리 기록
-   * - 그래프 / 평균 신뢰도 / VIP Dashboard 근거
+   * ❌ Notification 생성 실패 → EXTREME 확정 아님
    */
-  if (notif?.reliability !== undefined) {
-    pushExtremeHistory(notif.reliability);
+  if (!notif) {
+    return
   }
 
   /**
-   * 4️⃣ Stable Zone 자동 진입 로그 (🔥 핵심 1줄)
-   * - 평균 신뢰도 기준으로 안정 구간 진입/이탈 기록
+   * 3️⃣ Extreme 신뢰도 히스토리 기록
    */
-  checkAndLogStableZone(getAverageReliability());
+  if (notif.reliability !== undefined) {
+    pushExtremeHistory(notif.reliability)
+  }
 
   /**
-   * 5️⃣ Notification 발행 (쿨다운 포함)
+   * 4️⃣ Stable Zone 자동 진입 로그
    */
-  if (notif && canSendNotification(notif)) {
-    pushNotification(notif);
+  checkAndLogStableZone(getAverageReliability())
+
+  /**
+   * 5️⃣ 🔥 EXTREME RiskEvent 저장 (VIP 핵심)
+   *
+   * 이 함수는 EXTREME 전용 파이프라인이므로
+   * level 비교 불필요
+   */
+  await saveRiskEvent({
+    riskLevel: 'EXTREME',
+    entryPrice: rawEvent.entryPrice,
+    worstPrice: rawEvent.worstPrice,
+    position: rawEvent.position ?? 'LONG',
+    timestamp: Date.now(),
+    reason: 'Extreme volatility detected',
+  })
+
+  /**
+   * 6️⃣ Notification 발행
+   */
+  if (canSendNotification(notif)) {
+    pushNotification(notif)
   }
 }

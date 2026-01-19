@@ -1,7 +1,9 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, useAnimation } from 'framer-motion'
+import { useEffect, useRef } from 'react'
 import { useVipOverviewStore } from '@/lib/vip/overviewStore'
+import MarketPulseRecentBadge from './MarketPulseRecentBadge'
 
 const riskTone = {
   LOW: {
@@ -35,7 +37,8 @@ const riskTone = {
  * - 계산 ❌
  * - 판단 ❌
  * - SSOT(overviewStore)에서 상태만 읽어 연출
- * - riskLevel 변경 시에만 미세한 긴장 애니메이션
+ * - HIGH → EXTREME 전환 시 짧은 Visual Shock
+ * - 최근 변화 배지(FOMO) 표시
  */
 export default function MarketPulse() {
   const {
@@ -45,14 +48,27 @@ export default function MarketPulse() {
   } = useVipOverviewStore()
 
   const tone = riskTone[riskLevel]
+  const controls = useAnimation()
+  const prevRisk = useRef<typeof riskLevel | null>(null)
+
+  useEffect(() => {
+    if (prevRisk.current === 'HIGH' && riskLevel === 'EXTREME') {
+      // 🔥 Visual Shock (약 300ms)
+      controls.start({
+        scale: [1, 1.04, 0.98, 1],
+        filter: ['blur(0px)', 'blur(2px)', 'blur(0px)'],
+        transition: { duration: 0.35 },
+      })
+    }
+    prevRisk.current = riskLevel
+  }, [riskLevel, controls])
 
   return (
     <motion.section
-      key={riskLevel}
-      initial={{ opacity: 0.7, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="rounded-2xl border border-vipBorder bg-vipCard p-6 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4"
+      animate={controls}
+      initial={{ opacity: 0.85 }}
+      className="rounded-2xl border border-vipBorder bg-vipCard p-6
+                 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4"
     >
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -101,6 +117,9 @@ export default function MarketPulse() {
         </b>{' '}
         재평가됩니다
       </div>
+
+      {/* 🔔 Recent Change Badge (FOMO) */}
+      <MarketPulseRecentBadge />
     </motion.section>
   )
 }

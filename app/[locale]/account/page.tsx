@@ -1,14 +1,21 @@
 'use client'
 
-import { useVIP } from '@/lib/vip/vipClient'
 import { useRealtimePNL } from './useRealtimePNL'
 import VIPComparison from './VIPComparison'
 
 export default function AccountPage() {
-  const { vipLevel } = useVIP()
+  /**
+   * ❌ 중요
+   * account 영역에서는 useVIP / VIPContext / VIPRealtimeRoot
+   * 절대 사용하지 않는다.
+   */
+
+  // ✅ 임시 VIP 등급 (Phase 3에서 서버/DB 값으로 대체)
+  const vipLevel: 'FREE' | 'VIP1' | 'VIP2' | 'VIP3' = 'FREE'
+
   const myPNL = useRealtimePNL()
 
-  // ⚠️ 실제 서비스에서는 서버 통계 or Redis
+  // ⚠️ 실제 서비스에서는 서버 통계 or Redis 값
   const vipAvgPNL = 125.4
 
   return (
@@ -32,7 +39,7 @@ export default function AccountPage() {
         </div>
       </section>
 
-      {/* VIP 비교 */}
+      {/* VIP 성과 비교 */}
       <VIPComparison
         myPNL={myPNL}
         vipAvgPNL={vipAvgPNL}
@@ -45,8 +52,9 @@ export default function AccountPage() {
             VIP 유저들은 평균적으로 더 안정적인
             성과를 유지합니다.
           </p>
+          {/* 🔒 hard navigation 유지 */}
           <a
-            href="/account/upgrade"
+            href="/ko/account/upgrade"
             className="inline-block mt-4 rounded-xl bg-vipAccent px-6 py-3 font-semibold text-black"
           >
             VIP 업그레이드 →

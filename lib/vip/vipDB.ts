@@ -12,32 +12,56 @@ export type VIPState = {
   }
 }
 
-// DEV in-memory DB
+/**
+ * DEV in-memory DB
+ * ⚠️ 실서비스에서는 Redis / DB로 교체
+ */
 const mem = new Map<string, VIPState>()
 const autoExtendOption = new Map<string, number>()
 
-function priceIdToLevel(priceId: string): VIPLevel {
-  if (priceId === process.env.STRIPE_PRICE_VIP3) return 'VIP3'
-  if (priceId === process.env.STRIPE_PRICE_VIP2) return 'VIP2'
-  if (priceId === process.env.STRIPE_PRICE_VIP1) return 'VIP1'
-  return 'VIP1'
+/* =========================
+   Price → VIP Level / Period
+========================= */
+function priceIdToVIP(priceId: string): {
+  level: VIPLevel
+  days: number
+} {
+  if (priceId === process.env.STRIPE_PRICE_VIP3)
+    return { level: 'VIP3', days: 30 }
+
+  if (priceId === process.env.STRIPE_PRICE_VIP2)
+    return { level: 'VIP2', days: 30 }
+
+  if (priceId === process.env.STRIPE_PRICE_VIP1)
+    return { level: 'VIP1', days: 30 }
+
+  return { level: 'VIP1', days: 30 }
 }
 
+/* =========================
+   Read
+========================= */
 export async function getUserVIPState(
   userId: string
 ): Promise<VIPState | null> {
   return mem.get(userId) ?? null
 }
 
-export async function saveUserVIP(userId: string, priceId: string) {
+/* =========================
+   Write (결제 성공 SSOT)
+========================= */
+export async function applyVIPPaymentSuccess(
+  userId: string,
+  priceId: string
+) {
   const now = Date.now()
-  const level = priceIdToLevel(priceId)
+  const { level, days } = priceIdToVIP(priceId)
   const prev = mem.get(userId)
 
   mem.set(userId, {
     level,
     priceId,
-    expiredAt: now + 30 * 86400000,
+    expiredAt: now + days * 86400000,
     updatedAt: now,
     addons: prev?.addons,
   })
@@ -51,6 +75,9 @@ export async function saveUserVIP(userId: string, priceId: string) {
   })
 }
 
+/* =========================
+   Downgrade / Expire
+========================= */
 export async function downgradeUserVIP(userId: string) {
   const prev = mem.get(userId)
   if (!prev) return
@@ -67,6 +94,25 @@ export async function downgradeUserVIP(userId: string) {
   })
 }
 
+export async function forceExpireVIP(userId: string) {
+  const prev = mem.get(userId)
+  if (!prev) return
+
+  const now = Date.now()
+  mem.set(userId, { ...prev, expiredAt: now, updatedAt: now })
+
+  recordVIPChange({
+    userId,
+    before: prev.level,
+    after: prev.level,
+    reason: 'EXPIRE',
+    at: now,
+  })
+}
+
+/* =========================
+   Extend / Recover
+========================= */
 export async function extendVIP(userId: string, days: number) {
   const prev = mem.get(userId)
   if (!prev) return
@@ -83,22 +129,6 @@ export async function extendVIP(userId: string, days: number) {
     before: prev.level,
     after: prev.level,
     reason: 'EXTEND',
-    at: now,
-  })
-}
-
-export async function forceExpireVIP(userId: string) {
-  const prev = mem.get(userId)
-  if (!prev) return
-
-  const now = Date.now()
-  mem.set(userId, { ...prev, expiredAt: now, updatedAt: now })
-
-  recordVIPChange({
-    userId,
-    before: prev.level,
-    after: prev.level,
-    reason: 'EXPIRE',
     at: now,
   })
 }
@@ -127,7 +157,9 @@ export async function recoverVIP(
   })
 }
 
-/* Auto Extend */
+/* =========================
+   Auto Extend
+========================= */
 export async function enableAutoExtend(userId: string, days: number) {
   autoExtendOption.set(userId, days)
 }

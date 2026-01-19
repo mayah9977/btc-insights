@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
+import { redis } from '@/lib/redis'
 import VIPClientPage from './vipClientPage'
-import { calcVIPLevel } from '../lib/vipAccess'
+import { getVIP3Metrics } from '@/lib/vip/redis/getVIP3Metrics'
 
 type PageProps = {
   params: Promise<{
@@ -11,37 +12,44 @@ type PageProps = {
 export default async function VIPPage({ params }: PageProps) {
   const { locale } = await params
 
-  /**
-   * ⚠️ 임시 VIP 판별 로직
-   * 실제 서비스에서는:
-   * - 세션
-   * - 결제 정보
-   * - DB VIP flag
-   * 로 대체
-   */
-  const vipLevel = calcVIPLevel({
-    hasPayment: true,
-    daysUsed: 20,
-    roi: 12,
-  })
-
-  // ❌ FREE 유저 차단
-  if (vipLevel === 'FREE') {
-    redirect(`/${locale}/login`)
-  }
-
-  /**
-   * ✅ VIP 첫 진입 온보딩 분기
-   * (실서비스에서는 DB flag로 대체)
-   */
   const isFirstVIPEntry = false
   if (isFirstVIPEntry) {
     redirect(`/${locale}/casino/vip/onboarding`)
   }
 
-  /**
-   * ✅ VIP 리포트 UI는 Client Component에서 조립
-   * (판단/시나리오/히스토리 시각화)
-   */
-  return <VIPClientPage vipLevel={vipLevel} />
+  let dailyMetrics = {
+    avoidedExtremeCount: 0,
+    avoidedLossUSD: 0,
+  }
+
+  try {
+    const dailyRaw = await redis.get('vip:metrics:daily')
+    if (dailyRaw) dailyMetrics = JSON.parse(dailyRaw)
+  } catch {
+    // fallback
+  }
+
+  const weeklySummary = {
+    period: '7d' as const,
+    avoidedExtremeCount: dailyMetrics.avoidedExtremeCount,
+    avoidedLossUSD: dailyMetrics.avoidedLossUSD,
+  }
+
+  const monthlySummary = {
+    period: '30d' as const,
+    avoidedExtremeCount: dailyMetrics.avoidedExtremeCount,
+    avoidedLossUSD: dailyMetrics.avoidedLossUSD,
+  }
+
+  const vip3Metrics = await getVIP3Metrics()
+
+  return (
+    <VIPClientPage
+      avoidedExtremeCount={dailyMetrics.avoidedExtremeCount}
+      avoidedLossUSD={dailyMetrics.avoidedLossUSD}
+      weeklySummary={weeklySummary}
+      monthlySummary={monthlySummary}
+      vip3Metrics={vip3Metrics}
+    />
+  )
 }

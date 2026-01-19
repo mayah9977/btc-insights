@@ -1,13 +1,13 @@
-'use client';
+'use client'
 
-import { useVIPLevel } from '../lib/vipLevelStore';
-import { useExtremeTheme } from '../lib/extremeThemeStore';
+import { useVIP } from '@/lib/vip/vipClient'
+import { useExtremeTheme } from '../lib/extremeThemeStore'
 
 export default function ExtremeOverlay() {
-  const { vipLevel } = useVIPLevel();
-  const { extreme } = useExtremeTheme();
+  const { vipLevel } = useVIP()
+  const { extreme } = useExtremeTheme()
 
-  if (vipLevel !== 'VIP3' || !extreme) return null;
+  if (vipLevel !== 'VIP3' || !extreme) return null
 
   return (
     <div className="fixed inset-0 z-50 pointer-events-none">
@@ -18,5 +18,5 @@ export default function ExtremeOverlay() {
         </h1>
       </div>
     </div>
-  );
+  )
 }

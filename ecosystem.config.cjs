@@ -11,5 +11,16 @@ module.exports = {
       script: 'node_modules/next/dist/bin/next',
       args: 'start',
     },
+    {
+      name: 'telegram-bot',
+      script: 'lib/telegram/telegramBot.ts',
+      interpreter: 'node',
+      interpreter_args: '--loader ts-node/esm',
+      exec_mode: 'fork',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
   ],
 }

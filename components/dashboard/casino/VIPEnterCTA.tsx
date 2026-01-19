@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { useVipOverviewStore } from '@/lib/vip/overviewStore'
 
 type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
@@ -10,7 +10,7 @@ type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
 /**
  * 위험 단계별 CTA 문구
  * - 과장 ❌
- * - 보호/제한 톤만 강화
+ * - 보호/제한 톤 유지
  */
 const phraseByRisk: Record<
   RiskLevel,
@@ -29,8 +29,8 @@ const phraseByRisk: Record<
     sub: '반복된 경고 신호의 근거가 포함됩니다',
   },
   EXTREME: {
-    title: '이 구간은 공개되지 않습니다',
-    sub: '과열 구간의 상세 판단은 제한됩니다',
+    title: '이 구간은 보호되고 있습니다',
+    sub: '과열 구간의 상세 판단은 VIP 전용입니다',
   },
 }
 
@@ -47,10 +47,13 @@ function borderByDwell(sec: number) {
  * VIP Enter CTA
  * - 판단 ❌
  * - 계산 ❌
- * - FREE → VIP 전환 퍼널 최종 관문
+ * - FREE → VIP 진입 결정적 순간 UX
  */
 export default function VIPEnterCTA() {
   const router = useRouter()
+  const params = useParams<{ locale?: string }>()
+  const locale = params?.locale ?? 'ko'
+
   const { riskLevel } = useVipOverviewStore()
 
   /* =========================
@@ -65,7 +68,7 @@ export default function VIPEnterCTA() {
   }, [])
 
   /* =========================
-     Very Short Sound Cue
+     Subtle Sound Cue (Safe)
   ========================= */
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
@@ -76,44 +79,46 @@ export default function VIPEnterCTA() {
   const phrase = phraseByRisk[riskLevel]
   const borderTone = borderByDwell(dwell)
 
+  const handleClick = () => {
+    try {
+      audioRef.current?.play().catch(() => {})
+    } catch {}
+    router.push(`/${locale}/casino/vip`)
+  }
+
   return (
-    <>
-      <audio ref={audioRef} />
+    <motion.button
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={handleClick}
+      className={`w-full rounded-2xl border ${borderTone}
+        bg-gradient-to-r from-red-600/25 to-red-900/35
+        p-6 text-left shadow-[0_20px_60px_rgba(0,0,0,0.7)]
+        space-y-3 transition-colors`}
+    >
+      {/* Restricted Label */}
+      <div className="text-xs tracking-widest uppercase text-red-300">
+        Restricted Analysis
+      </div>
 
-      <motion.button
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-        onMouseDown={() => audioRef.current?.play()}
-        onClick={() => router.push('/ko/casino/vip')}
-        className={`w-full rounded-2xl border ${borderTone}
-          bg-gradient-to-r from-red-600/30 to-red-900/40
-          p-6 text-left shadow-[0_20px_60px_rgba(0,0,0,0.7)]
-          space-y-3 transition-colors`}
-      >
-        {/* Restricted Label */}
-        <div className="text-xs tracking-widest uppercase text-red-300">
-          Restricted Area
+      {/* Main Copy */}
+      <div className="text-xl font-extrabold text-white">
+        {phrase.title}
+      </div>
+
+      {/* Sub Copy */}
+      <div className="text-sm text-zinc-300">
+        {phrase.sub}
+      </div>
+
+      {/* Dwell-based Last Sentence */}
+      {dwell > 8 && (
+        <div className="pt-1 text-xs text-zinc-400">
+          이 정보는{' '}
+          <b className="text-zinc-300">현재 시장 상태</b>에서만
+          의미를 가집니다
         </div>
-
-        {/* Main Copy */}
-        <div className="text-xl font-extrabold text-white">
-          {phrase.title}
-        </div>
-
-        {/* Sub Copy */}
-        <div className="text-sm text-zinc-300">
-          {phrase.sub}
-        </div>
-
-        {/* Dwell-based Last Sentence */}
-        {dwell > 8 && (
-          <div className="pt-1 text-xs text-zinc-400">
-            이 정보는{' '}
-            <b className="text-zinc-300">지금 이 순간</b>에만
-            의미를 가집니다
-          </div>
-        )}
-      </motion.button>
-    </>
+      )}
+    </motion.button>
   )
 }

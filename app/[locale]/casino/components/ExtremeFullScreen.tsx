@@ -1,19 +1,19 @@
-'use client';
+'use client'
 
-import { useVIPLevel } from '../lib/vipLevelStore';
-import { useExtremeTheme } from '../lib/extremeThemeStore';
-import { POLICY } from 'lib/policy/switch';
+import { useVIP } from '@/lib/vip/vipClient'
+import { useExtremeTheme } from '../lib/extremeThemeStore'
+import { POLICY } from 'lib/policy/switch'
 
 export default function ExtremeFullScreen() {
-  const { vipLevel } = useVIPLevel();
-  const { extreme } = useExtremeTheme();
+  const { vipLevel } = useVIP()
+  const { extreme } = useExtremeTheme()
 
   if (
     !POLICY.enableExtremeVisuals ||
     vipLevel !== 'VIP3' ||
     !extreme
   ) {
-    return null;
+    return null
   }
 
   return (
@@ -27,5 +27,5 @@ export default function ExtremeFullScreen() {
         </p>
       </div>
     </div>
-  );
+  )
 }

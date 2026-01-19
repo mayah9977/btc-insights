@@ -1,31 +1,22 @@
-'use client';
+'use client'
 
-import { createContext, useContext } from 'react';
-import type { VIPLevel } from './vipAccess';
+import { useVIP } from '@/lib/vip/vipClient'
+import type { VIPLevel } from './vipAccess'
 
-const Ctx = createContext<{
-  vipLevel: VIPLevel;
-  extremeForced: boolean;
-} | null>(null);
+/**
+ * ⚠️ LEGACY BRIDGE
+ * ------------------------------------
+ * 기존 코드 호환용 헬퍼 훅
+ * 실제 Context는 VIPProvider 단일 사용
+ */
+export function useVIPLevel(): {
+  vipLevel: VIPLevel
+  extremeForced: boolean
+} {
+  const { vipLevel } = useVIP()
 
-export function VIPLevelProvider({
-  vipLevel,
-  extremeForced,
-  children,
-}: {
-  vipLevel: VIPLevel;
-  extremeForced: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Ctx.Provider value={{ vipLevel, extremeForced }}>
-      {children}
-    </Ctx.Provider>
-  );
-}
-
-export function useVIPLevel() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error('VIPLevelProvider missing');
-  return ctx;
+  return {
+    vipLevel,
+    extremeForced: vipLevel === 'VIP3',
+  }
 }
