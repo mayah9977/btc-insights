@@ -1,5 +1,6 @@
 // lib/vip/redis/getVIP3Metrics.ts
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
+
 
 export type VIP3Metrics = {
   extremeAccuracy: number

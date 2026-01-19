@@ -1,5 +1,5 @@
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
-import { redis } from '@/lib/redis'
+import { redis, createRedisSubscriber } from '@/lib/redis/server'
 
 export async function GET() {
   const raw = await redis.get('vip:metrics:daily')

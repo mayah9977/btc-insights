@@ -1,4 +1,5 @@
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
+
 
 export async function generateVIPDailyReport() {
   const raw = await redis.get('vip:metrics:daily')

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
 import VIPClientPage from './vipClientPage'
 import { getVIP3Metrics } from '@/lib/vip/redis/getVIP3Metrics'
 

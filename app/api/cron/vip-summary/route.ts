@@ -1,4 +1,4 @@
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
 import { aggregateVipSummary } from '@/lib/vip/redis/aggregateVipSummary'
 import { NextResponse } from 'next/server'
 

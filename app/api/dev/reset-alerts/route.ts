@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
+
 
 export async function POST() {
   try {

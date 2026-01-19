@@ -1,21 +1,30 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { calcPressureIndex } from '@/lib/notification/calcPressureIndex'
-import { getAverageReliability } from '@/lib/extreme/extremeHistoryStore'
-import { calcPositionGuide } from '@/lib/risk/calcPositionGuide'
+
+type Guide = {
+  action: 'LONG' | 'SHORT' | 'HOLD'
+  reason: string
+}
 
 export function PositionGuideCard() {
-  const pressure = calcPressureIndex()
-  const reliability = getAverageReliability()
-  const risk =
-    pressure > 75 || reliability < 0.25
-      ? 'HIGH'
-      : pressure > 40
-      ? 'MEDIUM'
-      : 'LOW'
+  const [guide, setGuide] = useState<Guide | null>(null)
 
-  const guide = calcPositionGuide(risk, pressure)
+  useEffect(() => {
+    fetch('/api/position-guide')
+      .then(res => res.json())
+      .then(data => setGuide(data))
+      .catch(() => setGuide(null))
+  }, [])
+
+  if (!guide) {
+    return (
+      <div className="border rounded-lg p-4 bg-black/40 text-gray-400 text-sm">
+        Loading guide...
+      </div>
+    )
+  }
 
   const color =
     guide.action === 'LONG'

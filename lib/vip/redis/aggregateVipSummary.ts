@@ -1,4 +1,5 @@
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
+
 
 type SummaryResult = {
   period: '7d' | '30d'

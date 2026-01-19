@@ -1,4 +1,4 @@
-import { redis } from '@/lib/redis'
+import { redis } from '@/lib/redis/index'
 import type { VIP3Metrics } from '@/lib/vip/redis/getVIP3Metrics'
 
 type MonthlyMetrics = {

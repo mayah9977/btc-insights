@@ -8,13 +8,22 @@ if (!process.env.REDIS_URL) {
 }
 
 /* =========================
+ * Client-side Guard (중요)
+ * ========================= */
+if (typeof window !== 'undefined') {
+  throw new Error('[Redis] lib/redis was imported on the client. This is forbidden.')
+}
+
+/* =========================
  * Redis Client (Base)
  * ========================= */
 export const redis = new Redis(process.env.REDIS_URL, {
-  maxRetriesPerRequest: null, // ✅ Pub/Sub, SSE에서 필수
+  maxRetriesPerRequest: null, // ✅ Pub/Sub, SSE 필수
   enableReadyCheck: true,
+
   reconnectOnError(err) {
     const message = err?.message || ''
+
     if (
       message.includes('READONLY') ||
       message.includes('ECONNRESET') ||
@@ -22,6 +31,7 @@ export const redis = new Redis(process.env.REDIS_URL, {
     ) {
       return true
     }
+
     return false
   },
 })
@@ -52,7 +62,6 @@ redis.on('close', () => {
 /* =========================
  * Helpers
  * ========================= */
-
 /**
  * Redis subscriber 전용 client 생성
  * - Pub/Sub은 반드시 duplicate 사용
