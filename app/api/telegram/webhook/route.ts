@@ -1,30 +1,19 @@
+// app/api/telegram/webhook/route.ts
 import { NextResponse } from 'next/server'
-import { generateVIPDailyReport } from '@/lib/vip/report/vipDailyReport'
-import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'
 
 export const runtime = 'nodejs'
 
-/**
- * 🚨 임시 VIP 허용
- * TODO: Redis / DB / Stripe 로 교체
- */
-const isVipUser = true
-
 export async function POST(req: Request) {
   let body: any
-
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ ok: true })
   }
 
-  console.log('[TELEGRAM WEBHOOK]', JSON.stringify(body, null, 2))
-
   const message = body.message
   const callback = body.callback_query
-
   const chatId =
     message?.chat?.id ??
     callback?.message?.chat?.id
@@ -34,13 +23,9 @@ export async function POST(req: Request) {
   }
 
   /**
-   * =========================
    * Step 1️⃣ /start + 버튼
-   * =========================
    */
   if (message?.text === '/start') {
-    console.log('[TELEGRAM] /start from', chatId)
-
     await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
@@ -62,17 +47,13 @@ export async function POST(req: Request) {
         }),
       }
     )
-
     return NextResponse.json({ ok: true })
   }
 
   /**
-   * =========================
    * Step 2️⃣ 버튼 콜백
-   * =========================
    */
   if (callback?.data === 'vip_report_redownload') {
-    // 즉시 안내 메시지
     await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
@@ -86,58 +67,28 @@ export async function POST(req: Request) {
     )
 
     /**
-     * =========================
-     * Step 3️⃣ VIP 분기 (임시 통과)
-     * =========================
-     */
-    if (!isVipUser) {
-      await fetch(
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: '❌ VIP 전용 기능입니다.',
-          }),
-        }
-      )
-      return NextResponse.json({ ok: true })
-    }
-
-    /**
-     * =========================
-     * Step 4️⃣ VIP → PDF 전송
-     * (비동기 처리)
-     * =========================
+     * Step 3️⃣ + 4️⃣
+     * 👉 VIP 체크 제거
+     * 👉 더미 PDF 즉시 전송 (파이프라인 검증)
      */
     void (async () => {
       try {
-        const report = await generateVIPDailyReport()
-        if (!report) return
-
-        const pdf = await generateVipDailyReportPdf({
-          date: report.generatedAt.slice(0, 10),
-          market: 'BTC',
-          vipLevel: 'VIP3',
-          riskLevel: 'HIGH',
-          judgement: report.summary,
-          scenarios: [
-            { title: 'EXTREME 회피', probability: 100 },
-          ],
-        })
+        const dummyPdf = Buffer.from(
+          '%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'
+        )
 
         await sendVipReportPdf(
           chatId,
-          pdf,
-          `VIP_Report_${report.generatedAt.slice(0, 10)}.pdf`
+          dummyPdf,
+          'TEST_VIP_Report.pdf'
         )
+
+        console.log('[TELEGRAM] dummy pdf sent')
       } catch (err) {
-        console.error('[VIP REPORT ERROR]', err)
+        console.error('[PDF SEND ERROR]', err)
       }
     })()
   }
 
-  // ✅ Telegram webhook은 항상 즉시 OK
   return NextResponse.json({ ok: true })
 }
