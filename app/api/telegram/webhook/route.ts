@@ -72,23 +72,25 @@ export async function POST(req: Request) {
      * 👉 더미 PDF 즉시 전송 (파이프라인 검증)
      */
     void (async () => {
-      try {
-        const dummyPdf = Buffer.from(
-          '%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF'
-        )
+  try {
+    console.log('[VIP TEST] async start')
 
-        await sendVipReportPdf(
-          chatId,
-          dummyPdf,
-          'TEST_VIP_Report.pdf'
-        )
-
-        console.log('[TELEGRAM] dummy pdf sent')
-      } catch (err) {
-        console.error('[PDF SEND ERROR]', err)
+    await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: '✅ 비동기 작업 진입 성공 (PDF 생성 전)',
+        }),
       }
-    })()
-  }
+    )
 
-  return NextResponse.json({ ok: true })
-}
+    // ⛔️ PDF 로직은 잠시 주석
+    // const report = await generateVIPDailyReport()
+    // ...
+  } catch (err) {
+    console.error('[VIP REPORT ERROR]', err)
+  }
+})()}}
