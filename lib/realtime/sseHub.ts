@@ -1,4 +1,5 @@
-import { createRedisSubscriber } from '@/lib/redis'
+import { createRedisSubscriber } from '@/lib/redis/index'
+import type { Redis } from 'ioredis'
 
 /* =========================
  * Types
@@ -15,7 +16,6 @@ type Client = {
  * ========================= */
 const encoder = new TextEncoder()
 
-// scope별 SSE client 관리
 const clientsByScope: Record<SSEScope, Set<Client>> = {
   ALERTS: new Set(),
   REALTIME: new Set(),
@@ -38,7 +38,7 @@ export function addSSEClient(
     `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
   )
 
-  // 연결 ACK (브라우저 안정화)
+  // 연결 ACK
   controller.enqueue(
     encoder.encode(`event: connected\ndata: {}\n\n`),
   )
@@ -53,24 +53,32 @@ export function addSSEClient(
 
 /* =========================
  * 🔥 Redis → SSE Bridge
- * - 전역 싱글톤 보장 (Next dev / HMR 안전)
+ * - 전역 싱글톤 (HMR / Vercel safe)
  * ========================= */
-const g = globalThis as any
+const g = globalThis as typeof globalThis & {
+  __SSE_REDIS_SUBSCRIBED__?: boolean
+}
 
 if (!g.__SSE_REDIS_SUBSCRIBED__) {
   g.__SSE_REDIS_SUBSCRIBED__ = true
 
-  const sub = createRedisSubscriber()
+  const sub: Redis = createRedisSubscriber()
 
-  sub.subscribe('realtime:market', err => {
-    if (err) {
-      console.error('[SSE] Redis subscribe failed', err)
-    } else {
-      console.log('[SSE] Redis subscribed: realtime:market')
-    }
+  /* ✅ subscribe에는 채널만 */
+  sub.subscribe('realtime:market')
+
+  /* ✅ 성공 로그 */
+  sub.on('subscribe', (channel: string, count: number) => {
+    console.log('[SSE] Redis subscribed:', channel, 'count=', count)
   })
 
-  sub.on('message', (_channel, message) => {
+  /* ✅ 에러 로그 */
+  sub.on('error', (err: Error) => {
+    console.error('[SSE] Redis error', err)
+  })
+
+  /* ✅ 메시지 수신 */
+  sub.on('message', (_channel: string, message: string) => {
     let event: any
 
     try {
@@ -80,9 +88,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       return
     }
 
-    /* =========================
-     * 이벤트 타입 → scope 매핑
-     * ========================= */
+    /* 이벤트 → scope 매핑 */
     let targetScope: SSEScope | null = null
 
     if (event.type === 'ALERT_TRIGGERED') {
@@ -93,7 +99,6 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       targetScope = 'VIP'
     }
 
-    // ❌ OI_TICK 등은 여기서 자연스럽게 drop
     if (!targetScope) return
 
     const set = clientsByScope[targetScope]
