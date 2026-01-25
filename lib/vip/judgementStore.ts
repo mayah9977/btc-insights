@@ -11,15 +11,27 @@ export type JudgementTimelineItem = {
 
 export type JudgementState = {
   // =========================
-  // 판단 요약 (이미 계산된 결과)
+  // 판단 요약 (실시간 확정값)
   // =========================
   judgmentSentence: string
   confidence: number
 
   // =========================
-  // 판단 타임라인
+  // 판단 타임라인 (히스토리)
   // =========================
   timeline: JudgementTimelineItem[]
+
+  /** 🔥 판단 문장 / 신뢰도 갱신 (RISK_UPDATE 기준) */
+  setJudgement: (params: {
+    sentence: string
+    confidence: number
+  }) => void
+
+  /** 🔥 실시간 판단 이벤트 누적 (히스토리용) */
+  append: (item: JudgementTimelineItem) => void
+
+  /** 전체 초기화 */
+  reset: () => void
 }
 
 /**
@@ -27,23 +39,31 @@ export type JudgementState = {
  * - 계산 ❌
  * - 해석 ❌
  * - UI ❌
- * - 이미 결정된 "판단 결과"만 보관
+ * - 서버 RISK_UPDATE 결과만 저장
  */
-export const useVipJudgementStore = create<JudgementState>(() => ({
-  judgmentSentence:
-    'Risk of entry is high due to current volatility and whale activity.',
-  confidence: 0.82,
+export const useVipJudgementStore =
+  create<JudgementState>((set) => ({
+    judgmentSentence: '',
+    confidence: 0,
 
-  timeline: [
-    {
-      time: '12:10',
-      state: 'Increased volatility',
-      note: 'Whale fastening increase detected',
-    },
-    {
-      time: '12:25',
-      state: 'Risk increased',
-      note: 'Entry restriction judgment',
-    },
-  ],
-}))
+    timeline: [],
+
+    setJudgement: ({ sentence, confidence }) =>
+      set({
+        judgmentSentence: sentence,
+        confidence,
+      }),
+
+    append: (item) =>
+      set((state) => ({
+        timeline: [...state.timeline, item],
+      })),
+
+    reset: () =>
+      set({
+        judgmentSentence: '',
+        confidence: 0,
+        timeline: [],
+      }),
+  }))
+
