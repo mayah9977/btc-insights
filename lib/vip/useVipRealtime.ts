@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { VIPLevel } from './vipTypes'
+import type { RiskLevel } from './riskTypes'
+
 import { notifyVipUpgrade } from './vipNotifier'
-import {
-  useVipRiskHistoryStore,
-  type RiskLevel,
-} from './riskHistoryStore'
+import { useVipRiskHistoryStore } from './riskHistoryStore'
 import { useVipJudgementStore } from './judgementStore'
 import { generateRiskSentence } from './riskSentence'
 
