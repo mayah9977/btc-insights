@@ -59,8 +59,8 @@ export function useVipRealtime(
   useEffect(() => {
     if (!userId) return
 
-    const { append: appendRisk } =
-      useVipRiskHistoryStore.getState()
+    const appendRisk =
+      useVipRiskHistoryStore.getState().append
     const {
       append: appendJudgement,
       setJudgement,
