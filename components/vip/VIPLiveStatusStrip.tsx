@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import type { RiskLevel } from '@/lib/vip/riskHistoryStore'
+import type { RiskLevel } from '@/lib/vip/riskTypes'
 
 type Props = {
   riskLevel: RiskLevel
