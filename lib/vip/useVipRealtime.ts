@@ -5,7 +5,7 @@ import type { VIPLevel } from './vipTypes'
 import type { RiskLevel } from './riskTypes'
 
 import { notifyVipUpgrade } from './vipNotifier'
-import { useVipRiskHistoryStore } from './riskHistoryStore'
+import { useVipRiskHistoryStore } from './riskHistoryStore' // ✅ 반드시 이 경로
 import { useVipJudgementStore } from './judgementStore'
 import { generateRiskSentence } from './riskSentence'
 
@@ -59,6 +59,7 @@ export function useVipRealtime(
   useEffect(() => {
     if (!userId) return
 
+    // ✅ 올바른 RiskHistory SSOT
     const appendRisk =
       useVipRiskHistoryStore.getState().append
 

@@ -1,37 +1,50 @@
+// lib/vip/riskHistoryStore.ts
 import { create } from 'zustand'
+import type { RiskLevel } from './riskTypes'
 
 export type RiskHistoryItem = {
   time: string
-  level: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+  level: RiskLevel
   reason: string
 }
 
-type RiskHistoryState = {
+export type RiskHistoryState = {
+  /** 과거 + 실시간 Risk 히스토리 */
   history: RiskHistoryItem[]
+
+  /** 실시간 Risk 이벤트 누적 */
+  append: (item: RiskHistoryItem) => void
+
+  /** 전체 초기화 (로그아웃 / 세션 변경 등) */
+  reset: () => void
+
+  /** 🔥 최초 1회 과거 히스토리 주입 (SSR ❌ / Client only) */
+  hydrate: (items: RiskHistoryItem[]) => void
 }
 
 /**
- * ⚠️ SSOT: 리스크 히스토리 단일 소스
+ * ⚠️ SSOT: VIP Risk History 단일 소스
  * - 계산 ❌
  * - 해석 ❌
  * - UI ❌
+ * - 과거 Risk + 실시간 Risk 모두 반드시 여기만 통과
  */
-export const useVipRiskHistoryStore = create<RiskHistoryState>(() => ({
-  history: [
-    {
-      time: '11:40',
-      level: 'MEDIUM',
-      reason: '변동성 증가',
-    },
-    {
-      time: '12:05',
-      level: 'HIGH',
-      reason: '고래 체결 집중',
-    },
-    {
-      time: '12:25',
-      level: 'EXTREME',
-      reason: '급격한 방향성 붕괴',
-    },
-  ],
-}))
+export const useVipRiskHistoryStore =
+  create<RiskHistoryState>((set) => ({
+    history: [],
+
+    append: (item) =>
+      set((state) => ({
+        history: [...state.history, item],
+      })),
+
+    reset: () => ({
+      history: [],
+    }),
+
+    // ✅ 최초 진입 시 서버에서 받은 "확정 Risk"만 세팅
+    hydrate: (items) =>
+      set(() => ({
+        history: items,
+      })),
+  }))
