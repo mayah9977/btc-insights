@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { VIPLevel } from './vipTypes'
 import { notifyVipUpgrade } from './vipNotifier'
-import { useVipRiskHistoryStore } from './riskHistoryStore'
+import {
+  useVipRiskHistoryStore,
+  type RiskLevel,
+} from './riskHistoryStore'
 import { useVipJudgementStore } from './judgementStore'
 import { generateRiskSentence } from './riskSentence'
-
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
 
 export type VipRealtimeState = {
   vipLevel: VIPLevel
@@ -61,6 +62,7 @@ export function useVipRealtime(
 
     const appendRisk =
       useVipRiskHistoryStore.getState().append
+
     const {
       append: appendJudgement,
       setJudgement,
