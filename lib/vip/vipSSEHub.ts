@@ -1,5 +1,7 @@
 // lib/vip/vipSSEHub.ts
 
+export type VIPLevel = 'FREE' | 'VIP1' | 'VIP2' | 'VIP3'
+
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>
 }
@@ -27,16 +29,22 @@ export function addVipClient(
   clients.get(userId)!.add(client)
 
   return () => {
-    clients.get(userId)?.delete(client)
+    const set = clients.get(userId)
+    if (!set) return
+
+    set.delete(client)
+    if (set.size === 0) {
+      clients.delete(userId)
+    }
   }
 }
 
 /* =========================
- * 🔔 공용 SSE Push
+ * 🔔 공용 SSE Push (user 단위)
  * ========================= */
-export function pushUserEvent(
+function pushUserEvent(
   userId: string,
-  payload: Record<string, unknown>, // ✅ object 타입으로 고정
+  payload: Record<string, unknown>,
 ) {
   const set = clients.get(userId)
   if (!set || set.size === 0) return
@@ -55,14 +63,64 @@ export function pushUserEvent(
 }
 
 /* =========================
- * (호환) VIP 전용 wrapper
+ * ✅ VIP 레벨 업데이트 (user 단위)
  * ========================= */
 export function pushVipUpdate(
   userId: string,
-  payload: Record<string, unknown>, // ✅ spread 가능
+  payload: { vipLevel: VIPLevel },
 ) {
   pushUserEvent(userId, {
-    type: 'VIP_UPDATE',
+    type: 'VIP_LEVEL',
+    vipLevel: payload.vipLevel,
+  })
+}
+
+/* =========================
+ * ❌ (유지하되 사용 금지)
+ * 개별 유저 Risk 전송은 잘못된 설계
+ * ========================= */
+export function pushVipRiskUpdate(
+  userId: string,
+  payload: {
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+    judgement: string
+    isExtreme: boolean
+    ts: number
+  },
+) {
+  pushUserEvent(userId, {
+    type: 'RISK_UPDATE',
     ...payload,
   })
+}
+
+/* =========================
+ * 🔥 RISK_UPDATE broadcast (SSOT) ✅ 정답
+ * ========================= */
+export function broadcastVipRiskUpdate(payload: {
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+  judgement: string
+  isExtreme: boolean
+  ts: number
+}) {
+  for (const userId of clients.keys()) {
+    pushUserEvent(userId, {
+      type: 'RISK_UPDATE',
+      ...payload,
+    })
+  }
+}
+
+/* =========================
+ * ✅ KPI 실시간 반영 (broadcast)
+ * ========================= */
+export function broadcastVipKpi(
+  kpi: Record<string, unknown>,
+) {
+  for (const userId of clients.keys()) {
+    pushUserEvent(userId, {
+      type: 'VIP_KPI_UPDATE',
+      kpi,
+    })
+  }
 }

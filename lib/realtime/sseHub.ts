@@ -53,7 +53,6 @@ export function addSSEClient(
 
 /* =========================
  * 🔥 Redis → SSE Bridge
- * - 전역 싱글톤 (HMR / Vercel safe)
  * ========================= */
 const g = globalThis as typeof globalThis & {
   __SSE_REDIS_SUBSCRIBED__?: boolean
@@ -64,20 +63,18 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 
   const sub: Redis = createRedisSubscriber()
 
-  /* ✅ subscribe에는 채널만 */
+  /* Redis 채널 */
   sub.subscribe('realtime:market')
 
-  /* ✅ 성공 로그 */
   sub.on('subscribe', (channel: string, count: number) => {
     console.log('[SSE] Redis subscribed:', channel, 'count=', count)
   })
 
-  /* ✅ 에러 로그 */
   sub.on('error', (err: Error) => {
     console.error('[SSE] Redis error', err)
   })
 
-  /* ✅ 메시지 수신 */
+  /* 메시지 수신 */
   sub.on('message', (_channel: string, message: string) => {
     let event: any
 
@@ -88,12 +85,20 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       return
     }
 
-    /* 이벤트 → scope 매핑 */
+    /* =========================
+     * 🔥 이벤트 → scope 매핑
+     * ========================= */
     let targetScope: SSEScope | null = null
 
     if (event.type === 'ALERT_TRIGGERED') {
       targetScope = 'ALERTS'
-    } else if (event.type === 'PRICE_TICK') {
+    } else if (
+      event.type === 'PRICE_TICK' ||
+      event.type === 'VOLUME_TICK' ||
+      event.type === 'OI_TICK' ||
+      event.type === 'WHALE_WARNING' ||
+      event.type === 'WHALE_INTENSITY_TICK' // ✅ 최종 추가
+    ) {
       targetScope = 'REALTIME'
     } else if (event.type === 'VIP_UPDATE') {
       targetScope = 'VIP'
@@ -120,7 +125,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 }
 
 /* =========================
- * 💓 Heartbeat (optional)
+ * 💓 Heartbeat
  * ========================= */
 export function pushHeartbeat() {
   const ping = encoder.encode(`event: ping\ndata: {}\n\n`)

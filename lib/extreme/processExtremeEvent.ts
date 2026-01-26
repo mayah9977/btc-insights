@@ -1,3 +1,5 @@
+// lib/extreme/processExtremeEvent.ts
+
 import { safeExtremeScore } from './extremeScoreSafe'
 import { extremeToNotification } from './extremeToNotification'
 import {
@@ -10,13 +12,14 @@ import { canSendNotification } from '@/lib/notification/notificationCooldown'
 import { pushNotification } from '@/lib/notification/notificationQueue'
 
 import { saveRiskEvent } from '@/lib/vip/redis/saveRiskEvent'
+import { getVipRiskEvents } from '@/lib/vip/redis/getVipRiskEvents'
+import { aggregateVipMetrics } from '@/lib/vip/aggregateVipMetrics'
+import { broadcastVipKpi } from '@/lib/vip/vipSSEHub'
+
 import type { ExtremeEvent } from './extremeToNotification'
 
 /**
  * 🔥 Extreme 이벤트 처리 메인 함수 (SSOT)
- *
- * 이 함수에 들어왔다는 것 자체가
- * 시스템이 EXTREME 후보로 판단했다는 의미
  */
 export async function processExtremeEvent(
   rawEvent: ExtremeEvent
@@ -55,9 +58,6 @@ export async function processExtremeEvent(
 
   /**
    * 5️⃣ 🔥 EXTREME RiskEvent 저장 (VIP 핵심)
-   *
-   * 이 함수는 EXTREME 전용 파이프라인이므로
-   * level 비교 불필요
    */
   await saveRiskEvent({
     riskLevel: 'EXTREME',
@@ -67,6 +67,20 @@ export async function processExtremeEvent(
     timestamp: Date.now(),
     reason: 'Extreme volatility detected',
   })
+
+  /**
+   * 5️⃣-1️⃣ ✅ KPI 즉시 재계산 + SSE Broadcast (핵심 추가)
+   */
+  try {
+    const events = await getVipRiskEvents()
+
+    broadcastVipKpi({
+      metrics7d: aggregateVipMetrics(events, 7),
+      metrics30d: aggregateVipMetrics(events, 30),
+    })
+  } catch (e) {
+    console.warn('[VIP KPI SSE] failed', e)
+  }
 
   /**
    * 6️⃣ Notification 발행

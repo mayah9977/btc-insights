@@ -10,9 +10,8 @@ type RiskInput = {
 
 /**
  * VIP Risk 자동 판단 엔진
- * - 수치 안정성
- * - 임계값 튐 방지
- * - UI/문장 공용 사용
+ * - whaleIntensity는 가속기 역할만
+ * - 단독 EXTREME 금지
  */
 export function calculateRiskLevel(input: RiskInput): RiskLevel {
   const {
@@ -24,29 +23,47 @@ export function calculateRiskLevel(input: RiskInput): RiskLevel {
   } = input
 
   /* =========================
-     1️⃣ 즉시 차단 (Hard Stop)
+     1️⃣ Hard Stop (결합 조건만 허용)
   ========================= */
-  if (extremeSignal && volatility > 0.75) {
+  if (extremeSignal && volatility > 0.6 && whaleIntensity > 0.7) {
     return 'EXTREME'
   }
 
-  if (Math.abs(fundingRate) > 0.06 && whaleIntensity > 0.65) {
+  if (
+    Math.abs(fundingRate) > 0.06 &&
+    volatility > 0.5 &&
+    whaleIntensity > 0.65
+  ) {
     return 'EXTREME'
   }
 
   /* =========================
      2️⃣ Composite Risk Index
+     (whaleIntensity 가중치 제한)
   ========================= */
   const riskIndex =
-    volatility * 0.45 +
-    whaleIntensity * 0.35 +
-    (1 - aiScore / 100) * 0.2
+    volatility * 0.5 +
+    Math.min(whaleIntensity, 0.8) * 0.25 +
+    (1 - aiScore / 100) * 0.25
 
   /* =========================
-     3️⃣ Risk Level Mapping
+     3️⃣ Base Risk Mapping
   ========================= */
-  if (riskIndex >= 0.75) return 'EXTREME'
-  if (riskIndex >= 0.6) return 'HIGH'
-  if (riskIndex >= 0.4) return 'MEDIUM'
-  return 'LOW'
+  let baseRisk: RiskLevel =
+    riskIndex >= 0.75 ? 'EXTREME' :
+    riskIndex >= 0.6  ? 'HIGH' :
+    riskIndex >= 0.4  ? 'MEDIUM' :
+                        'LOW'
+
+  /* =========================
+     4️⃣ Whale Acceleration (단계 보정)
+     - 단독 승격 금지
+     - 최대 1단계만
+  ========================= */
+  if (whaleIntensity > 0.85 && volatility > 0.35) {
+    if (baseRisk === 'MEDIUM') return 'HIGH'
+    if (baseRisk === 'HIGH') return 'EXTREME'
+  }
+
+  return baseRisk
 }

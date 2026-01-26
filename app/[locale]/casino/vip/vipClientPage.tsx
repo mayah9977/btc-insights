@@ -1,30 +1,39 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useVIP } from '@/lib/vip/vipClient'
+import { useState } from 'react'
+import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
+import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
+import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
+import { useWhaleWarning } from '@/lib/realtime/useWhaleWarning'
 
-/* =========================
-   KPI (TOP)
-========================= */
+import { useVipRealtime } from '@/lib/vip/useVipRealtime'
+import { useStableRiskLevel } from '@/lib/vip/useStableRiskLevel'
+import { useVipKpi } from '@/lib/vip/useVipKpi'
+import { useLatestRiskEvent } from '@/lib/vip/useLatestRiskEvent'
+import { useVipJudgementStore } from '@/lib/vip/judgementStore'
+import { generateRiskSentence } from '@/lib/vip/riskSentence'
+
+import { useInitialRiskHistory } from '@/lib/vip/useInitialRiskHistory'
+import { useRiskHeatmapSync } from '@/lib/vip/useRiskHeatmapSync'
+
+/* ================= KPI ================= */
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
+import VIPLiveStatusStrip from '@/components/vip/VIPLiveStatusStrip'
+import VIPNoEntryReasonBanner from '@/components/vip/VIPNoEntryReasonBanner'
+import VIPWhaleWarningBanner from '@/components/vip/VIPWhaleWarningBanner'
 
-/* =========================
-   Value / Compare / Summary
-========================= */
-import VIPValueSummary from '@/components/vip/VIPValueSummary'
+/* ================= Summary ================= */
 import VIPCompareTable from '@/components/vip/VIPCompareTable'
 import VIP30DayEvasionBadge from '@/components/vip/VIP30DayEvasionBadge'
 import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
 
-/* =========================
-   Mobile Layout
-========================= */
-import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
+/* ================= Charts ================= */
+import BtcLiveChart from '@/components/charts/BtcLiveChart'
+import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
 
-/* =========================
-   Core Sections
-========================= */
+/* ================= Sections ================= */
+import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
 import { VIPOverviewDashboard } from '@/components/vip/VIPOverviewDashboard'
 import { VIPJudgement } from '@/components/vip/VIPJudgement'
 import VIPJudgementTimeline from '@/components/vip/VIPJudgementTimeline'
@@ -34,168 +43,157 @@ import VIPRiskScenarioHeatmap from '@/components/vip/VIPRiskScenarioHeatmap'
 import VIPNoEntryReason from '@/components/vip/VIPNoEntryReason'
 import VIPLossAvoidanceLog from '@/components/vip/VIPLossAvoidanceLog'
 import { NotificationHistoryView } from '@/components/notifications/NotificationHistoryView'
-
-/* =========================
-   Phase 2 Cards
-========================= */
 import VIPTodayJudgementCard from '@/components/vip/VIPTodayJudgementCard'
 import VIPRiskAvoidanceCard from '@/components/vip/VIPRiskAvoidanceCard'
 import VIPDailySnapshot from '@/components/vip/VIPDailySnapshot'
 
-/* =========================
-   Types
-========================= */
-type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
-
-type Summary = {
-  period: '7d' | '30d'
-  avoidedLossUSD: number
-  avoidedExtremeCount: number
+type Props = {
+  userId: string
+  weeklySummary: any
+  monthlySummary: any
+  vip3Metrics: any
 }
 
-type VIP3Metrics = {
-  extremeAccuracy: number
-  avgAvoidedLoss30d: number
-  stableZoneRatio: number
-  confidenceScore: number
-}
-
-type VIPClientPageProps = {
-  avoidedExtremeCount: number
-  avoidedLossUSD: number
-  weeklySummary: Summary
-  monthlySummary: Summary
-
-  /** ✅ 추가: VIP3 고급 지표 */
-  vip3Metrics: VIP3Metrics
-}
-
-/* =========================
-   Component (FINAL)
-========================= */
 export default function VIPClientPage({
-  avoidedExtremeCount,
-  avoidedLossUSD,
+  userId,
   weeklySummary,
   monthlySummary,
   vip3Metrics,
-}: VIPClientPageProps) {
-  const { vipLevel } = useVIP()
+}: Props) {
+  useInitialRiskHistory()
 
-  const riskLevel: RiskLevel = 'HIGH'
-  const btcPrice = 62338
-  const avg30dAvoidedLossUSD = monthlySummary.avoidedLossUSD
+  const realtime = useVipRealtime(userId)
 
-  useEffect(() => {
-    return () => {
-      // realtime cleanup placeholder
-    }
-  }, [])
+  const riskLevel = useStableRiskLevel(realtime.riskLevel, {
+    settleDelayMs: 3000,
+    onStableChange: level => {
+      useVipJudgementStore.getState().setJudgement({
+        sentence: generateRiskSentence(level),
+        confidence:
+          level === 'LOW' ? 0.9 :
+          level === 'MEDIUM' ? 0.8 :
+          level === 'HIGH' ? 0.75 : 0.7,
+      })
+    },
+  })
+
+  useRiskHeatmapSync(riskLevel)
+
+  const { timeline } = useVipJudgementStore()
+
+  /* ===== Realtime Data ===== */
+  const oiState = useRealtimeOI('BTCUSDT')
+  const volumeState = useRealtimeVolume('BTCUSDT')
+  const whaleWarning = useWhaleWarning('BTCUSDT')
+
+  const priceState = useRealtimePrice('BTCUSDT')
+  const [chartPrice, setChartPrice] = useState<number | null>(null)
+  const btcPrice = chartPrice ?? priceState.price ?? 0
+
+  const { avoidedExtremeCount = 0, avoidedLossUSD = 0 } = useVipKpi()
+  const latestRiskEvent = useLatestRiskEvent()
 
   return (
     <>
-      {/* ========================= TOP KPI (ALL) ========================= */}
       <VIPTopKPIBar
         btcPrice={btcPrice}
         avoidedExtremeCount={avoidedExtremeCount}
         avoidedLossUSD={avoidedLossUSD}
       />
 
-      {/* ========================= Mobile ========================= */}
-      <VIPMobileLayout>
-        <VIPValueSummary
-          btcPrice={btcPrice}
-          avoidedExtremeCount={avoidedExtremeCount}
-          avoidedLossUSD={avoidedLossUSD}
-        />
+      <VIPLiveStatusStrip
+        riskLevel={riskLevel}
+        lastTriggeredAt={realtime.lastTriggeredAt}
+        whaleWarning={whaleWarning}
+        volume={volumeState.volume}
+      />
 
+      {whaleWarning && riskLevel !== 'EXTREME' && (
+        <VIPWhaleWarningBanner symbol="BTCUSDT" />
+      )}
+
+      <VIPNoEntryReasonBanner
+        riskLevel={riskLevel}
+        reason={latestRiskEvent?.reason}
+      />
+
+      {/* ================= Mobile ================= */}
+      <VIPMobileLayout>
         <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
 
-        {/* ⭐ VIP3 고급 지표 (Mobile) */}
-        <VIP3AdvancedMetrics
-          extremeAccuracy={vip3Metrics.extremeAccuracy}
-          avgAvoidedLoss30d={vip3Metrics.avgAvoidedLoss30d}
-          stableZoneRatio={vip3Metrics.stableZoneRatio}
-          confidenceScore={vip3Metrics.confidenceScore}
-        />
+        <div className="mt-3 space-y-1 text-xs text-zinc-400">
+          <div>
+            Open Interest:{' '}
+            <span className="text-white font-medium">
+              {oiState.openInterest?.toLocaleString() ?? '--'}
+            </span>
+          </div>
+          <div>
+            Volume:{' '}
+            <span className="text-white font-medium">
+              {volumeState.volume !== null
+                ? volumeState.volume.toFixed(2)
+                : '--'}
+            </span>
+          </div>
+        </div>
 
-        <VIP30DayEvasionBadge avgAvoidedLossUSD={avg30dAvoidedLossUSD} />
-
-        <VIPCompareTable />
-
-        <section className="space-y-2 mt-6">
-          <h1 className="text-xl font-extrabold text-white">
-            오늘 시장에서 피해야 했던 이유들
-          </h1>
-          <p className="text-sm text-zinc-400">
-            이 리포트는 수익을 약속하지 않습니다.
-            <br />
-            위험 구조와 진입 제한 근거를 설명합니다.
-          </p>
-        </section>
+        <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel} />
+        <BtcLiveChart riskLevel={riskLevel} onPriceUpdate={setChartPrice} />
 
         <VIPTodayJudgementCard />
+        <VIPJudgementTimeline riskLevel={riskLevel} timeline={timeline} />
+        <VIP3AdvancedMetrics {...vip3Metrics} />
+        <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+        <VIPCompareTable />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />
-
         <VIPOverviewDashboard />
         <VIPJudgement />
-        <VIPJudgementTimeline />
-
         <VIPRiskPanel riskLevel={riskLevel} />
         <VIPRiskHistoryTimeline />
         <VIPRiskScenarioHeatmap />
         <VIPNoEntryReason riskLevel={riskLevel} />
-
         <VIPLossAvoidanceLog />
       </VIPMobileLayout>
 
-      {/* ========================= Desktop ========================= */}
+      {/* ================= Desktop ================= */}
       <main className="hidden md:block space-y-10">
-        <VIPValueSummary
-          btcPrice={btcPrice}
-          avoidedExtremeCount={avoidedExtremeCount}
-          avoidedLossUSD={avoidedLossUSD}
-        />
-
         <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
 
-        {/* ⭐ VIP3 고급 지표 (Desktop) */}
-        <VIP3AdvancedMetrics
-          extremeAccuracy={vip3Metrics.extremeAccuracy}
-          avgAvoidedLoss30d={vip3Metrics.avgAvoidedLoss30d}
-          stableZoneRatio={vip3Metrics.stableZoneRatio}
-          confidenceScore={vip3Metrics.confidenceScore}
-        />
+        <div className="space-y-1 text-xs text-zinc-400">
+          <div>
+            Open Interest:{' '}
+            <span className="text-white font-medium">
+              {oiState.openInterest?.toLocaleString() ?? '--'}
+            </span>
+          </div>
+          <div>
+            Volume:{' '}
+            <span className="text-white font-medium">
+              {volumeState.volume !== null
+                ? volumeState.volume.toFixed(2)
+                : '--'}
+            </span>
+          </div>
+        </div>
 
-        <VIP30DayEvasionBadge avgAvoidedLossUSD={avg30dAvoidedLossUSD} />
+        <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel} />
+        <BtcLiveChart riskLevel={riskLevel} onPriceUpdate={setChartPrice} />
 
+        <VIPJudgementTimeline riskLevel={riskLevel} timeline={timeline} />
+        <VIP3AdvancedMetrics {...vip3Metrics} />
+        <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
         <VIPCompareTable />
-
-        <header className="space-y-3">
-          <h1 className="text-3xl font-extrabold text-white">
-            오늘 시장에서 피해야 했던 이유들
-          </h1>
-          <p className="text-sm text-zinc-400">
-            현재 등급: <b className="text-zinc-200">{vipLevel}</b>
-          </p>
-        </header>
-
-        <VIPTodayJudgementCard />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />
-
         <VIPOverviewDashboard />
         <VIPJudgement />
-        <VIPJudgementTimeline />
-
         <VIPRiskPanel riskLevel={riskLevel} />
         <VIPRiskHistoryTimeline />
         <VIPRiskScenarioHeatmap />
         <VIPNoEntryReason riskLevel={riskLevel} />
-
         <VIPLossAvoidanceLog />
-
         <NotificationHistoryView />
       </main>
     </>

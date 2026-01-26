@@ -1,3 +1,5 @@
+// lib/vip/aggregateVipMetrics.ts
+
 import { calcAvoidedLossUSD, RiskEvent } from './calcAvoidedLoss'
 
 export function aggregateVipMetrics(
@@ -11,8 +13,10 @@ export function aggregateVipMetrics(
     e => now - e.timestamp <= range
   )
 
+  const loss = calcAvoidedLossUSD(filtered)
+
   return {
-    avoidedLossUSD: Math.round(calcAvoidedLossUSD(filtered)),
+    avoidedLossUSD: Math.round(loss ?? 0),
     avoidedExtremeCount: filtered.filter(
       e => e.riskLevel === 'EXTREME'
     ).length,

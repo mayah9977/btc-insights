@@ -1,49 +1,32 @@
 'use client'
 
 import { useEffect } from 'react'
-import { VIPLevel } from './vipTypes'
+import type { VIPLevel } from './vipTypes'
+import { subscribeVipLevel } from '@/lib/realtime/vipChannel'
 
+/**
+ * useVipSSE
+ *
+ * 역할:
+ * - ❌ EventSource 생성 제거
+ * - ✅ 단일 SSE Manager 기반 VIP_LEVEL 구독
+ * - VIP 레벨 변경 시 setVIP 호출
+ */
 export function useVipSSE(
   userId: string,
-  setVIP: (vip: VIPLevel) => void
+  setVIP: (vip: VIPLevel) => void,
 ) {
   useEffect(() => {
-    if (!userId) {
-      console.log('[VIP SSE] skipped (no userId)')
-      return
-    }
+    if (!userId) return
 
-    const url = '/api/vip/sse'
-    console.log('[VIP SSE] connecting to:', url, 'userId:', userId)
-
-    const es = new EventSource(url)
-
-    es.onopen = () => {
-      console.log('[VIP SSE] connection opened')
-    }
-
-    es.onmessage = (event) => {
-      console.log('[VIP SSE] raw message:', event.data)
-      try {
-        const data = JSON.parse(event.data)
-
-        if (data.userId === userId) {
-          console.log('[VIP SSE] VIP update:', data.vipLevel)
-          setVIP(data.vipLevel as VIPLevel)
-        }
-      } catch (e) {
-        console.warn('[VIP SSE] JSON parse error', e)
-      }
-    }
-
-    es.onerror = (err) => {
-      console.warn('[VIP SSE] error', err)
-      es.close()
-    }
+    const unsubscribe = subscribeVipLevel(
+      (vipLevel) => {
+        setVIP(vipLevel)
+      },
+    )
 
     return () => {
-      console.log('[VIP SSE] connection closed')
-      es.close()
+      unsubscribe()
     }
   }, [userId, setVIP])
 }

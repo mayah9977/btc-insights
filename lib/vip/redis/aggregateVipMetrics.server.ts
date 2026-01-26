@@ -1,14 +1,18 @@
+// lib/vip/redis/aggregateDailyVipMetrics.server.ts
+
+import 'server-only'
 import { redis } from '@/lib/redis/index'
 import { aggregateVipMetrics } from '@/lib/vip/aggregateVipMetrics'
+import { getVipRiskEvents } from '@/lib/vip/redis/getVipRiskEvents'
 
-
-const SOURCE_KEY = 'vip:risk-events'
 const TARGET_KEY = 'vip:metrics:daily'
 
+/**
+ * 🕒 Daily KPI Snapshot (cron)
+ * - SSE / API 와 동일 로직 사용
+ */
 export async function aggregateDailyVipMetrics() {
-  const raw = await redis.lrange(SOURCE_KEY, 0, -1)
-
-  const events = raw.map((v) => JSON.parse(v))
+  const events = await getVipRiskEvents()
 
   const metrics7d = aggregateVipMetrics(events, 7)
   const metrics30d = aggregateVipMetrics(events, 30)

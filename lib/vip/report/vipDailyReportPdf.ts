@@ -1,168 +1,253 @@
-import { PDFDocument, rgb } from 'pdf-lib'
-import fontkit from '@pdf-lib/fontkit'
-import fs from 'fs'
-import path from 'path'
+import { renderPdfByCloudRun } from '@/lib/pdf/cloudRunPdfClient'
 
-type VipLevel = 'VIP1' | 'VIP2' | 'VIP3'
+/**
+ * VIP 도메인 타입
+ */
+export type VipLevel = 'VIP1' | 'VIP2' | 'VIP3'
 
-type DailyReportInput = {
+/**
+ * 🔴 EXTREME 구간 (차트 가로 비율 기준)
+ */
+export type ExtremeZone = {
+  startRatio: number // 0 ~ 1
+  endRatio: number   // 0 ~ 1
+}
+
+/**
+ * VIP Daily Report Input
+ */
+export type DailyReportInput = {
   date: string
   market: string
   vipLevel: VipLevel
   riskLevel: 'LOW' | 'MID' | 'HIGH'
   judgement: string
-  scenarios: { title: string; probability: number }[]
+  scenarios: {
+    title: string
+    probability: number
+  }[]
+
+  /** 🔥 차트 이미지 (base64) */
+  chartBase64: string
+
+  /** 🔥 EXTREME 구간 메타데이터 */
+  extremeZones?: ExtremeZone[]
 }
 
-export async function generateVipDailyReportPdf(
-  input: DailyReportInput
-): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create()
-  pdf.registerFontkit(fontkit)
-
-  const page = pdf.addPage([595, 842])
-  const width = page.getWidth()
-
-  const fontPath = path.join(
-    process.cwd(),
-    'public/fonts/NotoSansKR-Regular.ttf'
-  )
-  const fontBytes = fs.readFileSync(fontPath)
-  const font = await pdf.embedFont(fontBytes)
-
-  let y = 800
-
-  const colors = {
-    bg: rgb(0.05, 0.05, 0.08),
-    white: rgb(1, 1, 1),
-    gray: rgb(0.7, 0.7, 0.7),
-    risk: {
-      LOW: rgb(0.2, 0.8, 0.4),
-      MID: rgb(0.95, 0.7, 0.2),
-      HIGH: rgb(0.95, 0.3, 0.3),
-    },
-  }
-
-  // ===== Header =====
-  page.drawRectangle({
-    x: 0,
-    y: 780,
-    width,
-    height: 62,
-    color: colors.bg,
-  })
-
-  page.drawText('SIGNAL · VIP DAILY REPORT', {
-    x: 40,
-    y: 815,
-    size: 18,
-    font,
-    color: colors.white,
-  })
-
-  page.drawText(input.date, {
-    x: width - 160,
-    y: 815,
-    size: 10,
-    font,
-    color: colors.gray,
-  })
-
-  y = 740
-
-  const section = (title: string) => {
-    page.drawText(title, {
-      x: 40,
-      y,
-      size: 14,
-      font,
-      color: colors.white,
-    })
-    y -= 6
-    page.drawLine({
-      start: { x: 40, y },
-      end: { x: width - 40, y },
-      thickness: 1,
-      color: colors.gray,
-    })
-    y -= 20
-  }
-
-  const text = (t: string, size = 12) => {
-    page.drawText(t, {
-      x: 40,
-      y,
-      size,
-      font,
-      color: colors.white,
-      maxWidth: width - 80,
-      lineHeight: size * 1.5,
-    })
-    y -= size * 1.8
-  }
-
-  // ===== Market Summary =====
-  section('Market Summary')
-  text(`Market: ${input.market}`)
-  text(`VIP Level: ${input.vipLevel}`)
-  text(`Risk Level: ${input.riskLevel}`)
-
-  // Risk Badge
-  page.drawRectangle({
-    x: 200,
-    y: y + 6,
-    width: 80,
-    height: 22,
-    color: colors.risk[input.riskLevel],
-  })
-  page.drawText(input.riskLevel, {
-    x: 222,
-    y: y + 12,
-    size: 10,
-    font,
-    color: colors.white,
-  })
-
-  y -= 40
-
-  // ===== Judgement (VIP 분기) =====
-  section('AI Judgement')
-  if (input.vipLevel === 'VIP1') {
-    text('고급 판단은 VIP3 이상에서 제공됩니다.', 11)
-  } else {
-    text(input.judgement)
-  }
-
-  // ===== Scenarios (VIP 분기) =====
-  section('Probability Scenarios')
-
-  const scenarios =
+/**
+ * 1️⃣ VIP Daily Report HTML 생성 (A4 / Dark / Print-safe)
+ * - 차트 이미지
+ * - EXTREME 빨간 오버레이 포함
+ */
+function buildVipDailyReportHtml(input: DailyReportInput): string {
+  const visibleScenarios =
     input.vipLevel === 'VIP1'
       ? input.scenarios.slice(0, 1)
       : input.vipLevel === 'VIP2'
       ? input.scenarios.slice(0, 2)
       : input.scenarios
 
-  scenarios.forEach((s) =>
-    text(`• ${s.title} (${s.probability}%)`)
-  )
+  const riskColor =
+    input.riskLevel === 'LOW'
+      ? '#2ecc71'
+      : input.riskLevel === 'MID'
+      ? '#f1c40f'
+      : '#e74c3c'
 
-  if (input.vipLevel !== 'VIP3') {
-    y -= 10
-    text('※ 전체 시나리오는 VIP3에서 제공됩니다.', 10)
+  const extremeOverlays =
+    input.extremeZones?.map(
+      (z) => `
+        <div
+          class="extreme-zone"
+          style="
+            left: ${z.startRatio * 100}%;
+            width: ${(z.endRatio - z.startRatio) * 100}%;
+          "
+        ></div>
+      `
+    ).join('') ?? ''
+
+  return `
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<style>
+@page {
+  size: A4;
+  margin: 40px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', Arial, sans-serif;
+  background: #0d0f1a;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 6px 0;
+}
+
+.header {
+  border-bottom: 1px solid #2a2f45;
+  padding-bottom: 14px;
+  margin-bottom: 28px;
+}
+
+.date {
+  color: #9aa0b5;
+  font-size: 12px;
+}
+
+.section {
+  margin-bottom: 26px;
+}
+
+.section-title {
+  font-size: 15px;
+  margin-bottom: 10px;
+  border-left: 4px solid #4c6ef5;
+  padding-left: 10px;
+}
+
+.kv {
+  margin: 4px 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: ${riskColor};
+  color: #000;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.scenario {
+  margin: 6px 0;
+}
+
+.notice {
+  font-size: 11px;
+  color: #9aa0b5;
+  margin-top: 8px;
+}
+
+/* ===== Chart & EXTREME ===== */
+.chart-wrapper {
+  position: relative;
+  margin-top: 18px;
+}
+
+.chart-wrapper img {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #2a2f45;
+  display: block;
+}
+
+.extreme-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(239, 68, 68, 0.28);
+  border-left: 1px solid rgba(239, 68, 68, 0.7);
+  border-right: 1px solid rgba(239, 68, 68, 0.7);
+}
+
+/* ===== Footer ===== */
+.footer {
+  margin-top: 60px;
+  font-size: 11px;
+  color: #7b8099;
+  text-align: center;
+  border-top: 1px solid #2a2f45;
+  padding-top: 14px;
+}
+
+.watermark {
+  position: fixed;
+  bottom: 20px;
+  right: 30px;
+  font-size: 72px;
+  color: rgba(255,255,255,0.04);
+  transform: rotate(-20deg);
+  pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="watermark">${input.vipLevel}</div>
+
+<div class="header">
+  <h1>SIGNAL · VIP DAILY REPORT</h1>
+  <div class="date">${input.date}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">Market Summary</div>
+  <div class="kv">Market: ${input.market}</div>
+  <div class="kv">
+    Risk Level:
+    <span class="badge">${input.riskLevel}</span>
+  </div>
+  <div class="kv">VIP Level: ${input.vipLevel}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">Market Chart</div>
+  <div class="chart-wrapper">
+    <img src="${input.chartBase64}" />
+    ${extremeOverlays}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">AI Judgement</div>
+  ${
+    input.vipLevel === 'VIP1'
+      ? `<div>상세 판단은 VIP3 이상에서 제공됩니다.</div>`
+      : `<div>${input.judgement}</div>`
   }
+</div>
 
-  // ===== Footer =====
-  page.drawText(
-    'Generated by SIGNAL · VIP Intelligence Engine',
-    {
-      x: 40,
-      y: 30,
-      size: 9,
-      font,
-      color: colors.gray,
-    }
-  )
+<div class="section">
+  <div class="section-title">Probability Scenarios</div>
+  ${visibleScenarios
+    .map(
+      (s) =>
+        `<div class="scenario">• ${s.title} (${s.probability}%)</div>`
+    )
+    .join('')}
+  ${
+    input.vipLevel !== 'VIP3'
+      ? `<div class="notice">※ 전체 시나리오는 VIP3 전용 콘텐츠입니다.</div>`
+      : ''
+  }
+</div>
 
-  return await pdf.save()
+<div class="footer">
+  Generated by SIGNAL · VIP Intelligence Engine<br/>
+  This report is confidential and intended for VIP members only.
+</div>
+
+</body>
+</html>
+`
+}
+
+/**
+ * 2️⃣ 최종 PDF 생성
+ */
+export async function generateVipDailyReportPdf(
+  input: DailyReportInput
+): Promise<Buffer> {
+  const html = buildVipDailyReportHtml(input)
+  return renderPdfByCloudRun(html)
 }

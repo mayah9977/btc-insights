@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { redis } from '@/lib/redis/index'
 import VIPClientPage from './vipClientPage'
 import { getVIP3Metrics } from '@/lib/vip/redis/getVIP3Metrics'
+import { getSession } from '@/lib/auth/session'
 
 type PageProps = {
   params: Promise<{
@@ -12,11 +13,28 @@ type PageProps = {
 export default async function VIPPage({ params }: PageProps) {
   const { locale } = await params
 
+  /* =========================
+     🔐 Session (SSOT)
+  ========================= */
+  const session = await getSession()
+
+  if (!session) {
+    redirect(`/${locale}/login`)
+  }
+
+  const userId = session.userId
+
+  /* =========================
+     Onboarding 체크
+  ========================= */
   const isFirstVIPEntry = false
   if (isFirstVIPEntry) {
     redirect(`/${locale}/casino/vip/onboarding`)
   }
 
+  /* =========================
+     Daily Metrics
+  ========================= */
   let dailyMetrics = {
     avoidedExtremeCount: 0,
     avoidedLossUSD: 0,
@@ -43,10 +61,12 @@ export default async function VIPPage({ params }: PageProps) {
 
   const vip3Metrics = await getVIP3Metrics()
 
+  /* =========================
+     ✅ Client Page (userId 전달)
+  ========================= */
   return (
     <VIPClientPage
-      avoidedExtremeCount={dailyMetrics.avoidedExtremeCount}
-      avoidedLossUSD={dailyMetrics.avoidedLossUSD}
+      userId={userId}
       weeklySummary={weeklySummary}
       monthlySummary={monthlySummary}
       vip3Metrics={vip3Metrics}

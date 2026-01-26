@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAlert, listAlerts } from '@/lib/alerts/alertStore.server'
-import {
-  forceEvaluatePrice,
-  getLastPrice,
-} from '@/lib/market/pricePolling'
+import { forceEvaluatePrice } from '@/lib/market/pricePolling'
 import { fetchCurrentMarketPrice } from '@/lib/market/fetchCurrentMarketPrice'
 import type { AlertCondition } from '@/lib/alerts/alertTypes'
 
@@ -37,21 +34,14 @@ export async function POST(req: Request) {
       condition === 'PERCENT_UP' || condition === 'PERCENT_DOWN'
 
     /**
-     * 🔥 basePrice는 서버에서만 결정
-     * - null 절대 금지
-     * - number | undefined 만 허용
+     * 🔥 basePrice는 서버에서 fetch로만 결정
      */
     let basePrice: number | undefined = undefined
 
     if (isPercent) {
-      const cached = getLastPrice(body.symbol)
-      if (typeof cached === 'number') {
-        basePrice = cached
-      } else {
-        const fetched = await fetchCurrentMarketPrice(body.symbol)
-        if (typeof fetched === 'number') {
-          basePrice = fetched
-        }
+      const fetched = await fetchCurrentMarketPrice(body.symbol)
+      if (typeof fetched === 'number' && Number.isFinite(fetched)) {
+        basePrice = fetched
       }
     }
 
@@ -62,7 +52,7 @@ export async function POST(req: Request) {
       symbol: body.symbol,
       condition,
 
-      // 🔹 절대값 조건
+      // 절대값 조건
       targetPrice:
         condition === 'ABOVE' ||
         condition === 'BELOW' ||
@@ -70,17 +60,16 @@ export async function POST(req: Request) {
           ? body.targetPrice
           : undefined,
 
-      // 🔹 % 조건
+      // 퍼센트 조건
       basePrice,
       percent: isPercent ? body.percent : undefined,
 
       repeatMode: body.repeatMode ?? 'ONCE',
     })
 
-    // 2️⃣ 🔥 생성 직후 즉시 1회 평가
+    // 2️⃣ 생성 직후 즉시 1회 평가
     await forceEvaluatePrice({
       symbol: alert.symbol,
-      reason: 'ALERT_CREATED',
     })
 
     return NextResponse.json({ ok: true, alert })

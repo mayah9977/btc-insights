@@ -24,32 +24,59 @@ export default function VIPTopKPIBar({
         border-b border-neutral-800
       "
     >
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 px-4 py-3">
-        {/* BTC PRICE */}
+      {/* =========================
+          📱 Mobile Compact KPI
+      ========================= */}
+      <div className="md:hidden px-4 py-2 text-sm flex items-center justify-between text-neutral-300">
+        <span>
+          BTC{' '}
+          <strong className="text-white">
+            {btcPrice > 0 ? `$${btcPrice.toLocaleString()}` : '-'}
+          </strong>
+        </span>
+
+        <span className="text-green-400">
+          회피 {avoidedExtremeCount}회
+        </span>
+
+        <span className="text-yellow-400">
+          +${avoidedLossUSD.toLocaleString()}
+        </span>
+      </div>
+
+      {/* =========================
+          🖥 Desktop KPI Cards
+      ========================= */}
+      <div className="hidden md:grid max-w-7xl mx-auto grid-cols-3 gap-4 px-4 py-3">
+        {/* 현재 BTC 가격 */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
-          <p className="text-xs text-neutral-400">BTC PRICE</p>
+          <p className="text-xs text-neutral-400">
+            현재 BTC 가격
+          </p>
           <p className="text-2xl font-bold text-white">
-            ${btcPrice.toLocaleString()}
+            {btcPrice > 0
+              ? `$${btcPrice.toLocaleString()}`
+              : '-'}
           </p>
         </div>
 
-        {/* EXTREME AVOIDED */}
+        {/* 오늘 회피한 고위험 시나리오 */}
         <div className="bg-green-950/40 border border-green-800 rounded-xl p-4">
           <p className="text-xs text-green-400">
-            EXTREME AVOIDED (TODAY)
+            오늘 회피한 고위험 시나리오
           </p>
           <p className="text-2xl font-bold text-green-300">
-            +{avoidedExtremeCount}
+            {avoidedExtremeCount}회
           </p>
         </div>
 
-        {/* AVOIDED LOSS */}
+        {/* VIP가 피한 추정 손실 */}
         <div className="bg-yellow-950/40 border border-yellow-800 rounded-xl p-4">
           <p className="text-xs text-yellow-400">
-            AVOIDED LOSS (VIRTUAL P/L)
+            VIP가 피한 추정 손실
           </p>
           <p className="text-2xl font-bold text-yellow-300">
-            ${avoidedLossUSD.toLocaleString()}
+            +${avoidedLossUSD.toLocaleString()}
           </p>
         </div>
       </div>

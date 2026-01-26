@@ -40,26 +40,56 @@ export default function VIPRiskPanel({
   cooldownMinutes,
 }: Props) {
   const config = riskConfig[riskLevel]
+  const isExtreme = riskLevel === 'EXTREME'
 
   return (
-    <section className="rounded-2xl border border-vipBorder bg-vipCard p-6 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+    <section
+      className={`
+        rounded-2xl p-6 space-y-4
+        border shadow-[0_20px_60px_rgba(0,0,0,0.6)]
+        ${isExtreme
+          ? 'bg-red-950/40 border-red-700'
+          : 'bg-vipCard border-vipBorder'}
+      `}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs tracking-widest text-zinc-400 uppercase">
           Risk Control
         </span>
-        <span className={`text-sm font-semibold ${config.text}`}>
+
+        <span
+          className={`
+            text-sm font-semibold
+            ${config.text}
+          `}
+        >
           {config.label}
         </span>
       </div>
 
-      <div className="text-lg font-medium text-white">
+      <div
+        className={`
+          text-lg font-medium
+          ${isExtreme ? 'text-red-200' : 'text-white'}
+        `}
+      >
         {config.action}
       </div>
 
       {cooldownMinutes !== undefined && (
         <div className="text-sm text-zinc-400">
           다음 재평가까지{' '}
-          <b className="text-zinc-300">{cooldownMinutes}</b>분
+          <b className="text-zinc-300">
+            {cooldownMinutes}
+          </b>
+          분
+        </div>
+      )}
+
+      {/* 🔥 EXTREME 추가 경고 */}
+      {isExtreme && (
+        <div className="text-xs text-red-300">
+          ※ 현재 구간은 급격한 변동이 반복되는 위험 상태입니다
         </div>
       )}
     </section>

@@ -1,30 +1,19 @@
-// app/api/telegram/webhook/route.ts
 import { NextResponse } from 'next/server'
-import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'
+import { redis } from '@/lib/redis'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
-  let body: any
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ ok: true })
-  }
+  const body = await req.json().catch(() => null)
+  if (!body) return NextResponse.json({ ok: true })
 
   const message = body.message
   const callback = body.callback_query
-  const chatId =
-    message?.chat?.id ??
-    callback?.message?.chat?.id
 
-  if (!chatId) {
-    return NextResponse.json({ ok: true })
-  }
+  const chatId = message?.chat?.id ?? callback?.message?.chat?.id
+  if (!chatId) return NextResponse.json({ ok: true })
 
-  /**
-   * Step 1️⃣ /start + 버튼
-   */
+  // /start
   if (message?.text === '/start') {
     await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -33,15 +22,10 @@ export async function POST(req: Request) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          text: '🚀 알림 봇이 연결되었습니다.\n원하시는 작업을 선택하세요.',
+          text: '🚀 VIP 알림 봇이 연결되었습니다.',
           reply_markup: {
             inline_keyboard: [
-              [
-                {
-                  text: '📄 VIP 리포트 다시 받기',
-                  callback_data: 'vip_report_redownload',
-                },
-              ],
+              [{ text: '📄 VIP 리포트 받기', callback_data: 'vip_pdf_report' }],
             ],
           },
         }),
@@ -50,10 +34,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  /**
-   * Step 2️⃣ 버튼 콜백
-   */
-  if (callback?.data === 'vip_report_redownload') {
+  // 버튼 클릭 → 요청 접수만
+  if (callback?.data === 'vip_pdf_report') {
+    // 1) ACK
+    await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callback.id }),
+      }
+    )
+
+    // 2) ✅ 중복 방지 (SET NX EX)
+    const dedupeKey = `vip:telegram:callback:${callback.id}`
+    const setRes = await redis.set(dedupeKey, '1', 'EX', 60, 'NX')
+    // ioredis: NX 실패 시 null 반환
+    if (setRes !== 'OK') return NextResponse.json({ ok: true })
+
+    // 3) ✅ chatId 저장 (5분 TTL)
+    await redis.set('vip:pending:chat', String(chatId), 'EX', 60 * 5)
+
+    // 4) 안내
     await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
       {
@@ -61,36 +63,13 @@ export async function POST(req: Request) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          text: '⏳ 리포트를 준비 중입니다...',
+          text: '⏳ VIP 리포트 요청이 접수되었습니다.\n잠시만 기다려주세요.',
         }),
       }
     )
 
-    /**
-     * Step 3️⃣ + 4️⃣
-     * 👉 VIP 체크 제거
-     * 👉 더미 PDF 즉시 전송 (파이프라인 검증)
-     */
-    void (async () => {
-  try {
-    console.log('[VIP TEST] async start')
-
-    await fetch(
-      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: '✅ 비동기 작업 진입 성공 (PDF 생성 전)',
-        }),
-      }
-    )
-
-    // ⛔️ PDF 로직은 잠시 주석
-    // const report = await generateVIPDailyReport()
-    // ...
-  } catch (err) {
-    console.error('[VIP REPORT ERROR]', err)
+    return NextResponse.json({ ok: true })
   }
-})()}}
+
+  return NextResponse.json({ ok: true })
+}

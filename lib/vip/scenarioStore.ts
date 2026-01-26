@@ -1,3 +1,4 @@
+// lib/vip/scenarioStore.ts
 import { create } from 'zustand'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
@@ -10,21 +11,31 @@ export type HeatmapCell = {
 
 type ScenarioState = {
   heatmap: HeatmapCell[]
+
+  // 🔥 외부에서 동기화용 setter
+  setHeatmap: (next: HeatmapCell[]) => void
+  reset: () => void
 }
 
 /**
  * ⚠️ SSOT: VIP 시나리오 단일 소스
  * - 계산 ❌
  * - 해석 ❌
- * - UI에 필요한 형태 그대로 저장
+ * - UI ❌
+ * - 실시간 Risk Sync 결과만 저장
  */
-export const useVipScenarioStore = create<ScenarioState>(() => ({
-  heatmap: [
-    { hour: 9, risk: 'MEDIUM', scenarioBias: 'neutral' },
-    { hour: 10, risk: 'HIGH', scenarioBias: 'bear' },
-    { hour: 11, risk: 'HIGH', scenarioBias: 'bear' },
-    { hour: 12, risk: 'EXTREME', scenarioBias: 'bear' },
-    { hour: 13, risk: 'HIGH', scenarioBias: 'neutral' },
-    { hour: 14, risk: 'MEDIUM', scenarioBias: 'bull' },
-  ],
-}))
+export const useVipScenarioStore =
+  create<ScenarioState>((set) => ({
+    // ❗️초기값은 비어있어야 함
+    heatmap: [],
+
+    setHeatmap: (next) =>
+      set({
+        heatmap: next,
+      }),
+
+    reset: () =>
+      set({
+        heatmap: [],
+      }),
+  }))

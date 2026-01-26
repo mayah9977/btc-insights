@@ -2,9 +2,8 @@
 
 import { create } from 'zustand'
 import { toast } from 'react-hot-toast'
-
-let sse: EventSource | null = null
-let watchdogTimer: ReturnType<typeof setInterval> | null = null
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
+import { SSE_EVENT } from '@/lib/realtime/types'
 
 export type SystemRiskLevel = 'SAFE' | 'WARNING' | 'CRITICAL'
 
@@ -16,55 +15,34 @@ type AlertsSSEState = {
   shutdown: () => void
 }
 
-export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
-  connected: false,
-  systemRisk: 'SAFE',
-  lastEventAt: null,
+let unsubscribe: (() => void) | null = null
+let watchdogTimer: ReturnType<typeof setInterval> | null = null
 
-  /* =========================
-   * 🔥 SSE Bootstrap
-   * ========================= */
-  bootstrap: () => {
-    if (typeof window === 'undefined') return
+export const useAlertsSSEStore = create<AlertsSSEState>(
+  (set, get) => ({
+    connected: false,
+    systemRisk: 'SAFE',
+    lastEventAt: null,
 
-    // HMR / Fast Refresh 안전 처리
-    if (sse) {
-      try {
-        sse.close()
-      } catch {}
-      sse = null
-    }
+    /* =========================
+     * 🔥 Bootstrap (subscribe)
+     * ========================= */
+    bootstrap: () => {
+      if (typeof window === 'undefined') return
+      if (unsubscribe) return // already bootstrapped
 
-    console.log('[alerts-sse] bootstrap start')
+      console.log('[alerts-sse] bootstrap (manager)')
 
-    sse = new EventSource('/api/alerts/sse')
+      unsubscribe = sseManager.subscribe(
+        SSE_EVENT.ALERT_TRIGGERED ?? 'ALERT_TRIGGERED',
+        (data: any) => {
+          set({
+            connected: true,
+            systemRisk: 'SAFE',
+            lastEventAt: Date.now(),
+          })
 
-    sse.onopen = () => {
-      set({
-        connected: true,
-        systemRisk: 'SAFE',
-        lastEventAt: Date.now(),
-      })
-    }
-
-    sse.onerror = err => {
-      console.warn('[SSE][ALERTS] error (ignored)', err)
-    }
-
-    sse.onmessage = event => {
-      try {
-        const data = JSON.parse(event.data)
-
-        set({
-          connected: true,
-          systemRisk: 'SAFE',
-          lastEventAt: Date.now(),
-        })
-
-        if (data?.type === 'ALERT_TRIGGERED') {
-          /* =========================
-           * 🔔 Toast
-           * ========================= */
+          /* 🔔 Toast */
           toast.success(
             `🔔 ${data.symbol} 알림 발생\n가격: ${data.price}`,
             {
@@ -73,62 +51,61 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
             },
           )
 
-          /* =========================
-           * 🔥 Method 1 핵심
-           * - Alert 카드 Store로 전달
-           * ========================= */
+          /* 🔥 기존 UI 호환 이벤트 유지 */
           window.dispatchEvent(
-            new CustomEvent('alerts:sse', { detail: data }),
+            new CustomEvent('alerts:sse', {
+              detail: data,
+            }),
           )
+          window.dispatchEvent(
+            new CustomEvent('alert:triggered', {
+              detail: data,
+            }),
+          )
+        },
+      )
 
-          /* =========================
-           * 기존 UI/호환 이벤트 (유지)
-           * ========================= */
-          window.dispatchEvent(
-            new CustomEvent('alert:triggered', { detail: data }),
-          )
+      /* =========================
+       * 💓 Watchdog
+       * ========================= */
+      watchdogTimer = setInterval(() => {
+        const last = get().lastEventAt
+        if (!last) return
+
+        const gap = Date.now() - last
+        if (gap > 10_000) {
+          set({
+            connected: false,
+            systemRisk: 'CRITICAL',
+          })
+        } else if (gap > 5_000) {
+          set({
+            connected: true,
+            systemRisk: 'WARNING',
+          })
         }
-      } catch (e) {
-        console.error('[SSE] parse error', e)
-      }
-    }
+      }, 5_000)
+    },
 
     /* =========================
-     * 💓 Watchdog
+     * 🔌 Shutdown
      * ========================= */
-    watchdogTimer = setInterval(() => {
-      const last = get().lastEventAt
-      if (!last) return
-
-      const gap = Date.now() - last
-      if (gap > 10_000) {
-        set({ connected: false, systemRisk: 'CRITICAL' })
-      } else if (gap > 5_000) {
-        set({ connected: true, systemRisk: 'WARNING' })
+    shutdown: () => {
+      if (unsubscribe) {
+        unsubscribe()
+        unsubscribe = null
       }
-    }, 5_000)
-  },
 
-  /* =========================
-   * 🔌 Shutdown
-   * ========================= */
-  shutdown: () => {
-    if (sse) {
-      try {
-        sse.close()
-      } catch {}
-      sse = null
-    }
+      if (watchdogTimer) {
+        clearInterval(watchdogTimer)
+        watchdogTimer = null
+      }
 
-    if (watchdogTimer) {
-      clearInterval(watchdogTimer)
-      watchdogTimer = null
-    }
-
-    set({
-      connected: false,
-      systemRisk: 'SAFE',
-      lastEventAt: null,
-    })
-  },
-}))
+      set({
+        connected: false,
+        systemRisk: 'SAFE',
+        lastEventAt: null,
+      })
+    },
+  }),
+)

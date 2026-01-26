@@ -25,7 +25,7 @@ export default function VIPSummaryCards({
           </div>
 
           <div className="mt-2 text-xl font-semibold text-white">
-            +${s.avoidedLossUSD.toLocaleString()}
+            +${(s.avoidedLossUSD ?? 0).toLocaleString()}
           </div>
 
           <div className="mt-1 text-sm text-zinc-400">

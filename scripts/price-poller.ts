@@ -28,14 +28,15 @@ setInterval(async () => {
     await handlePriceTick({ symbol: SYMBOL, price })
 
     await redis.publish(
-      'realtime',
-      JSON.stringify({
-        type: 'PRICE_TICK',
-        symbol: SYMBOL,
-        price,
-        ts: Date.now(),
-      })
-    )
+  'realtime:market', // ✅ SSE Hub가 실제로 subscribe 중
+  JSON.stringify({
+    type: 'PRICE_TICK',
+    symbol: SYMBOL,
+    price,
+    ts: Date.now(),
+  })
+)
+
   } catch (e) {
     console.error('[POLLER ERROR]', e)
   }

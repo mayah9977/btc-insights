@@ -1,45 +1,42 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { useRealtimeStream } from './useRealtimeStream'
-import type { RealtimeEvent } from './eventTypes'
+import { useEffect, useState } from 'react'
+import { subscribeMarketPrice } from '@/lib/realtime/marketChannel'
 
 type RealtimePriceState = {
   price: number | null
-  prevPrice: number | null
-  lastUpdateTs: number | null
+  connected: boolean
+  lastUpdatedAt: number | null
 }
 
-const initialState: RealtimePriceState = {
+const INITIAL_STATE: RealtimePriceState = {
   price: null,
-  prevPrice: null,
-  lastUpdateTs: null,
+  connected: false,
+  lastUpdatedAt: null,
 }
 
 export function useRealtimePrice(symbol: string) {
-  const [state, setState] =
-    useState<RealtimePriceState>(initialState)
+  const [state, setState] = useState(INITIAL_STATE)
 
-  const onEvent = useCallback(
-    (e: RealtimeEvent) => {
-      if (
-        e?.type !== 'PRICE_TICK' ||
-        e.symbol !== symbol ||
-        typeof e.price !== 'number'
-      ) {
-        return
-      }
+  useEffect(() => {
+    if (!symbol) return
 
-      setState(prev => ({
-        price: e.price,
-        prevPrice: prev.price, // ✅ 핵심 수정
-        lastUpdateTs: e.ts,
-      }))
-    },
-    [symbol],
-  )
+    const unsubscribe = subscribeMarketPrice(
+      symbol,
+      (price) => {
+        setState({
+          price,
+          connected: true,
+          lastUpdatedAt: Date.now(),
+        })
+      },
+    )
 
-  useRealtimeStream(onEvent)
+    return () => {
+      unsubscribe()
+      setState(s => ({ ...s, connected: false }))
+    }
+  }, [symbol])
 
   return state
 }

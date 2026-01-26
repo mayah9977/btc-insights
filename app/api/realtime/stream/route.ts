@@ -1,6 +1,25 @@
 import { NextRequest } from 'next/server'
 import { addSSEClient } from '@/lib/realtime/sseHub'
 
+// =========================
+// 🔥 Server Boot (Singleton)
+// =========================
+const g = globalThis as typeof globalThis & {
+  __MARKET_BOOTSTRAPPED__?: boolean
+}
+
+if (!g.__MARKET_BOOTSTRAPPED__) {
+  g.__MARKET_BOOTSTRAPPED__ = true
+
+  // 🔥 Redis Consumer
+  import('@/lib/market/marketRealtimeConsumer')
+
+  // 🔥 Binance Price Stream (SSOT)
+  import('@/lib/market/binanceStream')
+
+  console.log('[SERVER] market streams bootstrapped')
+}
+
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -10,21 +29,18 @@ export async function GET(req: NextRequest) {
       const encoder = new TextEncoder()
 
       /**
-       * 1️⃣ 즉시 연결 신호
-       * - 브라우저 EventSource 안정화용
-       * - 실제 데이터 아님 (comment frame)
+       * 1️⃣ 즉시 연결 ACK
        */
       controller.enqueue(
         encoder.encode(`: connected\n\n`)
       )
 
       /**
-       * 2️⃣ SSE Hub에 클라이언트 등록
-       * - scope: ALERTS
-       * - alerts SSE 로그 / 카운트 전용
+       * 2️⃣ SSE Hub 등록
+       * REALTIME (PRICE / OI / VOLUME / WHALE)
        */
       const cleanup = addSSEClient(controller, {
-        scope: 'ALERTS',
+        scope: 'REALTIME',
       })
 
       /**
@@ -35,7 +51,7 @@ export async function GET(req: NextRequest) {
         try {
           controller.close()
         } catch {
-          // 이미 닫힌 경우 무시
+          // ignore
         }
       }
 
@@ -50,7 +66,6 @@ export async function GET(req: NextRequest) {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
-      // 프록시 / 엣지 버퍼링 방지
       'X-Accel-Buffering': 'no',
     },
   })

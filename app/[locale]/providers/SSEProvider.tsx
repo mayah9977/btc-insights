@@ -1,28 +1,46 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 type RealtimeMessage = any
 
-const SSEContext = createContext<RealtimeMessage | null>(null)
+const SSEContext =
+  createContext<RealtimeMessage | null>(null)
 
-export function SSEProvider({ children }: { children: React.ReactNode }) {
-  const [message, setMessage] = useState<RealtimeMessage | null>(null)
+/**
+ * SSEProvider
+ *
+ * 역할:
+ * - EventSource ❌
+ * - 단일 SSE Manager에 와일드카드(*) 구독
+ * - 가장 최근 이벤트 1건만 context로 제공
+ */
+export function SSEProvider({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const [message, setMessage] =
+    useState<RealtimeMessage | null>(null)
 
   useEffect(() => {
-    const es = new EventSource('/api/realtime/stream')
+    // ✅ 단일 SSE 매니저에 전체 이벤트 구독
+    const unsubscribe = sseManager.subscribe(
+      '*',
+      (event) => {
+        setMessage(event)
+      },
+    )
 
-    es.onmessage = (e) => {
-      try {
-        setMessage(JSON.parse(e.data))
-      } catch {}
+    return () => {
+      unsubscribe()
     }
-
-    es.onerror = () => {
-      es.close()
-    }
-
-    return () => es.close()
   }, [])
 
   return (
@@ -32,6 +50,12 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * useSSE
+ *
+ * - 전역 SSE 이벤트 1건 접근용
+ * - (디버그 / 레거시 화면 전용)
+ */
 export function useSSE() {
   return useContext(SSEContext)
 }

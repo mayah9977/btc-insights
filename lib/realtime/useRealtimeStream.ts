@@ -2,9 +2,10 @@
 
 import { useEffect } from 'react'
 import type { RealtimeEvent } from './eventTypes'
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 export function useRealtimeStream(
-  onEvent?: (e: RealtimeEvent) => void
+  onEvent?: (e: RealtimeEvent) => void,
 ) {
   useEffect(() => {
     // 🔒 alerts 페이지에서는 사용 금지
@@ -17,21 +18,16 @@ export function useRealtimeStream(
 
     if (!onEvent) return
 
-    const es = new EventSource('/api/realtime/stream')
-
-    es.onmessage = ev => {
-      try {
-        const data = JSON.parse(ev.data)
-        onEvent(data)
-      } catch {}
-    }
-
-    es.onerror = () => {
-      es.close()
-    }
+    // ✅ 단일 SSE 매니저에 "전체 이벤트" 구독
+    const unsubscribe = sseManager.subscribe(
+      '*',
+      (event: RealtimeEvent) => {
+        onEvent(event)
+      },
+    )
 
     return () => {
-      es.close()
+      unsubscribe()
     }
   }, [onEvent])
 }

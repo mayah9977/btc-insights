@@ -16,7 +16,7 @@ import { notifyVipUpgrade } from './vipNotifier'
 export async function upgradeUserVip(
   userId: string,
   vipLevel: VIPLevel,
-  days: number
+  days: number,
 ) {
   const prev = await getUserVIPState(userId)
   const before: VIPLevel = prev?.level ?? 'FREE'
@@ -33,9 +33,8 @@ export async function upgradeUserVip(
     at: Date.now(),
   })
 
-  // SSE
+  // ✅ SSE (string SSOT)
   pushVipUpdate(userId, {
-    type: 'vip',
     vipLevel,
   })
 
@@ -52,7 +51,7 @@ export async function expireUserVip(userId: string) {
   const prev = await getUserVIPState(userId)
   if (!prev || prev.level === 'FREE') return
 
-  const before = prev.level
+  const before: VIPLevel = prev.level
 
   // DB
   await forceExpireVIP(userId)
@@ -66,9 +65,8 @@ export async function expireUserVip(userId: string) {
     at: Date.now(),
   })
 
-  // SSE
+  // ✅ SSE (string SSOT)
   pushVipUpdate(userId, {
-    type: 'vip',
     vipLevel: 'FREE',
   })
 

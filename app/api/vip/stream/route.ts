@@ -6,17 +6,30 @@ import { addVipClient } from '@/lib/vip/vipSSEHub'
 import { verifySession } from '@/lib/auth/session'
 
 /* =========================
- * Types
+ * VIP SSE Payload
  * ========================= */
-type VipPayload =
-  | { type: 'vip'; vipLevel: number }
-  | { type: 'heartbeat' }
+export type VipSSEPayload =
+  | {
+      type: 'VIP_LEVEL'
+      vipLevel: number
+    }
+  | {
+      type: 'RISK_UPDATE'
+      riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+      judgement: string
+      isExtreme: boolean
+      ts: number
+    }
+  | {
+      type: 'HEARTBEAT'
+      ts: number
+    }
 
 const encoder = new TextEncoder()
 
 export async function GET(req: NextRequest) {
   /* =========================
-   * ✅ VIP 인증 (필수)
+   * ✅ Session / VIP Auth
    * ========================= */
   const user = await verifySession()
 
@@ -32,27 +45,29 @@ export async function GET(req: NextRequest) {
       let closed = false
 
       /* =========================
-       * ✅ 초기 comment ping (SSE 안정화)
+       * SSE 연결 안정화 (comment)
        * ========================= */
       controller.enqueue(
         encoder.encode(`: vip sse connected\n\n`)
       )
 
       /* =========================
-       * ✅ VIP client 등록
+       * VIP SSE Hub 등록
        * ========================= */
-      const remove = addVipClient(userId, controller)
+      const removeClient = addVipClient(userId, controller)
 
       /* =========================
-       * ✅ 초기 상태 payload
+       * 초기 VIP 상태
        * ========================= */
-      const init: VipPayload = {
-        type: 'vip',
+      const initPayload: VipSSEPayload = {
+        type: 'VIP_LEVEL',
         vipLevel: user.vipLevel,
       }
 
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify(init)}\n\n`)
+        encoder.encode(
+          `data: ${JSON.stringify(initPayload)}\n\n`
+        )
       )
 
       /* =========================
@@ -61,9 +76,14 @@ export async function GET(req: NextRequest) {
       const heartbeat = setInterval(() => {
         if (closed) return
         try {
+          const payload: VipSSEPayload = {
+            type: 'HEARTBEAT',
+            ts: Date.now(),
+          }
+
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`
+              `data: ${JSON.stringify(payload)}\n\n`
             )
           )
         } catch {
@@ -81,7 +101,7 @@ export async function GET(req: NextRequest) {
           closed = true
 
           clearInterval(heartbeat)
-          remove()
+          removeClient()
 
           try {
             controller.close()
