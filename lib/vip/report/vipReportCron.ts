@@ -12,29 +12,31 @@ export async function runVIPDailyReport(
   const report = await generateVIPDailyReport()
   if (!report) return
 
-  // 2️⃣ PDF 생성 (VIP Level 명시)
+  // 2️⃣ PDF 생성
   const pdf = await generateVipDailyReportPdf({
     date: report.generatedAt.slice(0, 10),
     market: 'BTC',
     vipLevel: 'VIP3',
     riskLevel: 'HIGH',
+
+    // ✅ summary 기반 judgement 구성
     judgement: report.summary,
-    scenarios: [
-      {
-        title: 'EXTREME 회피',
-        probability: 100,
-      },
-    ],
+
+    // ✅ cron에서는 시나리오 없음
+    scenarios: [],
+
+    // ✅ 서버/cron placeholder
+    chartBase64: 'data:image/png;base64,',
   })
 
-  // 3️⃣ 이메일 자동 발송 (Retention 보호)
+  // 3️⃣ 이메일 전송
   try {
     await sendVIPReportEmail(email, Buffer.from(pdf))
   } catch (err) {
     console.error('[VIP REPORT EMAIL FAILED]', err)
   }
 
-  // 4️⃣ Telegram PDF 전송 (연결된 경우만)
+  // 4️⃣ Telegram 전송 (연결된 경우만)
   try {
     const telegramUser = await getTelegramByUserId(userId)
     if (telegramUser?.chatId) {
