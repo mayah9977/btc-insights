@@ -1,8 +1,4 @@
-// app/api/vip/daily-report/route.ts
-
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
-
-export const runtime = 'nodejs'
 
 export async function GET() {
   const pdfBytes = await generateVipDailyReportPdf({
@@ -10,19 +6,20 @@ export async function GET() {
     market: 'BTCUSDT',
     vipLevel: 'VIP3',
     riskLevel: 'HIGH',
-    judgement: '과열 구간으로 신규 진입 비추천',
+    judgement: '시장 변동성 주의',
     scenarios: [
-      { title: '돌파 실패 → 급락', probability: 62 },
+      { title: '상승 지속', probability: 45 },
+      { title: '조정 후 반등', probability: 35 },
     ],
+
+    // ✅ 필수 추가 (server placeholder)
+    chartBase64: 'data:image/png;base64,',
   })
 
-  // Node.js 환경에서 PDF 바이너리 반환
-  const buffer = Buffer.from(pdfBytes)
-
-  return new Response(buffer, {
+  return new Response(new Uint8Array(pdfBytes), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': 'attachment; filename="vip-report.pdf"',
+      'Cache-Control': 'no-store',
     },
   })
 }
