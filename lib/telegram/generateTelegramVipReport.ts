@@ -1,24 +1,23 @@
-import { generateVipDailyReportPdf } from '../vip/report/vipDailyReportPdf.ts'
+import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 
-type TelegramVipReportInput = {
-  date: string
-  summary: string
-}
-
-export async function generateTelegramVipReportPdf(
-  input: TelegramVipReportInput
+export async function generateTelegramVipReport(
+  input: {
+    date: string
+    judgement: string
+    scenarios: { title: string; probability: number }[]
+  },
 ): Promise<Uint8Array> {
-  return generateVipDailyReportPdf({
+  const pdfBytes = await generateVipDailyReportPdf({
     date: input.date,
     market: 'BTC',
     vipLevel: 'VIP3',
     riskLevel: 'HIGH',
-    judgement: input.summary,
-    scenarios: [
-      {
-        title: 'EXTREME 회피',
-        probability: 100,
-      },
-    ],
+    judgement: input.judgement,
+    scenarios: input.scenarios,
+
+    // ✅ 필수 추가 (서버용 placeholder)
+    chartBase64: 'data:image/png;base64,',
   })
+
+  return new Uint8Array(pdfBytes)
 }
