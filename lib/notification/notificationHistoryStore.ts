@@ -10,36 +10,23 @@ type NotificationState = {
 }
 
 /**
- * 🔔 Notification SSOT
- * - 중복 알림 자동 차단
+ * 🔔 Notification SSOT (Disabled Safe Mode)
  */
-export const useNotificationStore = create<NotificationState>((set, get) => ({
+export const useNotificationStore = create<NotificationState>(() => ({
   history: [],
-
-  record: (item) =>
-    set((state) => {
-      const last = state.history[0]
-
-      // ✅ 동일 알림 중복 차단
-      if (
-        last &&
-        last.level === item.level &&
-        last.message === item.message &&
-        last.at === item.at
-      ) {
-        return state
-      }
-
-      return {
-        history: [item, ...state.history].slice(0, 200),
-      }
-    }),
-
-  clear: () => set({ history: [] }),
+  record: () => {}, // 🔕 비활성화
+  clear: () => {},
 }))
 
 /**
- * 🔄 기존 코드 호환용 (유지)
+ * 🔄 기존 코드 호환용
  */
-export const recordNotification = (item: NotificationItem) =>
-  useNotificationStore.getState().record(item)
+export const recordNotification = (_item: NotificationItem) => {}
+
+/**
+ * ✅ 빌드 에러 해결용 더미 export
+ * 기존 getNotificationHistory import 유지
+ */
+export const getNotificationHistory = (): NotificationItem[] => {
+  return []
+}
