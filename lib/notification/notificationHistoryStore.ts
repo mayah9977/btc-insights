@@ -46,7 +46,7 @@ export const recordNotification = (item: NotificationItem) =>
 export const getNotificationHistory = () =>
   useNotificationStore.getState().history
 
-/** 🔥 타입 완전 안전 Stats 계산 */
+/** 🔥 UI 구조와 100% 일치하는 Stats (최종 안정 버전) */
 export const getNotificationStats = () => {
   const history = useNotificationStore.getState().history
 
@@ -54,19 +54,19 @@ export const getNotificationStats = () => {
     (acc, item) => {
       acc.total++
 
-      const levelKey = String(item.level).toLowerCase()
+      const levelKey = String(item.level).toUpperCase()
 
-      if (levelKey in acc) {
-        ;(acc as any)[levelKey]++
-      }
+      if (levelKey === 'INFO') acc.INFO++
+      if (levelKey === 'WARNING') acc.WARNING++
+      if (levelKey === 'CRITICAL') acc.CRITICAL++
 
       return acc
     },
     {
       total: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
+      INFO: 0,
+      WARNING: 0,
+      CRITICAL: 0,
     }
   )
 
