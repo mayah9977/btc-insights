@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { VIPLevel } from './vipTypes'
 import type { RiskLevel } from './riskTypes'
+
 import {
   subscribeVipLevel,
   subscribeVipRisk,
   subscribeVipKpi,
 } from '@/lib/realtime/vipChannel'
-import { handleRiskUpdate } from '@/lib/realtime/vipEffects'
 
 export type VipRealtimeState = {
   vipLevel: VIPLevel
@@ -36,6 +36,9 @@ export function useVipRealtime(
   useEffect(() => {
     if (!userId) return
 
+    /* =========================
+     * VIP LEVEL
+     * ========================= */
     const unsubVip = subscribeVipLevel(vipLevel => {
       if (vipLevel !== lastVipRef.current) {
         lastVipRef.current = vipLevel
@@ -43,8 +46,13 @@ export function useVipRealtime(
       }
     })
 
+    /* =========================
+     * 🔥 VIP RISK (UI 동기화만)
+     * ========================= */
     const unsubRisk = subscribeVipRisk(data => {
-      handleRiskUpdate(data)
+      // ❗ Store 반영은 sseConnectionManager에서 이미 처리됨
+      // ❗ 여기서는 UI용 state만 갱신
+
       setState(s => ({
         ...s,
         riskLevel: data.riskLevel,
@@ -53,6 +61,9 @@ export function useVipRealtime(
       }))
     })
 
+    /* =========================
+     * KPI
+     * ========================= */
     const unsubKpi = onKpiUpdate
       ? subscribeVipKpi(onKpiUpdate)
       : () => {}

@@ -1,3 +1,102 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ======================================================
+   Action Gate Background Animations (UI-only)
+   ====================================================== */
+.ag-bg-observe {
+  background: linear-gradient(
+    90deg,
+    rgba(16,185,129,0.06),
+    rgba(20,184,166,0.04),
+    rgba(16,185,129,0.06)
+  );
+  background-size: 200% 100%;
+  animation: ag-drift-slow 30s linear infinite;
+}
+
+.ag-bg-caution {
+  background: linear-gradient(
+    90deg,
+    rgba(245,158,11,0.08),
+    rgba(251,191,36,0.06),
+    rgba(245,158,11,0.08)
+  );
+  background-size: 180% 100%;
+  animation: ag-drift-medium 18s linear infinite;
+}
+
+.ag-bg-ignore {
+  background: linear-gradient(
+    180deg,
+    rgba(100,116,139,0.14),
+    rgba(71,85,105,0.14)
+  );
+  animation: none;
+  opacity: 0.9;
+}
+
+.ag-bg-default {
+  background: transparent;
+}
+
+/* ======================================================
+   Action Gate Visual Density (State-based Layout)
+   ====================================================== */
+.ag-density-open {
+  min-height: 96px;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.ag-density-medium {
+  min-height: 80px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.ag-density-compact {
+  min-height: 64px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* ======================================================
+   Raw Observation Bar – UI-only Enhancements
+   ====================================================== */
+
+/* 🔹 Subtle number transition (value updated) */
+.ag-num-animate {
+  opacity: 0;
+  transform: translateY(2px);
+  animation: ag-num-fade 0.35s ease-out forwards;
+}
+
+/* ======================================================
+   Keyframes
+   ====================================================== */
+@keyframes ag-drift-slow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes ag-drift-medium {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 180% 50%;
+  }
+}
+
+@keyframes ag-num-fade {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

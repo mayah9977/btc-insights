@@ -1,49 +1,106 @@
-import { notifyVipUpgrade } from '@/lib/vip/vipNotifier'
-import { useVipRiskHistoryStore } from '@/lib/vip/riskHistoryStore'
-import { useVipJudgementStore } from '@/lib/vip/judgementStore'
-import { generateRiskSentence } from '@/lib/vip/riskSentence'
+// lib/realtime/vipEffects.ts
 
+import { useVipJudgementStore } from '@/lib/vip/judgementStore'
+import { useNotificationStore } from '@/lib/notification/notificationHistoryStore'
+import type { RiskLevel } from '@/lib/vip/riskTypes'
+
+// 🔥 Live Risk SSOT
+import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
+
+// 🐋 Whale Effects
+import {
+  handleWhaleIntensityEffect,
+  handleWhaleWarningEffect,
+} from '@/lib/realtime/whaleEffects'
+
+let lastRiskLevel: RiskLevel | null = null
+
+/* =========================
+ * 🔥 Risk Update (SSOT)
+ * ========================= */
 export function handleRiskUpdate(data: {
-  riskLevel: any
+  riskLevel: RiskLevel
+  ts: number
+  judgement: string
+  confidence: number
+  whaleAccelerated?: boolean
+}) {
+  const {
+    riskLevel,
+    ts,
+    judgement,
+    confidence,
+    whaleAccelerated,
+  } = data
+
+  /* 1️⃣ Live Risk State */
+  useLiveRiskState.getState().update({
+    level: riskLevel,
+    ts,
+    whaleAccelerated,
+  })
+
+  const judgementStore = useVipJudgementStore.getState()
+  const notificationStore = useNotificationStore.getState()
+
+  /* 2️⃣ Judgement SSOT 저장 */
+  judgementStore.setJudgement({
+    sentence: judgement,
+    rawConfidence: confidence,
+  })
+
+  /* 3️⃣ Risk 변경 시에만 Side Effect */
+  if (riskLevel !== lastRiskLevel) {
+    const timeLabel = new Date(ts).toLocaleTimeString('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    /* Timeline */
+    judgementStore.append({
+      time: timeLabel,
+      state: `Risk ${riskLevel}`,
+      note: judgement,
+    })
+
+    /* Notification */
+    notificationStore.record({
+      level:
+        riskLevel === 'EXTREME'
+          ? 'CRITICAL'
+          : riskLevel === 'HIGH'
+          ? 'WARNING'
+          : 'INFO',
+      message: judgement,
+      at: ts,
+    })
+
+    lastRiskLevel = riskLevel
+  }
+}
+
+/* =========================
+ * 🐋 Whale Effects
+ * ========================= */
+
+export function handleWhaleIntensity(data: {
+  symbol: string
+  intensity: number
+  avg: number
+  trend: 'UP' | 'DOWN' | 'FLAT'
+  isSpike: boolean
+  riskLevel: RiskLevel
   ts: number
 }) {
-  const sentence = generateRiskSentence(data.riskLevel)
-  const time = new Date(data.ts).toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  handleWhaleIntensityEffect(data)
+}
 
-  const riskStore = useVipRiskHistoryStore.getState()
-  const judgementStore = useVipJudgementStore.getState()
-
-  riskStore.append({
-    level: data.riskLevel,
-    reason: sentence,
-    time,
-  })
-
-  judgementStore.setJudgement({
-    sentence,
-    confidence:
-      data.riskLevel === 'LOW'
-        ? 0.9
-        : data.riskLevel === 'MEDIUM'
-        ? 0.8
-        : data.riskLevel === 'HIGH'
-        ? 0.75
-        : 0.7,
-  })
-
-  judgementStore.append({
-    time,
-    state:
-      data.riskLevel === 'EXTREME'
-        ? '리스크 급등'
-        : data.riskLevel === 'HIGH'
-        ? '리스크 상승'
-        : data.riskLevel === 'MEDIUM'
-        ? '변동성 증가'
-        : '시장 안정',
-    note: sentence,
-  })
+export function handleWhaleWarning(data: {
+  symbol: string
+  whaleIntensity: number
+  avgWhale: number
+  tradeUSD?: number
+  ts: number
+}) {
+  handleWhaleWarningEffect(data)
 }

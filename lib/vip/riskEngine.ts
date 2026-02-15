@@ -9,9 +9,17 @@ type RiskInput = {
 }
 
 /**
- * VIP Risk 자동 판단 엔진
- * - whaleIntensity는 가속기 역할만
- * - 단독 EXTREME 금지
+ * VIP Risk Level 계산 엔진 (SSOT)
+ *
+ * 역할:
+ * - 수치 기반 RiskLevel 산출 전용
+ * - LOW / MEDIUM / HIGH / EXTREME 만 결정
+ *
+ * ❌ 전략 문장 생성
+ * ❌ UI 해석
+ * ❌ 사용자 메시지 생성
+ *
+ * 👉 전략 문장은 vipJudgementEngine.ts 에서만 생성
  */
 export function calculateRiskLevel(input: RiskInput): RiskLevel {
   const {
@@ -24,6 +32,7 @@ export function calculateRiskLevel(input: RiskInput): RiskLevel {
 
   /* =========================
      1️⃣ Hard Stop (결합 조건만 허용)
+     - 단독 EXTREME 금지
   ========================= */
   if (extremeSignal && volatility > 0.6 && whaleIntensity > 0.7) {
     return 'EXTREME'
@@ -39,7 +48,7 @@ export function calculateRiskLevel(input: RiskInput): RiskLevel {
 
   /* =========================
      2️⃣ Composite Risk Index
-     (whaleIntensity 가중치 제한)
+     - whaleIntensity 가중치 제한
   ========================= */
   const riskIndex =
     volatility * 0.5 +
@@ -58,7 +67,7 @@ export function calculateRiskLevel(input: RiskInput): RiskLevel {
   /* =========================
      4️⃣ Whale Acceleration (단계 보정)
      - 단독 승격 금지
-     - 최대 1단계만
+     - 최대 1단계만 허용
   ========================= */
   if (whaleIntensity > 0.85 && volatility > 0.35) {
     if (baseRisk === 'MEDIUM') return 'HIGH'

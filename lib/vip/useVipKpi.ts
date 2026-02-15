@@ -61,9 +61,7 @@ export function useVipKpi(): VipKpiState {
     fetch('/api/vip/kpi')
       .then(r => r.json())
       .then(data => {
-        // ✅ 임시 확인 로그
-        console.log('[VIP KPI][hook]', data)
-
+        
         setState({
           avoidedExtremeCount:
             data?.kpi?.avoidedExtremeCount ?? 0,

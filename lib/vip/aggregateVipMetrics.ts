@@ -13,7 +13,12 @@ export function aggregateVipMetrics(
     e => now - e.timestamp <= range
   )
 
-  const loss = calcAvoidedLossUSD(filtered)
+  // ---------------------------------------------
+  // ❌ Avoided Loss는 구조적으로 유효하지 않음
+  // ⭕ calcAvoidedLossUSD 호출은 유지하되 결과는 사용하지 않음
+  // ---------------------------------------------
+  const _loss = calcAvoidedLossUSD(filtered)
+  const loss = 0
 
   return {
     avoidedLossUSD: Math.round(loss ?? 0),

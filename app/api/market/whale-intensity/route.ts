@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server'
-import { getWhaleIntensityHistory } from '@/lib/market/pricePolling'
 
-// 🔥 반드시 추가 (hydrate 보장)
+// ✅ SSOT: whale 히스토리는 Redis Store
+import {
+  loadWhaleIntensityHistory,
+} from '@/lib/market/whaleRedisStore'
+
+// 🔥 반드시 추가 (realtime consumer boot)
 import '@/lib/market/marketRealtimeConsumer'
 
 export const runtime = 'nodejs'
@@ -13,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   const symbol = rawSymbol.toUpperCase()
 
-  const history = getWhaleIntensityHistory(symbol)
+  const history = await loadWhaleIntensityHistory(symbol)
 
   return Response.json({
     symbol,

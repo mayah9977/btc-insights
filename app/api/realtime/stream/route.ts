@@ -1,6 +1,16 @@
 import { NextRequest } from 'next/server'
 import { addSSEClient } from '@/lib/realtime/sseHub'
 
+// 🔥 VIP Risk SSOT
+import { getLastVipRisk } from '@/lib/vip/vipLastRiskStore'
+
+// 🔥 Market SSOT
+import {
+  getLastOI,
+  getLastVolume,
+  getLastFundingRate,
+} from '@/lib/market/marketLastStateStore'
+
 // =========================
 // 🔥 Server Boot (Singleton)
 // =========================
@@ -11,10 +21,7 @@ const g = globalThis as typeof globalThis & {
 if (!g.__MARKET_BOOTSTRAPPED__) {
   g.__MARKET_BOOTSTRAPPED__ = true
 
-  // 🔥 Redis Consumer
   import('@/lib/market/marketRealtimeConsumer')
-
-  // 🔥 Binance Price Stream (SSOT)
   import('@/lib/market/binanceStream')
 
   console.log('[SERVER] market streams bootstrapped')
@@ -28,24 +35,82 @@ export async function GET(req: NextRequest) {
     start(controller) {
       const encoder = new TextEncoder()
 
-      /**
-       * 1️⃣ 즉시 연결 ACK
-       */
+      // 🔥 공통 send wrapper (핵심 추가)
+      function send(event: any) {
+        console.log('[SSE_STREAM_SEND]', {
+          type: event?.type,
+          symbol: event?.symbol,
+        })
+
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+        )
+      }
+
+      /* =========================
+       * 1️⃣ 연결 ACK
+       * ========================= */
       controller.enqueue(
         encoder.encode(`: connected\n\n`)
       )
 
-      /**
-       * 2️⃣ SSE Hub 등록
-       * REALTIME (PRICE / OI / VOLUME / WHALE)
-       */
+      /* =========================
+       * 2️⃣ SSE Hub 등록 (REALTIME)
+       * ========================= */
       const cleanup = addSSEClient(controller, {
         scope: 'REALTIME',
       })
 
-      /**
-       * 3️⃣ 연결 종료 처리
-       */
+      /* =========================
+       * 3️⃣ VIP Risk Replay (SSOT)
+       * ========================= */
+      const lastRisk = getLastVipRisk()
+      if (lastRisk) {
+        send({
+          type: 'RISK_UPDATE',
+          ...lastRisk,
+        })
+      }
+
+      /* =========================
+       * 4️⃣ Market OI Replay
+       * ========================= */
+      const oi = getLastOI('BTCUSDT')
+      if (oi !== undefined) {
+        send({
+          type: 'OI_TICK',
+          symbol: 'BTCUSDT',
+          openInterest: oi,
+        })
+      }
+
+      /* =========================
+       * 5️⃣ Market Volume Replay
+       * ========================= */
+      const volume = getLastVolume('BTCUSDT')
+      if (volume !== undefined) {
+        send({
+          type: 'VOLUME_TICK',
+          symbol: 'BTCUSDT',
+          volume,
+        })
+      }
+
+      /* =========================
+       * 6️⃣ Market Funding Rate Replay
+       * ========================= */
+      const fundingRate = getLastFundingRate('BTCUSDT')
+      if (fundingRate != null) {
+        send({
+          type: 'FUNDING_RATE_TICK',
+          symbol: 'BTCUSDT',
+          fundingRate,
+        })
+      }
+
+      /* =========================
+       * 7️⃣ 연결 종료 처리
+       * ========================= */
       const onAbort = () => {
         cleanup()
         try {

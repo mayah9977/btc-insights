@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/aggregate-vip-kpi",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/generate-context",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

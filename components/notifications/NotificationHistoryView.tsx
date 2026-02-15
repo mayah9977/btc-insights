@@ -1,32 +1,20 @@
-'use client';
+'use client'
 
-import {
-  getNotificationHistory,
-  getNotificationStats,
-} from '@/lib/notification/notificationHistoryStore';
+/**
+ * NotificationHistoryView
+ *
+ * ⛔ Currently Disabled
+ * - Notification history UI intentionally hidden
+ * - Range filter removed
+ * - Stats removed
+ * - Event cards removed
+ * - Store subscription disabled
+ *
+ * Reason:
+ * Current app architecture focuses on Live State,
+ * not past event log visualization.
+ */
 
 export function NotificationHistoryView() {
-  const list = getNotificationHistory();
-  const stats = getNotificationStats();
-
-  return (
-    <section className="p-4">
-      <h2 className="font-bold mb-2">Notification History</h2>
-
-      <div className="text-sm mb-3">
-        전체 {stats.total} /
-        INFO {stats.INFO} /
-        WARNING {stats.WARNING} /
-        CRITICAL {stats.CRITICAL}
-      </div>
-
-      <ul className="space-y-1 text-sm">
-        {list.map((n, i) => (
-          <li key={i} className="border-b pb-1">
-            [{n.level}] {n.message}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+  return null
 }

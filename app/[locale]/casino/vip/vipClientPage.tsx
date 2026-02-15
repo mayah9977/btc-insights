@@ -1,44 +1,33 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
-import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
-import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
 import { useWhaleWarning } from '@/lib/realtime/useWhaleWarning'
-
-import { useVipRealtime } from '@/lib/vip/useVipRealtime'
+import { useVipExtremeNotifier } from '@/lib/vip/useVipExtremeNotifier'
 import { useStableRiskLevel } from '@/lib/vip/useStableRiskLevel'
 import { useVipKpi } from '@/lib/vip/useVipKpi'
 import { useLatestRiskEvent } from '@/lib/vip/useLatestRiskEvent'
 import { useVipJudgementStore } from '@/lib/vip/judgementStore'
-import { generateRiskSentence } from '@/lib/vip/riskSentence'
+import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
+import { useVipRiskHistoryStore } from '@/lib/vip/riskHistoryStore'
+import { useVipHistoryStore } from '@/lib/vip/historyStore'
+import { startLiveRiskTicker } from '@/lib/realtime/liveRiskTicker'
 
-import { useInitialRiskHistory } from '@/lib/vip/useInitialRiskHistory'
-import { useRiskHeatmapSync } from '@/lib/vip/useRiskHeatmapSync'
-
-/* ================= KPI ================= */
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPLiveStatusStrip from '@/components/vip/VIPLiveStatusStrip'
 import VIPNoEntryReasonBanner from '@/components/vip/VIPNoEntryReasonBanner'
 import VIPWhaleWarningBanner from '@/components/vip/VIPWhaleWarningBanner'
-
-/* ================= Summary ================= */
 import VIPCompareTable from '@/components/vip/VIPCompareTable'
 import VIP30DayEvasionBadge from '@/components/vip/VIP30DayEvasionBadge'
 import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
-
-/* ================= Charts ================= */
 import BtcLiveChart from '@/components/charts/BtcLiveChart'
 import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
-
-/* ================= Sections ================= */
 import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
 import { VIPOverviewDashboard } from '@/components/vip/VIPOverviewDashboard'
 import { VIPJudgement } from '@/components/vip/VIPJudgement'
 import VIPJudgementTimeline from '@/components/vip/VIPJudgementTimeline'
 import VIPRiskPanel from '@/components/vip/VIPRiskPanel'
-import VIPRiskHistoryTimeline from '@/components/vip/VIPRiskHistoryTimeline'
 import VIPRiskScenarioHeatmap from '@/components/vip/VIPRiskScenarioHeatmap'
 import VIPNoEntryReason from '@/components/vip/VIPNoEntryReason'
 import VIPLossAvoidanceLog from '@/components/vip/VIPLossAvoidanceLog'
@@ -46,6 +35,11 @@ import { NotificationHistoryView } from '@/components/notifications/Notification
 import VIPTodayJudgementCard from '@/components/vip/VIPTodayJudgementCard'
 import VIPRiskAvoidanceCard from '@/components/vip/VIPRiskAvoidanceCard'
 import VIPDailySnapshot from '@/components/vip/VIPDailySnapshot'
+import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
+import { RawObservationBar } from '@/components/market/observation/RawObservationBar'
+
+import VIPSentimentPanel from '@/components/vip/VIPSentimentPanel'
+import VIPFortunePanel from '@/components/vip/VIPFortunePanel'
 
 type Props = {
   userId: string
@@ -60,38 +54,41 @@ export default function VIPClientPage({
   monthlySummary,
   vip3Metrics,
 }: Props) {
-  useInitialRiskHistory()
 
-  const realtime = useVipRealtime(userId)
+  useEffect(() => {
+    startLiveRiskTicker()
+  }, [])
 
-  const riskLevel = useStableRiskLevel(realtime.riskLevel, {
+  const liveRisk = useLiveRiskState(s => s.state)
+  const rawRiskLevel = liveRisk?.level ?? 'LOW'
+
+  const riskLevel = useStableRiskLevel(rawRiskLevel, {
     settleDelayMs: 3000,
-    onStableChange: level => {
-      useVipJudgementStore.getState().setJudgement({
-        sentence: generateRiskSentence(level),
-        confidence:
-          level === 'LOW' ? 0.9 :
-          level === 'MEDIUM' ? 0.8 :
-          level === 'HIGH' ? 0.75 : 0.7,
-      })
-    },
   })
 
-  useRiskHeatmapSync(riskLevel)
+  // ✅ 인자 제거 (에러 해결)
+  useVipExtremeNotifier(userId, rawRiskLevel)
 
   const { timeline } = useVipJudgementStore()
-
-  /* ===== Realtime Data ===== */
-  const oiState = useRealtimeOI('BTCUSDT')
-  const volumeState = useRealtimeVolume('BTCUSDT')
   const whaleWarning = useWhaleWarning('BTCUSDT')
-
-  const priceState = useRealtimePrice('BTCUSDT')
-  const [chartPrice, setChartPrice] = useState<number | null>(null)
-  const btcPrice = chartPrice ?? priceState.price ?? 0
+  const { price } = useRealtimePrice('BTCUSDT')
+  const btcPrice = price ?? 0
 
   const { avoidedExtremeCount = 0, avoidedLossUSD = 0 } = useVipKpi()
+  const { todayAvoidedLossPercent = 0 } = useVipHistoryStore()
+  const { history } = useVipRiskHistoryStore()
   const latestRiskEvent = useLatestRiskEvent()
+
+  const hasExtremeInRiskHistory = useMemo(
+    () => history.some(h => h.level === 'EXTREME'),
+    [history],
+  )
+
+  const shouldRenderAvoidanceSummary =
+    weeklySummary.avoidedExtremeCount > 0 ||
+    monthlySummary.avoidedExtremeCount > 0 ||
+    todayAvoidedLossPercent > 0 ||
+    hasExtremeInRiskHistory
 
   return (
     <>
@@ -101,100 +98,104 @@ export default function VIPClientPage({
         avoidedLossUSD={avoidedLossUSD}
       />
 
-      <VIPLiveStatusStrip
-        riskLevel={riskLevel}
-        lastTriggeredAt={realtime.lastTriggeredAt}
-        whaleWarning={whaleWarning}
-        volume={volumeState.volume}
-      />
+      <VIPActionGateContextBar symbol="BTCUSDT" />
+      <RawObservationBar symbol="BTCUSDT" />
+      <VIPLiveStatusStrip />
 
       {whaleWarning && riskLevel !== 'EXTREME' && (
         <VIPWhaleWarningBanner symbol="BTCUSDT" />
       )}
 
       <VIPNoEntryReasonBanner
-        riskLevel={riskLevel}
+        riskLevel={riskLevel as any}
         reason={latestRiskEvent?.reason}
       />
 
-      {/* ================= Mobile ================= */}
+      {/* ================= MOBILE ================= */}
       <VIPMobileLayout>
-        <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
 
-        <div className="mt-3 space-y-1 text-xs text-zinc-400">
-          <div>
-            Open Interest:{' '}
-            <span className="text-white font-medium">
-              {oiState.openInterest?.toLocaleString() ?? '--'}
-            </span>
-          </div>
-          <div>
-            Volume:{' '}
-            <span className="text-white font-medium">
-              {volumeState.volume !== null
-                ? volumeState.volume.toFixed(2)
-                : '--'}
-            </span>
-          </div>
-        </div>
+        {shouldRenderAvoidanceSummary && (
+          <VIPSummaryCards
+            weekly={weeklySummary}
+            monthly={monthlySummary}
+          />
+        )}
 
-        <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel} />
-        <BtcLiveChart riskLevel={riskLevel} onPriceUpdate={setChartPrice} />
+        <VIPWhaleIntensityChart
+          symbol="BTCUSDT"
+          riskLevel={riskLevel as any}
+        />
+
+        <VIPSentimentPanel symbol="BTCUSDT" />
+        <VIPFortunePanel />
+
+        <BtcLiveChart riskLevel={riskLevel as any} />
 
         <VIPTodayJudgementCard />
-        <VIPJudgementTimeline riskLevel={riskLevel} timeline={timeline} />
+
+        <VIPJudgementTimeline
+        />
+
         <VIP3AdvancedMetrics {...vip3Metrics} />
-        <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+
+        <VIP30DayEvasionBadge
+          avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+        />
+
         <VIPCompareTable />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />
         <VIPOverviewDashboard />
         <VIPJudgement />
-        <VIPRiskPanel riskLevel={riskLevel} />
-        <VIPRiskHistoryTimeline />
+        <VIPRiskPanel />
         <VIPRiskScenarioHeatmap />
-        <VIPNoEntryReason riskLevel={riskLevel} />
+
+        <VIPNoEntryReason riskLevel={riskLevel as any} />
         <VIPLossAvoidanceLog />
+
       </VIPMobileLayout>
 
-      {/* ================= Desktop ================= */}
+      {/* ================= DESKTOP ================= */}
       <main className="hidden md:block space-y-10">
-        <VIPSummaryCards weekly={weeklySummary} monthly={monthlySummary} />
 
-        <div className="space-y-1 text-xs text-zinc-400">
-          <div>
-            Open Interest:{' '}
-            <span className="text-white font-medium">
-              {oiState.openInterest?.toLocaleString() ?? '--'}
-            </span>
-          </div>
-          <div>
-            Volume:{' '}
-            <span className="text-white font-medium">
-              {volumeState.volume !== null
-                ? volumeState.volume.toFixed(2)
-                : '--'}
-            </span>
-          </div>
-        </div>
+        {shouldRenderAvoidanceSummary && (
+          <VIPSummaryCards
+            weekly={weeklySummary}
+            monthly={monthlySummary}
+  
+          />
+        )}
 
-        <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel} />
-        <BtcLiveChart riskLevel={riskLevel} onPriceUpdate={setChartPrice} />
+        <VIPWhaleIntensityChart
+          symbol="BTCUSDT"
+          riskLevel={riskLevel as any}
+        />
 
-        <VIPJudgementTimeline riskLevel={riskLevel} timeline={timeline} />
+        <VIPSentimentPanel symbol="BTCUSDT" />
+        <VIPFortunePanel />
+
+        <BtcLiveChart riskLevel={riskLevel as any} />
+
+        <VIPJudgementTimeline
+        />
+
         <VIP3AdvancedMetrics {...vip3Metrics} />
-        <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+
+        <VIP30DayEvasionBadge
+          avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+        />
+
         <VIPCompareTable />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />
         <VIPOverviewDashboard />
         <VIPJudgement />
-        <VIPRiskPanel riskLevel={riskLevel} />
-        <VIPRiskHistoryTimeline />
+        <VIPRiskPanel />
         <VIPRiskScenarioHeatmap />
-        <VIPNoEntryReason riskLevel={riskLevel} />
+        <VIPNoEntryReason riskLevel={riskLevel as any} />
         <VIPLossAvoidanceLog />
         <NotificationHistoryView />
+
       </main>
     </>
   )

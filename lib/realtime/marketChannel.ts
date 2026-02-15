@@ -1,4 +1,3 @@
-// lib/realtime/marketChannel.ts
 import { sseManager } from './sseConnectionManager'
 import { SSE_EVENT } from './types'
 
@@ -70,22 +69,37 @@ export function subscribeMarketVolume(
 
 /**
  * =========================
- * Market: Whale Intensity (tick)
+ * Market: Whale Intensity (🔥 확장형)
  * =========================
  */
 export function subscribeWhaleIntensity(
   symbol: string,
-  cb: (value: number, ts?: number) => void,
+  cb: (
+    intensity: number,
+    avg: number,
+    trend: 'UP' | 'DOWN' | 'FLAT',
+    isSpike: boolean,
+    ts?: number,
+  ) => void,
 ) {
   return sseManager.subscribe(
     SSE_EVENT.WHALE_INTENSITY,
     (data: {
       symbol: string
       intensity: number
+      avg: number
+      trend: 'UP' | 'DOWN' | 'FLAT'
+      isSpike: boolean
       ts?: number
     }) => {
       if (data.symbol === symbol) {
-        cb(data.intensity, data.ts)
+        cb(
+          data.intensity,
+          data.avg,
+          data.trend,
+          data.isSpike,
+          data.ts,
+        )
       }
     },
   )
@@ -114,6 +128,29 @@ export function subscribeWhaleWarning(
           data.avgWhale,
           data.ts,
         )
+      }
+    },
+  )
+}
+
+/**
+ * =========================
+ * 🔥 Market: Sentiment (Fear / Greed)
+ * =========================
+ */
+export function subscribeSentiment(
+  symbol: string,
+  cb: (sentiment: number, ts?: number) => void,
+) {
+  return sseManager.subscribe(
+    SSE_EVENT.SENTIMENT_UPDATE,
+    (data: {
+      symbol: string
+      sentiment: number
+      ts?: number
+    }) => {
+      if (data.symbol === symbol) {
+        cb(data.sentiment, data.ts)
       }
     },
   )

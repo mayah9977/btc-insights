@@ -3,6 +3,12 @@ import type { RiskEvent } from '@/lib/vip/redis/saveRiskEvent'
 export function generateDailyAvoidedLossSummary(
   events: RiskEvent[],
 ): string | null {
+  // ---------------------------------------------
+  // ❌ Avoided Loss Summary는 구조적으로 유효하지 않음
+  // ⭕ 항상 null 반환하여 UI / 리포트 출력 차단
+  // ---------------------------------------------
+  return null
+
   if (!events.length) return null
 
   /**

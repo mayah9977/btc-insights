@@ -1,45 +1,14 @@
-'use client'
+/**
+ * ⚠️ DEPRECATED — DO NOT USE
+ *
+ * 이 훅은 과거 Risk 전용 SSE 구조에서 사용되었으며,
+ * 현재 VIP 통합 SSE + LiveRiskState 구조에서는 완전히 폐기됨.
+ *
+ * ❌ 이 파일을 import 하면 안 됨
+ * ❌ useVipRealtime / liveRiskState 만 사용해야 함
+ *
+ * 이 파일은 "강제 차단용"으로만 유지됨
+ */
 
-import { useEffect, useState } from 'react'
-import { subscribeVipRisk } from '@/lib/realtime/vipChannel'
-
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
-
-export type RealtimeRiskState = {
-  riskLevel: RiskLevel
-  judgement: string
-  scenarios: any[]
-  isExtreme: boolean
-  lastTriggeredAt: number | null
-}
-
-const INITIAL_STATE: RealtimeRiskState = {
-  riskLevel: 'LOW',
-  judgement: '',
-  scenarios: [],
-  isExtreme: false,
-  lastTriggeredAt: null,
-}
-
-export function useRealtimeRisk() {
-  const [state, setState] =
-    useState<RealtimeRiskState>(INITIAL_STATE)
-
-  useEffect(() => {
-    const unsubscribe = subscribeVipRisk((data) => {
-      setState({
-        riskLevel: data.riskLevel,
-        judgement: data.judgement ?? '',
-        scenarios: data.scenarios ?? [],
-        isExtreme: data.isExtreme,
-        lastTriggeredAt: data.ts ?? Date.now(),
-      })
-    })
-
-    return () => {
-      unsubscribe()
-    }
-  }, [])
-
-  return state
-}
+// 🔥 아무것도 export 하지 않음 (강제 차단)
+export {}

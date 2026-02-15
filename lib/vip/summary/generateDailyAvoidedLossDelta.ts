@@ -3,6 +3,12 @@ import type { RiskEvent } from '@/lib/vip/redis/saveRiskEvent'
 export function generateDailyAvoidedLossDelta(
   events: RiskEvent[],
 ): number | null {
+  // ---------------------------------------------
+  // ❌ Avoided Loss Delta는 구조적으로 유효하지 않음
+  // ⭕ 항상 null 반환하여 변화율 계산 및 노출 차단
+  // ---------------------------------------------
+  return null
+
   if (!events.length) return null
 
   const now = new Date()
@@ -13,7 +19,8 @@ export function generateDailyAvoidedLossDelta(
     now.getDate(),
   ).getTime()
 
-  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000
+  const startOfYesterday =
+    startOfToday - 24 * 60 * 60 * 1000
 
   const todayExtreme = events.filter(
     (e) =>
@@ -31,16 +38,22 @@ export function generateDailyAvoidedLossDelta(
   if (!yesterdayExtreme.length) return null
 
   const todayLoss = todayExtreme.reduce(
-    (s, e) => s + Math.abs(e.worstPrice - e.entryPrice),
+    (s, e) =>
+      s + Math.abs(e.worstPrice - e.entryPrice),
     0,
   )
 
   const yesterdayLoss = yesterdayExtreme.reduce(
-    (s, e) => s + Math.abs(e.worstPrice - e.entryPrice),
+    (s, e) =>
+      s + Math.abs(e.worstPrice - e.entryPrice),
     0,
   )
 
   if (yesterdayLoss === 0) return null
 
-  return ((todayLoss - yesterdayLoss) / yesterdayLoss) * 100
+  return (
+    ((todayLoss - yesterdayLoss) /
+      yesterdayLoss) *
+    100
+  )
 }

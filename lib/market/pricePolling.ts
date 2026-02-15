@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { redis } from '@/lib/redis'
 import { handlePriceTick } from '@/lib/alerts/alertEngine'
 import { fetchCurrentMarketPrice } from '@/lib/market/fetchCurrentMarketPrice'
@@ -9,21 +10,22 @@ import { broadcastVipRiskUpdate } from '@/lib/vip/vipSSEHub'
 import { saveWhaleIntensity } from '@/lib/market/whaleRedisStore'
 import type { RiskLevel } from '@/lib/vip/riskEngine'
 
+import { interpretRealtimeRisk } from '@/lib/realtime/realtimeRiskInterpreter'
+
+// ✅ 추가
+import { pushRealtimeUpdate } from '@/lib/realtime/pushRealtimeUpdate'
+import { SSE_EVENT } from '@/lib/realtime/types'
+
 /* =========================
  * Internal State (SSOT)
  * ========================= */
 
 const lastPriceMap: Record<string, number> = {}
 const priceWindowMap: Record<string, number[]> = {}
-
 const lastOIMap: Record<string, number> = {}
 
-// 🔥 체결량 윈도우 (USD 기준)
 const tradeVolumeWindowMap: Record<string, number[]> = {}
-
-// 🔥 whaleIntensity 히스토리
 const whaleIntensityHistoryMap: Record<string, number[]> = {}
-
 const prevRiskLevelMap: Record<string, RiskLevel> = {}
 
 /* =========================
@@ -39,21 +41,6 @@ export function getOI(symbol: string): number | undefined {
   return lastOIMap[symbol.toUpperCase()]
 }
 
-export function getWhaleIntensityHistory(symbol: string): number[] {
-  return whaleIntensityHistoryMap[symbol.toUpperCase()] ?? []
-}
-
-export function setWhaleIntensityHistory(
-  symbol: string,
-  values: number[],
-) {
-  const upper = symbol.toUpperCase()
-  whaleIntensityHistoryMap[upper] = values
-    .map(v => Number(v))
-    .filter(v => Number.isFinite(v))
-    .slice(-30)
-}
-
 /* =========================
  * REALTIME PRICE + QTY FEED
  * ========================= */
@@ -63,13 +50,7 @@ export async function onPriceUpdate(
   price: number,
   qty: number,
 ) {
-  if (
-    !symbol ||
-    !Number.isFinite(price) ||
-    !Number.isFinite(qty)
-  ) {
-    return
-  }
+  if (!symbol || !Number.isFinite(price) || !Number.isFinite(qty)) return
 
   const upper = symbol.toUpperCase()
 
@@ -96,14 +77,13 @@ export async function onPriceUpdate(
     calculateMarketPressure(upper, price)
 
   /* =========================
-   * 🔥 체결량 기반 분석 (USD 기준)
+   * 체결량 기반 분석
    * ========================= */
 
   const volumeWindow =
     tradeVolumeWindowMap[upper] ??
     (tradeVolumeWindowMap[upper] = [])
 
-  // ✅ 핵심: USD 체결량
   const tradeUSD = qty * price
 
   volumeWindow.push(tradeUSD)
@@ -112,24 +92,18 @@ export async function onPriceUpdate(
   const totalVolume = volumeWindow.reduce((a, b) => a + b, 0)
   const avgVolume = totalVolume / volumeWindow.length
 
-  // 🔥 최소 10만 달러급 체결
-  const isLargeTrade =
-    tradeUSD > avgVolume * 3 &&
-    tradeUSD > 100_000
-
   /* =========================
-   * 📊 UI용 체결량 (USD)
+   * ✅ Volume SSE 송출 (핵심 추가)
    * ========================= */
+  pushRealtimeUpdate({
+    type: SSE_EVENT.VOLUME_TICK,
+    symbol: upper,
+    volume: Math.round(totalVolume),
+    ts: Date.now(),
+  })
 
-  await redis.publish(
-    'realtime:market',
-    JSON.stringify({
-      type: 'VOLUME_TICK',
-      symbol: upper,
-      volume: totalVolume, // ✅ USD 기준
-      ts: Date.now(),
-    }),
-  )
+  const isLargeTrade =
+    tradeUSD > avgVolume * 3 && tradeUSD > 100_000
 
   /* =========================
    * 🐋 whaleIntensity 계산
@@ -143,15 +117,9 @@ export async function onPriceUpdate(
     const volumeScore = Math.min(1, totalVolume / 500_000)
 
     whaleIntensity = oiScore * 0.5 + volumeScore * 0.5
-
     if (isLargeTrade) whaleIntensity += 0.15
-
     whaleIntensity = Math.min(1, whaleIntensity)
   }
-
-  /* =========================
-   * 히스토리 + Redis
-   * ========================= */
 
   const history =
     whaleIntensityHistoryMap[upper] ??
@@ -165,41 +133,22 @@ export async function onPriceUpdate(
   const avgWhale =
     history.reduce((a, b) => a + b, 0) / history.length
 
-  await redis.publish(
-    'realtime:market',
-    JSON.stringify({
-      type: 'WHALE_INTENSITY_TICK',
-      symbol: upper,
-      value: whaleIntensity,
-      avg: avgWhale,
-      ts: Date.now(),
-    }),
-  )
+  const prev =
+    history.length >= 2
+      ? history[history.length - 2]
+      : whaleIntensity
+
+  const whaleTrend: 'UP' | 'DOWN' | 'FLAT' =
+    whaleIntensity > prev
+      ? 'UP'
+      : whaleIntensity < prev
+      ? 'DOWN'
+      : 'FLAT'
+
+  const isSpike = whaleIntensity > avgWhale * 1.3
 
   /* =========================
-   * 🚨 고래 경보 (USD 기준)
-   * ========================= */
-
-  if (
-    isLargeTrade &&
-    whaleIntensity > 0.6 &&
-    whaleIntensity > avgWhale * 1.3
-  ) {
-    await redis.publish(
-      'realtime:market',
-      JSON.stringify({
-        type: 'WHALE_WARNING',
-        symbol: upper,
-        whaleIntensity,
-        avgWhale,
-        tradeUSD,
-        ts: Date.now(),
-      }),
-    )
-  }
-
-  /* =========================
-   * Risk 계산
+   * 🔥 Risk 계산
    * ========================= */
 
   const extremeSignal =
@@ -213,21 +162,37 @@ export async function onPriceUpdate(
     extremeSignal,
   })
 
-  if (prevRiskLevelMap[upper] === nextRiskLevel) return
+  const prevRiskLevel = prevRiskLevelMap[upper] ?? null
+  if (prevRiskLevel === nextRiskLevel) return
   prevRiskLevelMap[upper] = nextRiskLevel
+
+  /* =========================
+   * 🔥 리스크 해석 (SSOT)
+   * ========================= */
+
+  const interpreted = interpretRealtimeRisk({
+    riskLevel: nextRiskLevel,
+    prevRiskLevel,
+    whaleIntensity,
+    avgWhale,
+    whaleTrend,
+    isSpike,
+  })
+
+  /* =========================
+   * 📡 VIP RISK UPDATE
+   * ========================= */
 
   broadcastVipRiskUpdate({
     riskLevel: nextRiskLevel,
-    judgement:
-      nextRiskLevel === 'EXTREME'
-        ? '대량 USD 체결 + 고래 집중'
-        : nextRiskLevel === 'HIGH'
-        ? '고래 체결 증가'
-        : nextRiskLevel === 'MEDIUM'
-        ? '거래량 증가'
-        : '시장 안정',
+    judgement: interpreted.hint,
+    confidence: interpreted.extremeProximity,
     isExtreme: nextRiskLevel === 'EXTREME',
     ts: Date.now(),
+    pressureTrend: interpreted.pressureTrend,
+    extremeProximity: interpreted.extremeProximity,
+    preExtreme: interpreted.preExtreme,
+    whaleAccelerated: interpreted.whaleAccelerated,
   })
 }
 
@@ -239,12 +204,9 @@ export async function forceEvaluatePrice(params: {
   symbol: string
 }) {
   const symbol = params.symbol.toUpperCase()
-
   const fetched = await fetchCurrentMarketPrice(symbol)
 
-  if (typeof fetched !== 'number' || !Number.isFinite(fetched)) {
-    return
-  }
+  if (typeof fetched !== 'number') return
 
   await handlePriceTick({
     symbol,

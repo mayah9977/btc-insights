@@ -1,6 +1,9 @@
 import { createRedisSubscriber } from '@/lib/redis/index'
 import type { Redis } from 'ioredis'
 
+// 🔥 Market SSOT 저장
+import { setLastOI, setLastVolume } from '@/lib/market/marketLastStateStore'
+
 /* =========================
  * Types
  * ========================= */
@@ -30,6 +33,7 @@ export function addSSEClient(
   options?: { scope?: SSEScope },
 ) {
   const scope: SSEScope = options?.scope ?? 'REALTIME'
+
   const client: Client = { controller, scope }
 
   clientsByScope[scope].add(client)
@@ -38,7 +42,6 @@ export function addSSEClient(
     `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
   )
 
-  // 연결 ACK
   controller.enqueue(
     encoder.encode(`event: connected\ndata: {}\n\n`),
   )
@@ -63,7 +66,6 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 
   const sub: Redis = createRedisSubscriber()
 
-  /* Redis 채널 */
   sub.subscribe('realtime:market')
 
   sub.on('subscribe', (channel: string, count: number) => {
@@ -74,7 +76,6 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     console.error('[SSE] Redis error', err)
   })
 
-  /* 메시지 수신 */
   sub.on('message', (_channel: string, message: string) => {
     let event: any
 
@@ -86,7 +87,22 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
 
     /* =========================
-     * 🔥 이벤트 → scope 매핑
+     * ✅ Market SSOT 저장 (REPLAY용)
+     * ========================= */
+    if (event?.type === 'OI_TICK') {
+      try {
+        setLastOI(event.symbol, event.openInterest)
+      } catch {}
+    }
+
+    if (event?.type === 'VOLUME_TICK') {
+      try {
+        setLastVolume(event.symbol, event.volume)
+      } catch {}
+    }
+
+    /* =========================
+     * 🔥 이벤트 → scope 매핑 (수정 핵심)
      * ========================= */
     let targetScope: SSEScope | null = null
 
@@ -96,8 +112,11 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       event.type === 'PRICE_TICK' ||
       event.type === 'VOLUME_TICK' ||
       event.type === 'OI_TICK' ||
+      event.type === 'FUNDING_RATE_TICK' ||
       event.type === 'WHALE_WARNING' ||
-      event.type === 'WHALE_INTENSITY_TICK' // ✅ 최종 추가
+      event.type === 'WHALE_INTENSITY_TICK' ||
+      event.type === 'BB_SIGNAL' ||               // ✅ 추가
+      event.type === 'BB_LIVE_COMMENTARY'         // ✅ 추가 (핵심)
     ) {
       targetScope = 'REALTIME'
     } else if (event.type === 'VIP_UPDATE') {
@@ -139,4 +158,15 @@ export function pushHeartbeat() {
       }
     }
   })
+}
+
+/* =========================
+ * 🔥 Market Signal Broadcaster (ADD)
+ * ========================= */
+export function broadcastMarketSignal(event: any) {
+  try {
+    return
+  } catch (e) {
+    console.error('[SSE] broadcastMarketSignal error', e)
+  }
 }
