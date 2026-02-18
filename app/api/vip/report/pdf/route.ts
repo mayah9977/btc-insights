@@ -1,24 +1,17 @@
 // app/api/vip/report/pdf/route.ts
+
 import { NextResponse } from 'next/server'
-import {
-  generateVipDailyReportPdf,
-  ExtremeZone,
-} from '@/lib/vip/report/vipDailyReportPdf'
-import { redis } from '@/lib/redis'
+import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
+import { redis } from '@/lib/redis/server'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    const {
-      chartBase64,
-      extremeZones,
-    }: {
-      chartBase64: string
-      extremeZones?: ExtremeZone[]
-    } = body
+    const { chartBase64 }: { chartBase64?: string } = body
 
     if (!chartBase64) {
       return NextResponse.json(
@@ -29,7 +22,6 @@ export async function POST(req: Request) {
 
     /**
      * 1️⃣ Telegram chatId 조회
-     * - Webhook에서 미리 저장해둔 값
      */
     const chatId = await redis.get('vip:pending:chat')
     if (!chatId) {
@@ -40,22 +32,27 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 2️⃣ PDF 생성
+     * 2️⃣ PDF 생성 (최신 DailyReportInput 구조에 맞춤)
      */
     const pdfBuffer = await generateVipDailyReportPdf({
       date: new Date().toISOString().slice(0, 10),
-      market: 'BTCUSDT',
+      market: 'BTC',
       vipLevel: 'VIP3',
-      riskLevel: 'HIGH',
-      judgement:
-        '현재 시장은 EXTREME 구간에 진입했으며 변동성 확대 가능성이 높습니다.',
-      scenarios: [
-        { title: '상승 지속', probability: 45 },
-        { title: '조정 후 재상승', probability: 35 },
-        { title: '급락', probability: 20 },
-      ],
-      chartBase64,
-      extremeZones,
+
+      btcPrice: 0,
+      openInterest: 0,
+      fundingRate: 0,
+      candleChartBase64: chartBase64,
+
+      whaleIntensity: 0,
+      whaleInterpretation: 'Whale data not available',
+
+      sentimentIndex: 50,
+      sentimentRegime: 'NEUTRAL',
+      sentimentInterpretation: 'Market sentiment neutral',
+
+      newsSummary: 'No news summary available',
+      newsMidLongTerm: 'No structural outlook available',
     })
 
     /**
@@ -84,12 +81,10 @@ export async function POST(req: Request) {
       throw new Error(`Telegram send failed: ${errText}`)
     }
 
-    /**
-     * 4️⃣ Client 응답 (성공)
-     */
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[VIP PDF API ERROR]', err)
+
     return NextResponse.json(
       { error: 'PDF generation failed' },
       { status: 500 }
