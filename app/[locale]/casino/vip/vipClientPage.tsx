@@ -66,7 +66,6 @@ export default function VIPClientPage({
     settleDelayMs: 3000,
   })
 
-  // ✅ 인자 제거 (에러 해결)
   useVipExtremeNotifier(userId, rawRiskLevel)
 
   const { timeline } = useVipJudgementStore()
@@ -127,21 +126,18 @@ export default function VIPClientPage({
         />
 
         <VIPSentimentPanel symbol="BTCUSDT" />
-        <VIPFortunePanel />
 
         <BtcLiveChart riskLevel={riskLevel as any} />
 
+        {/* 🔥 위치 이동 완료 */}
+        <VIPFortunePanel />
+
         <VIPTodayJudgementCard />
-
-        <VIPJudgementTimeline
-        />
-
+        <VIPJudgementTimeline />
         <VIP3AdvancedMetrics {...vip3Metrics} />
-
         <VIP30DayEvasionBadge
           avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
         />
-
         <VIPCompareTable />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />
@@ -149,7 +145,6 @@ export default function VIPClientPage({
         <VIPJudgement />
         <VIPRiskPanel />
         <VIPRiskScenarioHeatmap />
-
         <VIPNoEntryReason riskLevel={riskLevel as any} />
         <VIPLossAvoidanceLog />
 
@@ -162,7 +157,6 @@ export default function VIPClientPage({
           <VIPSummaryCards
             weekly={weeklySummary}
             monthly={monthlySummary}
-  
           />
         )}
 
@@ -172,19 +166,17 @@ export default function VIPClientPage({
         />
 
         <VIPSentimentPanel symbol="BTCUSDT" />
-        <VIPFortunePanel />
 
         <BtcLiveChart riskLevel={riskLevel as any} />
 
-        <VIPJudgementTimeline
-        />
+        {/* 🔥 위치 이동 완료 */}
+        <VIPFortunePanel />
 
+        <VIPJudgementTimeline />
         <VIP3AdvancedMetrics {...vip3Metrics} />
-
         <VIP30DayEvasionBadge
           avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
         />
-
         <VIPCompareTable />
         <VIPRiskAvoidanceCard />
         <VIPDailySnapshot />

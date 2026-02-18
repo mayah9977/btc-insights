@@ -1,12 +1,22 @@
 import WebSocket from 'ws'
 import { onPriceUpdate } from './pricePolling'
 import { redis } from '@/lib/redis'
-import { getLastOI, getPrevOI, getLastVolume, getPrevVolume } from '@/lib/market/marketLastStateStore'
+import {
+  getLastOI,
+  getPrevOI,
+  getLastVolume,
+  getPrevVolume,
+} from '@/lib/market/marketLastStateStore'
 import { calcWhaleIntensity } from '@/lib/ai/calcWhaleIntensity'
 import { saveWhaleIntensity } from '@/lib/market/whaleRedisStore'
 
 const SYMBOL = 'BTCUSDT'
 const CHANNEL = 'realtime:market'
+
+/* ✅ 추가된 Redis Keys */
+const PRICE_KEY = `market:last:price:${SYMBOL}`
+const OI_KEY = `market:last:oi:${SYMBOL}`
+const FUNDING_KEY = `market:last:funding:${SYMBOL}`
 
 /* =========================
  * 🔥 AggTrade Stream
@@ -33,7 +43,7 @@ setInterval(async () => {
 
   if (volume > 0) {
     try {
-      // 1️⃣ Volume publish
+      /* 1️⃣ Volume publish */
       await redis.publish(
         CHANNEL,
         JSON.stringify({
@@ -44,7 +54,7 @@ setInterval(async () => {
         }),
       )
 
-      // 2️⃣ 🔥 Whale Intensity 계산
+      /* 2️⃣ Whale Intensity 계산 */
       const lastOI = getLastOI(SYMBOL)
       const prevOI = getPrevOI(SYMBOL)
       const lastVolume = getLastVolume(SYMBOL)
@@ -67,7 +77,6 @@ setInterval(async () => {
           volumeShock: volumeDelta,
         })
 
-        // 🔥 연속값 생성 (핵심)
         const raw =
           oiDelta * 0.04 +
           Math.max(0, volumeDelta - 1) * 0.6
@@ -82,10 +91,10 @@ setInterval(async () => {
             ? Math.max(0.45, normalized)
             : normalized
 
-        // 3️⃣ Redis 저장
+        /* 3️⃣ Redis 저장 (🔥 추가됨) */
         await saveWhaleIntensity(SYMBOL, intensity)
 
-        // 4️⃣ 🔥 SSE publish
+        /* 4️⃣ SSE publish */
         await redis.publish(
           CHANNEL,
           JSON.stringify({
@@ -93,8 +102,7 @@ setInterval(async () => {
             symbol: SYMBOL,
             intensity,
             avg: normalized,
-            trend:
-              intensity > 0.5 ? 'UP' : 'FLAT',
+            trend: intensity > 0.5 ? 'UP' : 'FLAT',
             isSpike: intensity > 0.85,
             ts: now,
           }),
@@ -109,7 +117,7 @@ setInterval(async () => {
 }, 1000)
 
 /* =========================
- * AggTrade
+ * AggTrade (가격)
  * ========================= */
 tradeWs.on('message', async raw => {
   try {
@@ -120,6 +128,10 @@ tradeWs.on('message', async raw => {
     if (!Number.isFinite(price) || !Number.isFinite(qty)) return
 
     volumeBufferUSD += price * qty
+
+    /* 🔥 PRICE Redis 저장 추가 */
+    await redis.set(PRICE_KEY, String(price))
+
     await onPriceUpdate(SYMBOL, price, qty)
   } catch {}
 })
@@ -132,6 +144,9 @@ markPriceWs.on('message', async raw => {
     const data = JSON.parse(raw.toString())
     const fundingRate = Number(data.r)
     if (!Number.isFinite(fundingRate)) return
+
+    /* 🔥 FUNDING Redis 저장 추가 */
+    await redis.set(FUNDING_KEY, String(fundingRate))
 
     await redis.publish(
       CHANNEL,

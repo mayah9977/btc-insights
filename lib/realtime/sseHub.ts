@@ -8,7 +8,6 @@ import { setLastOI, setLastVolume } from '@/lib/market/marketLastStateStore'
  * Types
  * ========================= */
 export type SSEScope = 'ALERTS' | 'REALTIME' | 'VIP'
-
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>
   scope: SSEScope
@@ -42,9 +41,7 @@ export function addSSEClient(
     `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
   )
 
-  controller.enqueue(
-    encoder.encode(`event: connected\ndata: {}\n\n`),
-  )
+  controller.enqueue(encoder.encode(`event: connected\ndata: {}\n\n`))
 
   return () => {
     clientsByScope[scope].delete(client)
@@ -57,9 +54,7 @@ export function addSSEClient(
 /* =========================
  * 🔥 Redis → SSE Bridge
  * ========================= */
-const g = globalThis as typeof globalThis & {
-  __SSE_REDIS_SUBSCRIBED__?: boolean
-}
+const g = globalThis as typeof globalThis & { __SSE_REDIS_SUBSCRIBED__?: boolean }
 
 if (!g.__SSE_REDIS_SUBSCRIBED__) {
   g.__SSE_REDIS_SUBSCRIBED__ = true
@@ -115,8 +110,9 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       event.type === 'FUNDING_RATE_TICK' ||
       event.type === 'WHALE_WARNING' ||
       event.type === 'WHALE_INTENSITY_TICK' ||
-      event.type === 'BB_SIGNAL' ||               // ✅ 추가
-      event.type === 'BB_LIVE_COMMENTARY'         // ✅ 추가 (핵심)
+      event.type === 'BB_SIGNAL' ||
+      // ✅ 추가
+      event.type === 'BB_LIVE_COMMENTARY' // ✅ 추가 (핵심)
     ) {
       targetScope = 'REALTIME'
     } else if (event.type === 'VIP_UPDATE') {
@@ -128,9 +124,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     const set = clientsByScope[targetScope]
     if (!set.size) return
 
-    const payload = encoder.encode(
-      `data: ${JSON.stringify(event)}\n\n`,
-    )
+    const payload = encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
 
     for (const client of set) {
       try {
@@ -149,7 +143,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 export function pushHeartbeat() {
   const ping = encoder.encode(`event: ping\ndata: {}\n\n`)
 
-  ;(Object.keys(clientsByScope) as SSEScope[]).forEach(scope => {
+  ;(Object.keys(clientsByScope) as SSEScope[]).forEach((scope) => {
     for (const client of clientsByScope[scope]) {
       try {
         client.controller.enqueue(ping)

@@ -1,22 +1,10 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
 import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
 import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
-
-/**
- * RawObservationBar
- *
- * ✅ Observation-only panel
- * ❌ No interpretation
- * ❌ No risk / direction / judgement language
- * ❌ No dependency on Action Gate state
- *
- * Visual role:
- * - Visually attached to ActionGate bottom
- * - Raw data layer (pre-interpretation)
- */
+import { NumericAnimatedValue } from '@/components/ui/NumericAnimatedValue'
 
 interface RawObservationBarProps {
   symbol: string
@@ -27,29 +15,25 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
   const volumeState = useRealtimeVolume(symbol)
   const { fundingRate } = useRealtimeMarket(symbol)
 
-  /** ------------------------------------------------
-   * 🔹 Subtle number transition (CSS only)
-   * - Detect value change → fade/slide once
-   * - No semantic meaning added
-   * ------------------------------------------------ */
-  const oiRef = useRef<HTMLSpanElement | null>(null)
-  const volRef = useRef<HTMLSpanElement | null>(null)
-  const frRef = useRef<HTMLSpanElement | null>(null)
-
-  useEffect(() => {
-    ;[oiRef.current, volRef.current, frRef.current].forEach(el => {
-      if (!el) return
-      el.classList.remove('ag-num-animate')
-      void el.offsetWidth // reflow
-      el.classList.add('ag-num-animate')
-    })
-  }, [oiState.openInterest, volumeState.volume, fundingRate])
-
   return (
-    <div className="relative">
-      {/* ─────────────────────────────────────────────
-          1️⃣ Visual cohesion layer (ActionGate bottom)
-         ───────────────────────────────────────────── */}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="relative overflow-hidden"
+    >
+      {/* Luxury moving light sweep */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        animate={{ backgroundPosition: ['0% 0%', '200% 0%'] }}
+        transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+        style={{
+          backgroundImage:
+            'linear-gradient(90deg, transparent, rgba(16,185,129,0.05), transparent)',
+          backgroundSize: '200% 100%',
+        }}
+      />
+
+      {/* 상단 라인 */}
       <div
         aria-hidden
         className="
@@ -61,67 +45,57 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
         "
       />
 
-      {/* Observation content */}
-      <div className="px-4 py-4 text-sm text-zinc-300">
-        <div className="flex flex-wrap items-center gap-8">
-          {/* Open Interest */}
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm text-zinc-500">
+      <div className="relative px-4 py-6">
+        <div className="flex flex-wrap items-center gap-16">
+
+          {/* ================= OI ================= */}
+          <div className="flex items-baseline gap-5">
+            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
               Open Interest (미결제약정)
             </span>
-            <span
-              ref={oiRef}
-              className="
-                text-base font-medium text-zinc-200
-                transition-opacity transition-transform
-                duration-300 ease-out
-              "
-            >
-              {oiState.openInterest != null
-                ? oiState.openInterest.toLocaleString()
-                : '--'}
-            </span>
+
+            <NumericAnimatedValue
+              value={oiState.openInterest}
+              size="lg"
+              glowMode="direction"
+              className="font-bold text-emerald-400 tracking-wide"
+            />
           </div>
 
-          {/* Volume */}
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm text-zinc-500">
+          {/* ================= Volume ================= */}
+          <div className="flex items-baseline gap-5">
+            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
               Volume (거래량)
             </span>
-            <span
-              ref={volRef}
-              className="
-                text-base font-medium text-zinc-200
-                transition-opacity transition-transform
-                duration-300 ease-out
-              "
-            >
-              {volumeState.volume != null
-                ? volumeState.volume.toLocaleString()
-                : '--'}
-            </span>
+
+            <NumericAnimatedValue
+              value={volumeState.volume}
+              size="lg"
+              glowMode="direction"
+              suffix={
+                volumeState.volume != null ? ' K' : ''
+              }
+              className="font-bold text-emerald-400 tracking-wide"
+            />
           </div>
 
-          {/* Funding Rate */}
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm text-zinc-500">
-              Funding rate (자금 조달율)
+          {/* ================= Funding ================= */}
+          <div className="flex items-baseline gap-5">
+            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
+              Funding Rate (펀딩비)
             </span>
-            <span
-              ref={frRef}
-              className="
-                text-base font-medium text-zinc-200
-                transition-opacity transition-transform
-                duration-300 ease-out
-              "
-            >
-              {fundingRate != null && Number.isFinite(fundingRate)
-                ? `${(fundingRate * 100).toFixed(4)}%`
-                : '--'}
-            </span>
+
+            <NumericAnimatedValue
+              value={fundingRate}
+              size="lg"
+              glowMode="direction"
+              format={(v) => `${(v * 100).toFixed(4)}%`}
+              className="font-bold text-emerald-400 tracking-wide"
+            />
           </div>
+
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

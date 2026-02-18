@@ -1,4 +1,7 @@
 import { createRedisSubscriber } from '@/lib/redis'
+import { redis } from '@/lib/redis/server'
+import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
+
 import { updateOI } from '@/lib/market/pricePolling'
 import {
   loadAllWhaleIntensityKeys,
@@ -25,10 +28,9 @@ import { buildRiskInputFromRealtime } from '@/lib/market/buildRiskInputFromRealt
 import { getActionGateState } from '@/lib/market/action/getActionGateState'
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 
-/* 🔥 NEW: Sentiment Engine */
 import { computeSentiment } from '@/lib/market/sentimentEngine'
 
-/* ========================================================= */
+const STRUCTURAL_KEY = 'market:finalized:analysis'
 
 const g = globalThis as any
 
@@ -43,11 +45,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
       for (const symbol of symbols) {
         await loadWhaleIntensityHistory(symbol)
       }
-      if (symbols.length > 0) {
-        console.log(
-          `[MARKET CONSUMER] whaleIntensity hydrated (${symbols.length} symbols)`,
-        )
-      }
     } catch (e) {
       console.error('[MARKET CONSUMER] whaleIntensity hydrate failed', e)
     }
@@ -59,8 +56,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
   const pub = createRedisSubscriber()
 
   sub.subscribe('realtime:market')
-
-  /* ================= AVG WINDOW ================= */
 
   const whaleAvgWindowMap: Record<
     string,
@@ -92,48 +87,35 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
     return 'FLAT'
   }
 
-  /* ========================================================= */
-
   sub.on('message', async (_channel, raw) => {
     try {
       const event = JSON.parse(raw)
 
       /* ================= OI ================= */
-
       if (event.type === 'OI_TICK') {
         updateOI(event.symbol, event.openInterest)
         setLastOI(event.symbol, event.openInterest)
 
-        pushRollingValue(
-          `OI_${event.symbol}`,
-          event.openInterest,
-          50,
-        )
+        pushRollingValue(`OI_${event.symbol}`, event.openInterest, 50)
       }
 
       /* ================= VOLUME ================= */
-
       if (event.type === 'VOLUME_TICK') {
         setLastVolume(event.symbol, event.volume)
       }
 
       /* ================= FUNDING ================= */
-
       if (event.type === 'FUNDING_RATE_TICK') {
         setLastFundingRate(event.symbol, event.fundingRate)
       }
 
       /* ================= PRICE ================= */
-
       if (event.type === 'PRICE_TICK') {
         const symbol = event.symbol
         const price = event.price
         const ts = event.ts
 
-        if (!Number.isFinite(ts)) {
-          console.warn('[PRICE_TICK] invalid ts', event)
-          return
-        }
+        if (!Number.isFinite(ts)) return
 
         pushRecentPrice(symbol, price)
 
@@ -141,7 +123,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         const aggregator = candle30mMap[symbol]
 
         const result = aggregator.update({ price, ts }, 0)
-
         const confirmedSignal =
           result.confirmedSignal as ConfirmedBBSignal | undefined
 
@@ -152,6 +133,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         }
 
         if (confirmedSignal) {
+          /* 🔥 1️⃣ 기존 상태 저장 */
           setLastBollingerSignal(symbol, {
             enabled: true,
             timeframe: '30m',
@@ -164,19 +146,33 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             at: confirmedSignal.at,
           })
 
-          pub.publish('realtime:market', JSON.stringify(confirmedSignal))
+          pub.publish(
+            'realtime:market',
+            JSON.stringify(confirmedSignal),
+          )
+
+          /* 🔥 2️⃣ Finalized Redis 저장 (핵심 추가) */
+          const sentence =
+            BOLLINGER_SENTENCE_MAP[
+              confirmedSignal.signalType as BollingerSignalType
+            ]
+
+          if (sentence?.description) {
+            await redis.set(
+              STRUCTURAL_KEY,
+              sentence.description,
+            )
+          }
         }
       }
 
-      /* ================= RISK PIPELINE ================= */
-
+      /* ================= RISK + SENTIMENT ================= */
       if (
         event.type === 'PRICE_TICK' ||
         event.type === 'OI_TICK' ||
         event.type === 'FUNDING_RATE_TICK'
       ) {
         const symbol = event.symbol
-
         const snapshot = await buildRiskInputFromRealtime(symbol)
         if (!snapshot) return
 
@@ -191,8 +187,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           intensity >= 0.7 ||
           (avg > 0 && intensity >= avg * 1.6)
 
-        /* ================= WHALE SSE ================= */
-
         pub.publish(
           'realtime:market',
           JSON.stringify({
@@ -205,10 +199,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             ts: Date.now(),
           }),
         )
-
-        /* =========================================================
-           🔥🔥🔥 SENTIMENT SSE UPDATE (최종 구조) 🔥🔥🔥
-        ========================================================== */
 
         try {
           const sentiment = computeSentiment(snapshot)
@@ -226,8 +216,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           console.error('[Sentiment error]', err)
         }
 
-        /* ================= ACTION GATE ================= */
-
         const nextActionGateInput: ActionGateInput = {
           whalePressure: snapshot.whalePressure,
           participationState: snapshot.participationState,
@@ -240,10 +228,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
 
         const prev = getLastActionGateInput(symbol)
 
-        if (
-          JSON.stringify(prev) !==
-          JSON.stringify(nextActionGateInput)
-        ) {
+        if (JSON.stringify(prev) !== JSON.stringify(nextActionGateInput)) {
           setActionGateState(
             symbol,
             getActionGateState(nextActionGateInput),

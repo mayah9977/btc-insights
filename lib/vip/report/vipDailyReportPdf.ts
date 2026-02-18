@@ -1,77 +1,57 @@
 import { renderPdfByCloudRun } from '@/lib/pdf/cloudRunPdfClient'
 
-/**
- * VIP 도메인 타입
- */
 export type VipLevel = 'VIP1' | 'VIP2' | 'VIP3'
 
-/**
- * 🔴 EXTREME 구간 (차트 가로 비율 기준)
- */
-export type ExtremeZone = {
-  startRatio: number // 0 ~ 1
-  endRatio: number   // 0 ~ 1
-}
+/* =========================================================
+   FINAL SSOT TYPE
+========================================================= */
 
-/**
- * VIP Daily Report Input
- */
-export type DailyReportInput = {
+export interface DailyReportInput {
   date: string
   market: string
   vipLevel: VipLevel
-  riskLevel: 'LOW' | 'MID' | 'HIGH'
-  judgement: string
-  scenarios: {
-    title: string
-    probability: number
-  }[]
 
-  /** 🔥 차트 이미지 (base64) */
-  chartBase64: string
+  /* 1️⃣ BTC Snapshot */
+  btcPrice: number
+  openInterest: number
+  fundingRate: number
+  candleChartBase64: string
 
-  /** 🔥 EXTREME 구간 메타데이터 */
-  extremeZones?: ExtremeZone[]
+  /* 2️⃣ Whale */
+  whaleIntensity: number
+  whaleInterpretation: string
+
+  /* 3️⃣ Sentiment */
+  sentimentIndex: number
+  sentimentRegime: 'FEAR' | 'NEUTRAL' | 'GREED'
+  sentimentInterpretation: string
+
+  /* 4️⃣ News */
+  newsSummary: string
+  newsMidLongTerm: string
 }
 
-/**
- * 1️⃣ VIP Daily Report HTML 생성 (A4 / Dark / Print-safe)
- * - 차트 이미지
- * - EXTREME 빨간 오버레이 포함
- */
+/* =========================================================
+   PREMIUM TEMPLATE (2 PAGE FIXED)
+========================================================= */
+
 function buildVipDailyReportHtml(input: DailyReportInput): string {
-  const visibleScenarios =
-    input.vipLevel === 'VIP1'
-      ? input.scenarios.slice(0, 1)
-      : input.vipLevel === 'VIP2'
-      ? input.scenarios.slice(0, 2)
-      : input.scenarios
-
-  const riskColor =
-    input.riskLevel === 'LOW'
-      ? '#2ecc71'
-      : input.riskLevel === 'MID'
-      ? '#f1c40f'
-      : '#e74c3c'
-
-  const extremeOverlays =
-    input.extremeZones?.map(
-      (z) => `
-        <div
-          class="extreme-zone"
-          style="
-            left: ${z.startRatio * 100}%;
-            width: ${(z.endRatio - z.startRatio) * 100}%;
-          "
-        ></div>
-      `
-    ).join('') ?? ''
+  const sentimentColor =
+    input.sentimentRegime === 'FEAR'
+      ? '#ff4d4f'
+      : input.sentimentRegime === 'NEUTRAL'
+      ? '#facc15'
+      : '#22c55e'
 
   return `
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8"/>
+
+<!-- 🔥 Google Font 명시 -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet"/>
+
 <style>
 @page {
   size: A4;
@@ -79,162 +59,162 @@ function buildVipDailyReportHtml(input: DailyReportInput): string {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', Arial, sans-serif;
-  background: #0d0f1a;
+  font-family: 'Noto Sans KR', sans-serif;
+  background: #05070d;
   color: #ffffff;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
-h1 {
-  font-size: 22px;
-  margin: 0 0 6px 0;
+.page {
+  width: 100%;
+  page-break-after: always;
+}
+
+.page:last-child {
+  page-break-after: auto;
 }
 
 .header {
-  border-bottom: 1px solid #2a2f45;
-  padding-bottom: 14px;
-  margin-bottom: 28px;
+  padding-bottom: 20px;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #1f2937;
 }
 
-.date {
-  color: #9aa0b5;
-  font-size: 12px;
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  background: linear-gradient(90deg,#facc15,#ff9900);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .section {
-  margin-bottom: 26px;
+  margin-bottom: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: linear-gradient(145deg,#0b0f17,#111827);
+  border: 1px solid #1f2937;
 }
 
 .section-title {
-  font-size: 15px;
-  margin-bottom: 10px;
-  border-left: 4px solid #4c6ef5;
-  padding-left: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #facc15;
 }
 
-.kv {
-  margin: 4px 0;
+.metric {
+  margin-bottom: 8px;
 }
 
 .badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 6px;
-  background: ${riskColor};
-  color: #000;
   font-size: 11px;
-  margin-left: 6px;
+  font-weight: 700;
 }
 
-.scenario {
-  margin: 6px 0;
-}
-
-.notice {
-  font-size: 11px;
-  color: #9aa0b5;
-  margin-top: 8px;
-}
-
-/* ===== Chart & EXTREME ===== */
-.chart-wrapper {
-  position: relative;
-  margin-top: 18px;
-}
-
-.chart-wrapper img {
-  width: 100%;
-  border-radius: 8px;
-  border: 1px solid #2a2f45;
-  display: block;
-}
-
-.extreme-zone {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(239, 68, 68, 0.28);
-  border-left: 1px solid rgba(239, 68, 68, 0.7);
-  border-right: 1px solid rgba(239, 68, 68, 0.7);
-}
-
-/* ===== Footer ===== */
-.footer {
-  margin-top: 60px;
-  font-size: 11px;
-  color: #7b8099;
+.chart {
+  margin-top: 15px;
   text-align: center;
-  border-top: 1px solid #2a2f45;
-  padding-top: 14px;
 }
 
-.watermark {
-  position: fixed;
-  bottom: 20px;
-  right: 30px;
-  font-size: 72px;
-  color: rgba(255,255,255,0.04);
-  transform: rotate(-20deg);
-  pointer-events: none;
+.footer {
+  margin-top: 40px;
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+  border-top: 1px solid #1f2937;
+  padding-top: 14px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="watermark">${input.vipLevel}</div>
+<!-- ================= PAGE 1 ================= -->
+<div class="page">
 
 <div class="header">
-  <h1>SIGNAL · VIP DAILY REPORT</h1>
-  <div class="date">${input.date}</div>
+  <div class="title">SIGNAL · VIP INTELLIGENCE REPORT</div>
+  <div>${input.date} · ${input.market}</div>
 </div>
 
 <div class="section">
-  <div class="section-title">Market Summary</div>
-  <div class="kv">Market: ${input.market}</div>
-  <div class="kv">
-    Risk Level:
-    <span class="badge">${input.riskLevel}</span>
+  <div class="section-title">1️⃣ 비트코인 시장 스냅샷 (15분 기준)</div>
+
+  <div class="metric">
+    현재 가격: <strong>$${input.btcPrice.toLocaleString()}</strong>
   </div>
-  <div class="kv">VIP Level: ${input.vipLevel}</div>
-</div>
 
-<div class="section">
-  <div class="section-title">Market Chart</div>
-  <div class="chart-wrapper">
-    <img src="${input.chartBase64}" />
-    ${extremeOverlays}
+  <div class="metric">
+    Open Interest: <strong>${input.openInterest.toLocaleString()}</strong>
+  </div>
+
+  <div class="metric">
+    Funding Rate: <strong>${input.fundingRate.toFixed(5)}</strong>
+  </div>
+
+  <div class="chart">
+    <img src="${input.candleChartBase64}" width="520"/>
   </div>
 </div>
 
 <div class="section">
-  <div class="section-title">AI Judgement</div>
-  ${
-    input.vipLevel === 'VIP1'
-      ? `<div>상세 판단은 VIP3 이상에서 제공됩니다.</div>`
-      : `<div>${input.judgement}</div>`
-  }
+  <div class="section-title">2️⃣ 고래 강도 분석</div>
+
+  <div class="metric">
+    강도 지수: <strong>${input.whaleIntensity.toFixed(2)}</strong>
+  </div>
+
+  <div class="metric">
+    ${input.whaleInterpretation}
+  </div>
+</div>
+
+</div>
+
+<!-- ================= PAGE 2 ================= -->
+<div class="page">
+
+<div class="section">
+  <div class="section-title">3️⃣ 시장 심리지수</div>
+
+  <div class="metric">
+    현재 지수: <strong>${input.sentimentIndex}</strong>
+  </div>
+
+  <div class="metric">
+    상태:
+    <span class="badge" style="background:${sentimentColor};color:#000">
+      ${input.sentimentRegime}
+    </span>
+  </div>
+
+  <div class="metric">
+    ${input.sentimentInterpretation}
+  </div>
 </div>
 
 <div class="section">
-  <div class="section-title">Probability Scenarios</div>
-  ${visibleScenarios
-    .map(
-      (s) =>
-        `<div class="scenario">• ${s.title} (${s.probability}%)</div>`
-    )
-    .join('')}
-  ${
-    input.vipLevel !== 'VIP3'
-      ? `<div class="notice">※ 전체 시나리오는 VIP3 전용 콘텐츠입니다.</div>`
-      : ''
-  }
+  <div class="section-title">4️⃣ 오늘의 주요 뉴스와 전망</div>
+
+  <div class="metric">
+    ${input.newsSummary}
+  </div>
+
+  <div class="metric" style="margin-top:12px;">
+    ${input.newsMidLongTerm}
+  </div>
 </div>
 
 <div class="footer">
-  Generated by SIGNAL · VIP Intelligence Engine<br/>
-  This report is confidential and intended for VIP members only.
+  SIGNAL AI Risk Observation Engine<br/>
+  VIP 전용 리포트 · 무단 배포 금지
+</div>
+
 </div>
 
 </body>
@@ -242,11 +222,12 @@ h1 {
 `
 }
 
-/**
- * 2️⃣ 최종 PDF 생성
- */
+/* =========================================================
+   PDF Render
+========================================================= */
+
 export async function generateVipDailyReportPdf(
-  input: DailyReportInput
+  input: DailyReportInput,
 ): Promise<Buffer> {
   const html = buildVipDailyReportHtml(input)
   return renderPdfByCloudRun(html)

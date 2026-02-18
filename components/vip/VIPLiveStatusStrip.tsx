@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
 import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
 import type { RiskLevel } from '@/lib/vip/riskTypes'
@@ -13,45 +13,46 @@ const RISK_COLOR: Record<RiskLevel, string> = {
   EXTREME: 'text-red-500',
 }
 
-const RISK_LABEL: Record<RiskLevel, string> = {
-  LOW: '시장 안정',
-  MEDIUM: '변동성 증가',
-  HIGH: '고위험 감지',
-  EXTREME: '극단적 위험',
-}
-
 export default function VIPLiveStatusStrip() {
   const live = useLiveRiskState(s => s.state)
-  const triggerWhalePulse = useLiveRiskState(
-    s => s.triggerWhalePulse,
-  )
-
-  // ✅ SSOT: PRICE / OI / VOLUME 통합
+  const triggerWhalePulse = useLiveRiskState(s => s.triggerWhalePulse)
   const { volume } = useRealtimeMarket('BTCUSDT')
 
-  /* =========================
-   * 🔁 Whale pulse trigger
-   * ========================= */
-  useEffect(() => {
-    if (!live) return
-    if (volume === undefined || volume === null) return
+  const prevVolumeRef = useRef<number | null>(null)
 
-    // 🔥 [ADD] preExtreme 상태 플래그 (UI 리듬 전용)
+  /* ---------------------------
+     체결량 방향 계산
+  --------------------------- */
+
+  const prevVolume = prevVolumeRef.current
+  const delta =
+    volume != null && prevVolume != null
+      ? volume - prevVolume
+      : 0
+
+  const glowColor =
+    delta > 0
+      ? 'rgba(250,204,21,0.9)'   // 상승 = 골드
+      : delta < 0
+      ? 'rgba(239,68,68,0.9)'    // 하락 = 레드
+      : 'rgba(16,185,129,0.7)'   // 유지 = 에메랄드
+
+  useEffect(() => {
+    if (volume != null) {
+      prevVolumeRef.current = volume
+    }
+  }, [volume])
+
+  useEffect(() => {
+    if (!live || volume == null) return
+
     const preExtreme = (live as any)?.preExtreme === true
 
-    // 🔥 [MOD] Whale Pulse 민감도 강화
-    // - RiskLevel / 문구 변경 ❌
-    // - 리듬(맥박)만 강화
     const isWhalePulse =
       live.whaleAccelerated &&
-      (
-        volume > 500_000 ||
-        (preExtreme && volume > 250_000)
-      )
+      (volume > 500_000 || (preExtreme && volume > 250_000))
 
-    if (isWhalePulse) {
-      triggerWhalePulse()
-    }
+    if (isWhalePulse) triggerWhalePulse()
   }, [live, volume, triggerWhalePulse])
 
   if (!live) return null
@@ -61,15 +62,12 @@ export default function VIPLiveStatusStrip() {
     direction,
     whaleAccelerated,
     whalePulse,
-    durationSec, // 🔥 Risk 체류 시간
+    durationSec,
   } = live
 
-  // 🔥 [ADD] preExtreme 상태 (배경 리듬 강화용)
   const preExtreme = (live as any)?.preExtreme === true
-
   const isExtreme = level === 'EXTREME'
 
-  // 🔥 시장 안정(LOW) 구간에서는 체류 시간 표시하지 않음
   const durationText =
     level !== 'LOW' &&
     typeof durationSec === 'number' &&
@@ -77,57 +75,88 @@ export default function VIPLiveStatusStrip() {
       ? `· ${Math.floor(durationSec / 60)}분 ${durationSec % 60}초 유지 중`
       : ''
 
+  const volumeKey =
+    volume != null ? `vol-${volume}` : 'vol-empty'
+
+  /* ---------------------------
+     상단 숫자와 동일 애니메이션
+  --------------------------- */
+
+  const numericPulse = {
+    initial: { scale: 1 },
+    animate: {
+      scale: [1, 1.06, 1],
+      textShadow: [
+        '0 0 0 rgba(0,0,0,0)',
+        `0 0 18px ${glowColor}`,
+        '0 0 0 rgba(0,0,0,0)',
+      ],
+    },
+    transition: { duration: 0.6 },
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{
         opacity: 1,
         y: 0,
-
-        // 🔥 [MOD] preExtreme는 색상 변경 ❌
-        // - 배경 밝기·리듬만 미세 강화
         backgroundColor: isExtreme
           ? 'rgba(69,10,10,0.65)'
           : preExtreme
           ? 'rgba(24,24,27,0.92)'
-          : 'rgba(9,9,11,0.8)',
-
-        boxShadow: isExtreme
-          ? '0 0 40px rgba(239,68,68,0.25)'
-          : preExtreme
-          ? '0 0 24px rgba(234,179,8,0.12)'
-          : '0 0 0 rgba(0,0,0,0)',
+          : 'rgba(9,9,11,0.85)',
       }}
-      transition={{
-        duration: isExtreme ? 0.4 : preExtreme ? 0.8 : 1.2,
-        ease: 'easeOut',
-      }}
+      transition={{ duration: 0.6 }}
       className="
-        sticky
-        top-[64px]
-        z-50
-        mb-4
+        sticky top-[64px] z-50 mb-4
         border-b border-neutral-800
-        backdrop-blur
+        backdrop-blur overflow-hidden
       "
     >
-      <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs md:text-sm text-neutral-300">
-        {/* 🛡 VIP 보호 상태 */}
-        <div className="flex items-center gap-2">
+      {/* 상단 흐름 유지 */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        animate={{
+          backgroundPosition: whalePulse
+            ? ['0% 0%', '200% 0%']
+            : ['0% 0%', '100% 0%'],
+        }}
+        transition={{
+          duration: whalePulse ? 1.2 : 6,
+          repeat: Infinity,
+          ease: 'linear',
+        }}
+        style={{
+          backgroundImage:
+            'linear-gradient(90deg, transparent, rgba(34,197,94,0.08), transparent)',
+          backgroundSize: '200% 100%',
+        }}
+      />
+
+      {/* 🔥 위 숫자와 동일 text-sm 통일 */}
+      <div className="
+        relative max-w-7xl mx-auto
+        px-4 py-2
+        flex flex-wrap items-center gap-x-8 gap-y-1
+        text-sm
+      ">
+
+        {/* VIP 보호 */}
+        <div className="flex items-center gap-2 text-zinc-300">
           <span className="text-emerald-400">🛡</span>
           <span>VIP 보호</span>
-          <span className="font-semibold text-emerald-300">
+          <span className="font-semibold text-emerald-400">
             ACTIVE
           </span>
         </div>
 
-        {/* ⚠ Risk 상태 */}
-        <div className="flex items-center gap-2">
+        {/* Risk */}
+        <div className="flex items-center gap-2 text-zinc-300">
           <span className={RISK_COLOR[level]}>
             ⚠ 정상모드 (Normal Mode)
           </span>
 
-          {/* 🔽 방향 텍스트 유지 */}
           <span
             className={
               direction === 'UP'
@@ -144,7 +173,6 @@ export default function VIPLiveStatusStrip() {
               : ''}
           </span>
 
-          {/* 🔥 Risk 체류 시간 (LOW 제외) */}
           {durationText && (
             <span className="text-zinc-400">
               {durationText}
@@ -152,45 +180,42 @@ export default function VIPLiveStatusStrip() {
           )}
         </div>
 
-        {/* 🐋 고래 가속 */}
-        <div className="flex items-center gap-2">
+        {/* 관측 */}
+        <div className="flex items-center gap-2 text-zinc-400">
           <span>🐋</span>
-          {whaleAccelerated ? (
-            <span className="text-red-400 font-medium">
-              고래 출현
-            </span>
-          ) : (
-            <span className="text-neutral-400">
-              Observing real-time market conditions. (실시간 시장 상황을 관측 중입니다)
-            </span>
-          )}
+          <span>Observing real-time market conditions. ( 실시간 시장을 모니터링중입니다. )</span>
         </div>
 
-        {/* 🔥 실시간 체결량 (Risk / Judgment와 완전 분리) */}
-        <div className="flex items-center gap-2">
+        {/* 🔥 실시간 체결량 (상단 숫자와 동일 애니메이션) */}
+        <motion.div
+          key={volumeKey}
+          variants={numericPulse}
+          initial="initial"
+          animate="animate"
+          className="flex items-center gap-1 font-semibold text-emerald-400"
+        >
           <span>🔥</span>
-          <span
-            className={
-              whalePulse
-                ? 'text-red-400 font-bold animate-pulse'
-                : volume !== undefined &&
-                  volume !== null &&
-                  volume > 300_000
-                ? 'text-yellow-400 font-medium'
-                : 'text-neutral-400'
-            }
-          >
+          <span>
             실시간 체결량{' '}
-            {volume !== undefined && volume !== null
+            {volume != null
               ? volume.toLocaleString()
               : '--'}
             $
           </span>
+        </motion.div>
 
+        <AnimatePresence>
           {whalePulse && (
-            <span className="text-red-400">🐋</span>
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              className="text-red-400"
+            >
+              🐋
+            </motion.span>
           )}
-        </div>
+        </AnimatePresence>
       </div>
     </motion.div>
   )

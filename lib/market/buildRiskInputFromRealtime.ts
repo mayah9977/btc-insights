@@ -20,14 +20,29 @@ import { detectWhale } from '@/lib/detectWhale'
 import { deriveBollingerObservation } from '@/lib/market/actionGate/deriveBollingerObservation'
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 
+/* =======================================================
+   🔥 확장된 Snapshot 타입
+======================================================= */
+
 export interface RealtimeRiskSnapshot extends ActionGateInput {
+  /* 기본 */
   price: number
   volatility: number
   whaleIntensity: number
   fundingRate: number
+
+  /* 🔥 추가 확장 */
+  openInterest: number
+  prevOpenInterest: number
+  oiDeltaRatio: number
+  volumeRatio: number
+  fundingBias: 'LONG_HEAVY' | 'SHORT_HEAVY' | 'NEUTRAL'
+
+  /* 리스크 */
   extremeSignal: boolean
   preExtreme: boolean
   marketPulse: 'ACCELERATING' | 'STABLE'
+
   ts: number
 }
 
@@ -39,13 +54,13 @@ export async function buildRiskInputFromRealtime(
 
   const priceRaw = getLastPrice(symbol)
   if (priceRaw == null || !Number.isFinite(priceRaw)) return null
-  const price: number = priceRaw
+  const price = priceRaw
 
   /* ================= VOLATILITY ================= */
 
   const volatilityRaw = await calculateVolatilityFromCandles(symbol)
   if (volatilityRaw == null || !Number.isFinite(volatilityRaw)) return null
-  const volatility: number = volatilityRaw
+  const volatility = volatilityRaw
 
   /* ================= OI ================= */
 
@@ -60,14 +75,15 @@ export async function buildRiskInputFromRealtime(
     prevOIRaw === 0
   ) return null
 
-  const lastOI: number = lastOIRaw
-  const prevOI: number = prevOIRaw
+  const openInterest = lastOIRaw
+  const prevOpenInterest = prevOIRaw
 
-  const oiDelta =
-    Math.abs((lastOI - prevOI) / prevOI)
+  const oiDeltaRatio =
+    (openInterest - prevOpenInterest) /
+    prevOpenInterest
 
   const oiEnergy =
-    Math.tanh(oiDelta * 2.4)
+    Math.tanh(Math.abs(oiDeltaRatio) * 2.4)
 
   /* ================= VOLUME ================= */
 
@@ -82,10 +98,7 @@ export async function buildRiskInputFromRealtime(
     prevVolumeRaw === 0
   ) return null
 
-  const lastVolume: number = lastVolumeRaw
-  const prevVolume: number = prevVolumeRaw
-
-  const volumeRatio = lastVolume / prevVolume
+  const volumeRatio = lastVolumeRaw / prevVolumeRaw
 
   const volumeEnergy =
     Math.tanh(Math.sqrt(volumeRatio) * 1.6)
@@ -108,13 +121,13 @@ export async function buildRiskInputFromRealtime(
     rollingStd > 0
   ) {
     const drift =
-      Math.abs(lastOI - rollingMean) /
+      Math.abs(openInterest - rollingMean) /
       (rollingStd + 1e-6)
 
     driftEnergy = Math.tanh(drift * 1.4)
   }
 
-  /* ================= RAW ================= */
+  /* ================= RAW INTENSITY ================= */
 
   const raw =
     0.32 * oiEnergy +
@@ -124,8 +137,6 @@ export async function buildRiskInputFromRealtime(
 
   const baseIntensity =
     Math.tanh(raw * 1.2)
-
-  /* ================= VISUAL VITALITY ================= */
 
   const microPulse =
     0.015 * Math.sin(Date.now() / 2000)
@@ -139,10 +150,10 @@ export async function buildRiskInputFromRealtime(
   /* ================= WHALE DETECT ================= */
 
   const whaleDetected = detectWhale({
-    prevOI,
-    currentOI: lastOI,
-    recentVolume: lastVolume,
-    avgVolume: prevVolume,
+    prevOI: prevOpenInterest,
+    currentOI: openInterest,
+    recentVolume: lastVolumeRaw,
+    avgVolume: prevVolumeRaw,
   })
 
   /* ================= EXTREME ================= */
@@ -175,6 +186,12 @@ export async function buildRiskInputFromRealtime(
       ? fundingRaw
       : 0
 
+  let fundingBias: 'LONG_HEAVY' | 'SHORT_HEAVY' | 'NEUTRAL'
+
+  if (fundingRate > 0.0005) fundingBias = 'LONG_HEAVY'
+  else if (fundingRate < -0.0005) fundingBias = 'SHORT_HEAVY'
+  else fundingBias = 'NEUTRAL'
+
   /* ================= ACTION GATE ================= */
 
   const whalePressure: ActionGateInput['whalePressure'] =
@@ -190,16 +207,27 @@ export async function buildRiskInputFromRealtime(
     volatility,
     whaleIntensity,
     fundingRate,
+
+    /* 🔥 확장 */
+    openInterest,
+    prevOpenInterest,
+    oiDeltaRatio,
+    volumeRatio,
+    fundingBias,
+
     extremeSignal,
     preExtreme,
     marketPulse,
+
     whalePressure,
     participationState,
-    bollingerRegime: bollingerObservation.bollingerRegime,
+    bollingerRegime:
+      bollingerObservation.bollingerRegime,
     elliott: { possible: true },
     trend: { valid: true },
     fibonacci: { overextended: false },
     momentum: { valid: true },
+
     ts: Date.now(),
   }
 }

@@ -1,5 +1,3 @@
-// lib/realtime/sseConnectionManager.ts
-
 import { SSE_EVENT } from './types'
 import {
   handleWhaleIntensityEffect,
@@ -7,9 +5,11 @@ import {
 } from './whaleEffects'
 import { handleRiskUpdate } from './vipEffects'
 
+/* 🔥 UI BRIDGE */
+import { applyRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
+
 type Handler = (data: any) => void
 
-// ✅ Market 계열 이벤트 (전달 보장 대상)
 const MARKET_EVENTS = new Set([
   'PRICE_TICK',
   'OI_TICK',
@@ -37,6 +37,7 @@ class SSEConnectionManager {
 
     this.es.onmessage = (e) => {
       let msg: any
+
       try {
         msg = JSON.parse(e.data)
       } catch {
@@ -47,8 +48,7 @@ class SSEConnectionManager {
       if (!type) return
 
       /* =========================
-       * 🔇 로그 폭주 최소 차단
-       * - Market 이벤트는 RAW 로그 제외
+       * 🔇 로그 최소화
        * ========================= */
       if (
         process.env.NODE_ENV !== 'production' &&
@@ -69,7 +69,7 @@ class SSEConnectionManager {
       }
 
       /* =========================
-       * 🐋 Whale Side Effects
+       * 🐋 Whale Effects
        * ========================= */
       if (type === SSE_EVENT.WHALE_INTENSITY) {
         handleWhaleIntensityEffect({
@@ -92,8 +92,42 @@ class SSEConnectionManager {
         })
       }
 
+      /* =====================================================
+       * 🔍 2️⃣ SSE 레벨 실제 수신 값 확인 (중요)
+       * ===================================================== */
+
+      if (type === SSE_EVENT.BB_SIGNAL) {
+        console.log(
+          '[SSE CONFIRMED]',
+          'signalType:',
+          msg.signalType,
+          '| confirmed:',
+          msg.confirmed,
+          '| timeframe:',
+          msg.timeframe
+        )
+
+        try {
+          applyRealtimeBollingerSignal(msg)
+        } catch (err) {
+          console.error('[BB_SIGNAL error]', err)
+        }
+      }
+
+      if (type === 'BB_LIVE_COMMENTARY') {
+        console.log(
+          '[SSE LIVE]',
+          'signalType:',
+          msg.signalType,
+          '| confirmed:',
+          msg.confirmed,
+          '| timeframe:',
+          msg.timeframe
+        )
+      }
+
       /* =========================
-       * 📡 Fan-out to subscribers
+       * 📡 Fan-out
        * ========================= */
       this.handlers.get(type)?.forEach((handler) => {
         try {
@@ -124,11 +158,13 @@ class SSEConnectionManager {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set())
     }
+
     this.handlers.get(type)!.add(handler)
 
     return () => {
       this.handlers.get(type)?.delete(handler)
       this.refCount--
+
       if (this.refCount <= 0) {
         this.es?.close()
         this.es = null

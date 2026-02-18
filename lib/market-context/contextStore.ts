@@ -6,6 +6,10 @@ if (typeof window !== 'undefined') {
 
 const CONTEXT_KEY = 'market:context:latest'
 
+/* =========================================================
+   Stored Market Context (SSOT)
+========================================================= */
+
 export interface StoredMarketContext {
   headlines: {
     source: string
@@ -19,9 +23,14 @@ export interface StoredMarketContext {
   updatedAt: number
 }
 
+/* =========================================================
+   Save Market Context
+========================================================= */
+
 export async function saveMarketContext(
   data: Omit<StoredMarketContext, 'updatedAt'>
-) {
+): Promise<StoredMarketContext> {
+
   const payload: StoredMarketContext = {
     ...data,
     updatedAt: Date.now(),
@@ -31,15 +40,17 @@ export async function saveMarketContext(
     CONTEXT_KEY,
     JSON.stringify(payload),
     'EX',
-    60 * 60 * 12
+    60 * 60 * 12 // 12시간 유지
   )
 
   return payload
 }
 
-export async function getMarketContext(): Promise<
-  StoredMarketContext | null
-> {
+/* =========================================================
+   Get Market Context
+========================================================= */
+
+export async function getMarketContext(): Promise<StoredMarketContext | null> {
   const raw = await redis.get(CONTEXT_KEY)
   if (!raw) return null
 

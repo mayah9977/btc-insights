@@ -1,10 +1,11 @@
 FROM node:20-slim
 
-# Chromium 설치
+# Chromium + 한글 폰트 설치
 RUN apt-get update && apt-get install -y \
   chromium \
   ca-certificates \
   fonts-liberation \
+  fonts-noto-cjk \
   libasound2 \
   libatk1.0-0 \
   libatk-bridge2.0-0 \
@@ -26,11 +27,14 @@ RUN apt-get update && apt-get install -y \
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm install
+
 COPY . .
 RUN npm run build
 
 ENV PORT=8080
 EXPOSE 8080
+
 CMD ["node", "dist/server.js"]

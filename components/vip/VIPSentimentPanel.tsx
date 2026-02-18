@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useSpring, useMotionValue } from 'framer-motion'
 import { subscribeSentiment } from '@/lib/realtime/marketChannel'
 import { VIPSentimentFlashOverlay } from './VIPSentimentFlashOverlay'
+import VIPSentimentGuide from './VIPSentimentGuide' // ✅ 추가
 
 type Props = {
   symbol?: string
@@ -18,7 +19,7 @@ function getLabel(v: number) {
 }
 
 function getColor(v: number) {
-  if (v < 25) return '#dc2626'
+  if (v < 25) return '#ef4444'
   if (v < 45) return '#f97316'
   if (v < 60) return '#eab308'
   if (v < 75) return '#22c55e'
@@ -28,19 +29,21 @@ function getColor(v: number) {
 export default function VIPSentimentPanel({
   symbol = 'BTCUSDT',
 }: Props) {
+
   const [value, setValue] = useState(50)
-  const [glow, setGlow] = useState(false)
   const [flash, setFlash] = useState(false)
   const [flashType, setFlashType] =
     useState<'FEAR' | 'GREED' | null>(null)
 
   const prevValueRef = useRef(50)
   const lastFlashRef = useRef(0)
-  const vibrationStrengthRef = useRef(0)
 
-  /* =========================
-   * 🔥 SSE 구독
-   * ========================= */
+  const motionVal = useMotionValue(50)
+  const smoothValue = useSpring(motionVal, {
+    stiffness: 80,
+    damping: 20,
+  })
+
   useEffect(() => {
     const unsub = subscribeSentiment(
       symbol.toUpperCase(),
@@ -48,16 +51,7 @@ export default function VIPSentimentPanel({
         if (!Number.isFinite(sentiment)) return
 
         const prev = prevValueRef.current
-        const diff = Math.abs(sentiment - prev)
 
-        /* 🔥 급격한 변화 glow */
-        if (diff >= 12) {
-          setGlow(true)
-          vibrationStrengthRef.current = 4
-          setTimeout(() => setGlow(false), 1200)
-        }
-
-        /* 🔥 EXTREME 진입 감지 */
         const enteringFear =
           sentiment < 15 && prev >= 15
         const enteringGreed =
@@ -76,10 +70,11 @@ export default function VIPSentimentPanel({
           setFlashType(
             enteringFear ? 'FEAR' : 'GREED',
           )
-          setTimeout(() => setFlash(false), 800)
+          setTimeout(() => setFlash(false), 900)
         }
 
         prevValueRef.current = sentiment
+        motionVal.set(sentiment)
         setValue(sentiment)
       },
     )
@@ -87,35 +82,10 @@ export default function VIPSentimentPanel({
     return () => unsub()
   }, [symbol])
 
-  /* =========================
-   * 회전값
-   * ========================= */
   const rotation = (value / 100) * 180 - 90
-
-  /* =========================
-   * 진동 감쇠 로직
-   * ========================= */
-  const vibration =
-    vibrationStrengthRef.current > 0
-      ? [
-          0,
-          -vibrationStrengthRef.current,
-          vibrationStrengthRef.current,
-          -vibrationStrengthRef.current / 2,
-          0,
-        ]
-      : 0
-
-  if (vibrationStrengthRef.current > 0) {
-    vibrationStrengthRef.current *= 0.7
-    if (vibrationStrengthRef.current < 0.5) {
-      vibrationStrengthRef.current = 0
-    }
-  }
 
   return (
     <>
-      {/* 🔥 Full Screen Flash */}
       <VIPSentimentFlashOverlay
         show={flash}
         type={flashType}
@@ -123,79 +93,100 @@ export default function VIPSentimentPanel({
 
       <motion.div
         animate={{
-          boxShadow: glow
-            ? `0 0 30px ${getColor(value)}55`
-            : '0 0 0px transparent',
+          boxShadow: `0 0 50px ${getColor(value)}33`,
         }}
-        transition={{ duration: 0.8 }}
-        className="bg-neutral-900 border border-neutral-800 rounded-xl p-6"
+        transition={{ duration: 0.6 }}
+        className="
+          relative
+          rounded-2xl
+          p-[2px]
+          bg-gradient-to-r
+          from-neutral-800
+          via-neutral-600
+          to-neutral-800
+        "
       >
-        <div className="text-sm text-neutral-400 mb-4">
-          Market Sentiment Index (시장 심리 지수)
-        </div>
+        <div className="relative bg-black rounded-2xl p-8 overflow-hidden">
 
-        <div className="relative h-44 flex items-end justify-center overflow-hidden">
-          {/* 반원 배경 */}
-          <div className="absolute w-72 h-72 rounded-full border-[14px] border-neutral-800 top-[-160px]" />
-
-          {/* arc */}
-          <div
-            className="absolute w-72 h-72 rounded-full top-[-160px]"
-            style={{
-              background: `conic-gradient(
-                ${getColor(value)} 0deg ${value * 1.8}deg,
-                transparent ${value * 1.8}deg 180deg
-              )`,
-              maskImage:
-                'radial-gradient(circle at center, transparent 58%, black 59%)',
-              WebkitMaskImage:
-                'radial-gradient(circle at center, transparent 58%, black 59%)',
-            }}
+          {/* Background aura */}
+          <motion.div
+            animate={{ opacity: [0.05, 0.12, 0.05] }}
+            transition={{ repeat: Infinity, duration: 4 }}
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
           />
 
-          {/* 바늘 */}
-          <motion.div
-            initial={{ rotate: -90 }}
-            animate={{
-              rotate: rotation,
-              x: vibration,
-            }}
-            transition={{
-              rotate: { duration: 0.6, ease: 'easeOut' },
-              x: { duration: 0.35 },
-            }}
-            className="absolute w-72 h-72 top-[-160px]"
-            style={{ transformOrigin: '50% 50%' }}
-          >
-            <div
-              className="absolute w-[3px] h-36 bottom-0 left-1/2"
+          <div className="text-sm text-neutral-400 mb-6">
+            Market Sentiment Index (시장 심리 지수)
+          </div>
+
+          <div className="relative h-52 flex items-end justify-center">
+
+            <div className="absolute w-80 h-80 rounded-full border border-neutral-700 top-[-180px]" />
+
+            <motion.div
+              className="absolute w-80 h-80 rounded-full top-[-180px]"
               style={{
-                background: getColor(value),
-                transform: 'translateX(-50%)',
+                background: `conic-gradient(
+                  ${getColor(value)} 0deg ${value * 1.8}deg,
+                  transparent ${value * 1.8}deg 180deg
+                )`,
+                maskImage:
+                  'radial-gradient(circle at center, transparent 60%, black 61%)',
+                WebkitMaskImage:
+                  'radial-gradient(circle at center, transparent 60%, black 61%)',
               }}
             />
-          </motion.div>
 
-          {/* 중앙 값 */}
-          <div className="relative z-10 text-center">
-            <div className="text-3xl font-bold text-white">
-              {value}
-            </div>
-            <div
-              className="text-sm mt-1 font-medium"
-              style={{ color: getColor(value) }}
+            <motion.div
+              animate={{ rotate: rotation }}
+              transition={{
+                duration: 0.8,
+                ease: 'easeOut',
+              }}
+              className="absolute w-80 h-80 top-[-180px]"
+              style={{ transformOrigin: '50% 50%' }}
             >
-              {getLabel(value)}
-            </div>
-          </div>
-        </div>
+              <div
+                className="absolute w-[3px] h-40 bottom-0 left-1/2"
+                style={{
+                  background: getColor(value),
+                  transform: 'translateX(-50%)',
+                }}
+              />
+            </motion.div>
 
-        <div className="mt-3 flex justify-between text-xs text-neutral-500">
-          <span>0</span>
-          <span>50</span>
-          <span>100</span>
+            <div className="relative z-10 text-center">
+              <motion.div
+                style={{ color: getColor(value) }}
+                className="text-4xl font-bold"
+              >
+                {value}
+              </motion.div>
+
+              <motion.div
+                animate={{ opacity: [0.6, 1, 0.6] }}
+                transition={{ repeat: Infinity, duration: 3 }}
+                className="text-sm mt-2"
+                style={{ color: getColor(value) }}
+              >
+                {getLabel(value)}
+              </motion.div>
+            </div>
+
+          </div>
+
+          <div className="mt-6 flex justify-between text-xs text-neutral-500">
+            <span>0</span>
+            <span>50</span>
+            <span>100</span>
+          </div>
+
         </div>
       </motion.div>
+
+      {/* ✅ VIP 고급 해석 가이드 연결 */}
+      <VIPSentimentGuide value={value} />
+
     </>
   )
 }

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/generate-context",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/vip-report",
+      "schedule": "5 0 * * *"
     }
   ]
 }
