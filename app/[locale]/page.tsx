@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default async function LocalePage({
+export function generateStaticParams() {
+  return [{ locale: "ko" }];
+}
+
+export default function LocalePage({
   params,
 }: {
   params: { locale: string };
