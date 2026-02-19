@@ -3,7 +3,18 @@ import { aggregateVipMetrics } from '@/lib/vip/aggregateVipMetrics'
 import { aggregateRiskMetrics } from '@/lib/vip/metrics/aggregateRiskMetrics'
 
 /* =========================================================
-   Clean Snapshot (BTC Insight SSOT 전용)
+   ✅ Legacy 타입 (getVipKpiSnapshot.ts 호환용)
+   👉 반드시 export 필요 (빌드 에러 해결)
+========================================================= */
+export type VipKpiSnapshot = {
+  avoidedExtremeCount: number
+  totalSignals: number
+  winRate: number
+  lastUpdated: string | null
+}
+
+/* =========================================================
+   ✅ Clean Snapshot (현재 SSOT 구조)
 ========================================================= */
 export type VipKpiSnapshotClean = {
   avoidedExtremeCount: number
@@ -33,33 +44,33 @@ export type VipKpiSnapshotClean = {
 const TARGET_KEY = 'vip:kpi:snapshot'
 
 export async function aggregateDailyVipKpi() {
-  /* =========================================================
-     1️⃣ Hash 기반 RiskEvent SSOT
-  ========================================================= */
-
   const keys = await redis.keys('vip:risk:event:*')
 
   if (!keys.length) {
+    const emptySnapshot: VipKpiSnapshotClean = {
+      avoidedExtremeCount: 0,
+      riskMetrics: {
+        extremeCount: 0,
+        highCount: 0,
+        transitions: 0,
+        stableRatio: 0,
+      },
+      weeklySummary: {
+        period: '7d',
+        avoidedExtremeCount: 0,
+      },
+      monthlySummary: {
+        period: '30d',
+        avoidedExtremeCount: 0,
+      },
+      updatedAt: Date.now(),
+    }
+
     await redis.set(
       TARGET_KEY,
-      JSON.stringify({
-        avoidedExtremeCount: 0,
-        riskMetrics: {
-          extremeCount: 0,
-          highCount: 0,
-          transitions: 0,
-          stableRatio: 0,
-        },
-        weeklySummary: {
-          period: '7d',
-          avoidedExtremeCount: 0,
-        },
-        monthlySummary: {
-          period: '30d',
-          avoidedExtremeCount: 0,
-        },
-        updatedAt: Date.now(),
-      }),
+      JSON.stringify(emptySnapshot),
+      'EX',
+      60 * 60 * 48,
     )
 
     return
@@ -90,23 +101,9 @@ export async function aggregateDailyVipKpi() {
   const typedEvents =
     events as import('@/lib/vip/redis/saveRiskEvent').RiskEvent[]
 
-  /* =========================================================
-     2️⃣ 7d / 30d 집계 (기존 로직 유지)
-  ========================================================= */
-
   const weekly = aggregateVipMetrics(typedEvents, 7)
   const monthly = aggregateVipMetrics(typedEvents, 30)
-
-  /* =========================================================
-     3️⃣ Honest Risk KPI (StableRatio / Transition 출처)
-     👉 aggregateRiskMetrics 가 단일 출처(SSOT)
-  ========================================================= */
-
   const riskMetrics = aggregateRiskMetrics(typedEvents)
-
-  /* =========================================================
-     4️⃣ Clean Snapshot 저장
-  ========================================================= */
 
   const snapshot: VipKpiSnapshotClean = {
     avoidedExtremeCount: monthly.avoidedExtremeCount,
@@ -131,7 +128,6 @@ export async function aggregateDailyVipKpi() {
     updatedAt: Date.now(),
   }
 
-  // 🔥 48시간 TTL (안정형)
   await redis.set(
     TARGET_KEY,
     JSON.stringify(snapshot),
