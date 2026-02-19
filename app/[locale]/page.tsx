@@ -9,7 +9,9 @@ export function generateStaticParams() {
 export default function LocalePage({
   params,
 }: {
-  params: { locale: string };
+  params: { locale?: string };
 }) {
-  redirect(`/${params.locale}/casino`);
+  const locale = params?.locale ?? "ko";
+
+  redirect(`/${locale}/casino`);
 }
