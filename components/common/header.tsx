@@ -1,15 +1,20 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useParams } from "next/navigation";
 
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const params = useParams();
+
+  // ✅ locale 안전 추출
+  const locale =
+    typeof params?.locale === "string" ? params.locale : "ko";
 
   // 루트(/)와 /ko 에서는 뒤로가기 숨김
   const canGoBack =
     pathname !== "/" &&
-    pathname !== "/ko";
+    pathname !== `/${locale}`;
 
   return (
     <header
@@ -33,9 +38,13 @@ export default function Header() {
           </button>
         )}
 
-        <span className="font-bold tracking-wide">
+        {/* ✅ 로고 클릭 시 항상 locale 루트로 이동 */}
+        <button
+          onClick={() => router.push(`/${locale}`)}
+          className="font-bold tracking-wide hover:opacity-80 transition"
+        >
           BTC 인사이트
-        </span>
+        </button>
       </div>
     </header>
   );
