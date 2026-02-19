@@ -1,3 +1,5 @@
+// lib/telegram/telegramBot.ts
+
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
@@ -14,6 +16,7 @@ import { sendVipReportPdf } from './sendVipReportPdf'
  */
 
 const token = process.env.TELEGRAM_BOT_TOKEN
+
 if (!token) {
   console.error('[Telegram] ❌ TELEGRAM_BOT_TOKEN is undefined')
   process.exit(1)
@@ -30,27 +33,36 @@ bot.on('message', async (msg: Message) => {
   if (msg.text === '/start') {
     await bot.sendMessage(
       msg.chat.id,
-      '🚀 알림 봇이 연결되었습니다.',
+      '🚀 VIP 리포트 봇이 연결되었습니다.',
     )
   }
 })
 
-/** 🔘 콜백 (PDF 재전송) */
+/** 🔘 콜백 (PDF 생성 & 전송) */
 bot.on('callback_query', async (query: CallbackQuery) => {
   if (!query.message) return
 
-  const pdfBytes = await generateTelegramVipReport({
-    date: new Date().toISOString().slice(0, 10),
-    judgement: '시장 리스크 HIGH — EXTREME 회피 권장',
-    scenarios: [
-      { title: '상승 지속', probability: 45 },
-      { title: '조정 후 반등', probability: 35 },
-    ],
-  })
+  try {
+    console.log('[Telegram] 🔘 Callback received')
 
-  await sendVipReportPdf(
-    query.message.chat.id,
-    pdfBytes,
-    'VIP_Report_Today.pdf',
-  )
+    /**
+     * ✅ 최신 구조 기준
+     * generateTelegramVipReport는 chartBase64만 받음
+     * (현재는 placeholder 이미지 사용)
+     */
+    const pdfBytes = await generateTelegramVipReport({
+      chartBase64:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ajmR6cAAAAASUVORK5CYII=',
+    })
+
+    await sendVipReportPdf(
+      query.message.chat.id,
+      pdfBytes,
+      'VIP_Report_Today.pdf',
+    )
+
+    console.log('[Telegram] ✅ PDF sent')
+  } catch (err) {
+    console.error('[Telegram] ❌ PDF send error:', err)
+  }
 })

@@ -1,23 +1,30 @@
+// lib/telegram/generateTelegramVipReport.ts
+
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 
-export async function generateTelegramVipReport(
-  input: {
-    date: string
-    judgement: string
-    scenarios: { title: string; probability: number }[]
-  },
-): Promise<Uint8Array> {
-  const pdfBytes = await generateVipDailyReportPdf({
-    date: input.date,
+export async function generateTelegramVipReport(input: {
+  chartBase64: string
+}) {
+  const pdfBuffer = await generateVipDailyReportPdf({
+    date: new Date().toISOString().slice(0, 10),
     market: 'BTC',
     vipLevel: 'VIP3',
-    riskLevel: 'HIGH',
-    judgement: input.judgement,
-    scenarios: input.scenarios,
 
-    // ✅ 필수 추가 (서버용 placeholder)
-    chartBase64: 'data:image/png;base64,',
+    btcPrice: 0,
+    openInterest: 0,
+    fundingRate: 0,
+    candleChartBase64: input.chartBase64,
+
+    whaleIntensity: 0,
+    whaleInterpretation: 'Whale data unavailable',
+
+    sentimentIndex: 50,
+    sentimentRegime: 'NEUTRAL',
+    sentimentInterpretation: 'Market sentiment neutral',
+
+    newsSummary: 'No news summary available',
+    newsMidLongTerm: 'No structural outlook available',
   })
 
-  return new Uint8Array(pdfBytes)
+  return pdfBuffer
 }
