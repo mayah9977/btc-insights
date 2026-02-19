@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-static";
+
 export function generateStaticParams() {
   return [{ locale: "ko" }];
 }

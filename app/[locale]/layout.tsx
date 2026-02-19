@@ -1,25 +1,15 @@
-'use client'
-
 import type { ReactNode } from 'react'
-import { useEffect } from 'react'
-
 import Header from '@/components/common/header'
-import { useAlertsSSEStore } from '@/lib/alerts/alertsSSEStore'
+import LocaleClientBootstrap from './LocaleClientBootstrap'
 
 export default function LocaleLayout({
   children,
 }: {
   children: ReactNode
 }) {
-  const bootstrapAlertsSSE = useAlertsSSEStore((s) => s.bootstrap)
-
-  useEffect(() => {
-    bootstrapAlertsSSE()
-  }, [bootstrapAlertsSSE])
-
   return (
     <>
-      {/* ✅ locale prop 제거 */}
+      <LocaleClientBootstrap />
       <Header />
 
       <main className="pt-14">
