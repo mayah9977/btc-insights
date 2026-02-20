@@ -6,34 +6,45 @@ export async function sendVipReportPdf(
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) throw new Error('Missing TELEGRAM_BOT_TOKEN')
 
-  const form = new FormData()
+  /* =========================================
+     1️⃣ multipart boundary 생성
+  ========================================= */
+  const boundary = '----TelegramBoundary' + Date.now()
 
-  form.append('chat_id', String(chatId))
+  /* =========================================
+     2️⃣ multipart header 구성
+  ========================================= */
+  const header =
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="chat_id"\r\n\r\n` +
+    `${chatId}\r\n` +
 
-  // ✅ Uint8Array → Node Buffer 변환 (가장 안정적)
-  const fileBuffer = Buffer.from(pdf)
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="document"; filename="${filename}"\r\n` +
+    `Content-Type: application/pdf\r\n\r\n`
 
-  form.append('document', fileBuffer as any, filename)
+  const footer = `\r\n--${boundary}--\r\n`
 
-  form.append(
-    'reply_markup',
-    JSON.stringify({
-      inline_keyboard: [
-        [
-          {
-            text: '📄 리포트 다시 받기',
-            callback_data: 'vip_report_redownload',
-          },
-        ],
-      ],
-    })
-  )
+  /* =========================================
+     3️⃣ Buffer로 최종 body 구성
+  ========================================= */
+  const body = Buffer.concat([
+    Buffer.from(header, 'utf8'),
+    Buffer.from(pdf),
+    Buffer.from(footer, 'utf8'),
+  ])
 
+  /* =========================================
+     4️⃣ Telegram API 호출
+  ========================================= */
   const res = await fetch(
     `https://api.telegram.org/bot${token}/sendDocument`,
     {
       method: 'POST',
-      body: form as any,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
     }
   )
 
