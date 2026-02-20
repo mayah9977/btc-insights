@@ -14,7 +14,6 @@ export function MarketContextPanel() {
   const [data, setData] = useState<MarketContextData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  /* 🔥 새 데이터 도착 감지용 */
   const prevUpdatedAtRef = useRef<number | null>(null)
   const [showFlash, setShowFlash] = useState(false)
   const [showToast, setShowToast] = useState(false)
@@ -35,29 +34,55 @@ export function MarketContextPanel() {
 
         const json = await res.json()
 
-        if (json?.ok && json?.data && isMounted) {
-          setData((prev) => {
-            if (!prev || prev.updatedAt !== json.data.updatedAt) {
-
-              /* 🔥 updatedAt 변경 감지 */
-              if (
-                prev &&
-                prevUpdatedAtRef.current &&
-                prevUpdatedAtRef.current !== json.data.updatedAt
-              ) {
-                setShowFlash(true)
-                setShowToast(true)
-
-                setTimeout(() => setShowFlash(false), 1200)
-                setTimeout(() => setShowToast(false), 4000)
-              }
-
-              prevUpdatedAtRef.current = json.data.updatedAt
-              return json.data
-            }
-            return prev
-          })
+        if (!json?.ok || !json?.data || !isMounted) {
+          if (isMounted) setLoading(false)
+          return
         }
+
+        const newData: MarketContextData = json.data
+
+        setData((prev) => {
+          /* =========================
+             🔐 1️⃣ 유효성 검사
+          ========================= */
+          const isValid =
+            newData.summary &&
+            newData.summary.trim().length > 20 &&
+            newData.midLongTerm &&
+            newData.midLongTerm.trim().length > 20 &&
+            newData.translatedHeadlines &&
+            newData.translatedHeadlines.length > 0
+
+          if (!isValid) {
+            console.warn(
+              '[MarketContextPanel] Invalid new data → keeping previous'
+            )
+            return prev
+          }
+
+          /* =========================
+             🔄 2️⃣ updatedAt 변경 감지
+          ========================= */
+          if (!prev || prev.updatedAt !== newData.updatedAt) {
+
+            if (
+              prev &&
+              prevUpdatedAtRef.current &&
+              prevUpdatedAtRef.current !== newData.updatedAt
+            ) {
+              setShowFlash(true)
+              setShowToast(true)
+
+              setTimeout(() => setShowFlash(false), 1200)
+              setTimeout(() => setShowToast(false), 4000)
+            }
+
+            prevUpdatedAtRef.current = newData.updatedAt
+            return newData
+          }
+
+          return prev
+        })
       } catch (error) {
         console.error('[MarketContextPanel] fetch error:', error)
       } finally {
@@ -76,6 +101,10 @@ export function MarketContextPanel() {
       clearInterval(interval)
     }
   }, [])
+
+  /* =========================
+     🧱 로딩 / 대기 UI
+  ========================= */
 
   if (loading) {
     return (
@@ -96,9 +125,12 @@ export function MarketContextPanel() {
   const updatedDate = new Date(data.updatedAt)
   const timeLabel = `${updatedDate.toLocaleDateString()} ${updatedDate.toLocaleTimeString()}`
 
+  /* =========================
+     🎨 렌더
+  ========================= */
+
   return (
     <>
-      {/* 🔔 상단 새 정보 알림 */}
       <AnimatePresence>
         {showToast && (
           <motion.div
@@ -125,7 +157,7 @@ export function MarketContextPanel() {
           initial={{ opacity: 0, y: 50, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.9 }}
           className="
             relative mt-8 overflow-hidden
             rounded-3xl
@@ -135,7 +167,6 @@ export function MarketContextPanel() {
             shadow-[0_30px_100px_rgba(0,0,0,0.8)]
           "
         >
-          {/* 🔥 새 데이터 도착 시 골드 플래시 */}
           <AnimatePresence>
             {showFlash && (
               <motion.div
@@ -148,45 +179,16 @@ export function MarketContextPanel() {
             )}
           </AnimatePresence>
 
-          {/* 기존 골드 shimmer */}
-          <motion.div
-            className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-yellow-400 to-transparent"
-            animate={{ x: ['-100%', '100%'] }}
-            transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-          />
-
-          {/* 기존 골드 glow */}
-          <motion.div
-            className="absolute inset-0 rounded-3xl pointer-events-none"
-            animate={{
-              boxShadow: [
-                '0 0 0px rgba(255,215,0,0)',
-                '0 0 40px rgba(255,215,0,0.08)',
-                '0 0 0px rgba(255,215,0,0)',
-              ],
-            }}
-            transition={{ duration: 6, repeat: Infinity }}
-          />
-
-          {/* Header */}
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold tracking-wide text-yellow-400">
               📰 오늘의 주요뉴스와 전망
             </h3>
 
-            <motion.span
-              animate={{
-                opacity: [0.5, 1, 0.5],
-                scale: [1, 1.02, 1],
-              }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="text-xs text-yellow-500/70"
-            >
+            <span className="text-xs text-yellow-500/70">
               Updated: {timeLabel}
-            </motion.span>
+            </span>
           </div>
 
-          {/* Headlines */}
           <div className="space-y-4 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
               🔹 Latest Headlines
@@ -194,58 +196,33 @@ export function MarketContextPanel() {
 
             <ul className="space-y-3 text-gray-300">
               {(data.translatedHeadlines ?? []).map((title, idx) => (
-                <motion.li
+                <li
                   key={`${data.updatedAt}-${idx}`}
-                  initial={{ opacity: 0, x: -25 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{
-                    delay: idx * 0.15,
-                    type: 'spring',
-                    stiffness: 80,
-                  }}
-                  className="
-                    transition-all duration-300
-                    hover:text-yellow-400
-                    hover:translate-x-1
-                  "
+                  className="hover:text-yellow-400 transition-all duration-300"
                 >
                   • {title}
-                </motion.li>
+                </li>
               ))}
             </ul>
           </div>
 
-          {/* Summary */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="space-y-3 text-sm mt-6"
-          >
+          <div className="space-y-3 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
               🔎 시장 요약
             </h4>
-
             <p className="whitespace-pre-line leading-relaxed text-gray-300">
               {data.summary}
             </p>
-          </motion.div>
+          </div>
 
-          {/* Mid/Long */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="space-y-3 text-sm mt-6"
-          >
+          <div className="space-y-3 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
               🧭 중장기 해석
             </h4>
-
             <p className="whitespace-pre-line leading-relaxed text-gray-300">
               {data.midLongTerm}
             </p>
-          </motion.div>
+          </div>
         </motion.section>
       </AnimatePresence>
     </>

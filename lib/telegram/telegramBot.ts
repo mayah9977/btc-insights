@@ -1,5 +1,3 @@
-// lib/telegram/telegramBot.ts
-
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
@@ -45,15 +43,8 @@ bot.on('callback_query', async (query: CallbackQuery) => {
   try {
     console.log('[Telegram] 🔘 Callback received')
 
-    /**
-     * ✅ 최신 구조 기준
-     * generateTelegramVipReport는 chartBase64만 받음
-     * (현재는 placeholder 이미지 사용)
-     */
-    const pdfBytes = await generateTelegramVipReport({
-      chartBase64:
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ajmR6cAAAAASUVORK5CYII=',
-    })
+    // ✅ 최신 구조: 인자 없이 호출
+    const pdfBytes = await generateTelegramVipReport()
 
     await sendVipReportPdf(
       query.message.chat.id,

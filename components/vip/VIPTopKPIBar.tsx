@@ -85,7 +85,7 @@ export default function VIPTopKPIBar({
             "
           >
             <p className="text-xs text-green-400">
-              Risk Observation System (리스크 관측 시스템)
+              AI Risk Observation System (AI 기반 리스크 관측 시스템)
             </p>
             <p className="text-2xl font-bold text-green-300">
               시스템 활용방법

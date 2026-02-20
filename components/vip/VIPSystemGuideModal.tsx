@@ -38,7 +38,7 @@ export default function VIPSystemGuideModal() {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
             <h2 className="text-lg font-semibold text-white">
-              VIP 시스템 안내
+              AI 기반 실시간 확률적 위험 감지모델
             </h2>
 
             <button
@@ -97,8 +97,8 @@ export default function VIPSystemGuideModal() {
                     2️⃣ 활용 방법
                   </h3>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>고래 체결 강도가 0.55 이상 상승 시 경계 구간 주의</li>
-                    <li>0.7 이상 + Spike 발생 시 고위험 구간 주의</li>
+                    <li>VIP 레포트를 통해 최근 뉴스와 온체인데이터를 기반으로한 크립토시장을 분석하고 전망하는데 활용가능하다.</li>
+                    <li>시장심리지수를 통해 현재 시장의 분위기를 파악하는것이 가능해 매매에 활용할수 있다.</li>
                     <li>실시간데이터를 기반으로한 분석을 이용, 위험구간을 미리 감지해 포지션의 크기를 줄이는데 활용가능하다.</li>
                     <li>데이터를 기반으로 분석된 내용을 토대로 리스크가 적은 진입시점을 판단하는데 도움을 받을수 있다.</li>
                     <li>분석된 내용이 즉시 확인가능하므로, 시장상황의 리스크를 바로 감지할수 있다. </li>

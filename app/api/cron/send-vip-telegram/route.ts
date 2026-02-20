@@ -1,5 +1,6 @@
-import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { redis } from '@/lib/redis/server'
+import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
+import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'
 
 /* 🔥 Multi On-chain */
 import { fetchOnchainMultiSource } from '@/lib/onchain/fetchOnchainMultiSource'
@@ -17,12 +18,27 @@ export const dynamic = 'force-dynamic'
 
 const NEWS_KEY = 'market:context:latest'
 const ONCHAIN_CACHE_KEY = 'vip:onchain:summary'
+const TELEGRAM_USERS_KEY = 'vip:telegram:users'
 
 export async function GET() {
   try {
+    console.log('[CRON] 🚀 send-vip-telegram started')
 
     /* =====================================================
-       1️⃣ News
+       1️⃣ Telegram VIP 유저 목록 조회
+    ===================================================== */
+
+    const chatIds: string[] = await redis.smembers(TELEGRAM_USERS_KEY)
+
+    if (!chatIds || chatIds.length === 0) {
+      console.log('[CRON] ❌ No telegram users found')
+      return Response.json({ ok: false, message: 'No telegram users' })
+    }
+
+    console.log(`[CRON] 👥 ${chatIds.length} users found`)
+
+    /* =====================================================
+       2️⃣ News
     ===================================================== */
 
     let newsSummary =
@@ -38,11 +54,11 @@ export async function GET() {
         newsMidLongTerm = parsed?.midLongTerm ?? newsMidLongTerm
       }
     } catch (err) {
-      console.error('[NEWS PARSE ERROR]', err)
+      console.error('[NEWS ERROR]', err)
     }
 
     /* =====================================================
-       2️⃣ On-chain (Hybrid)
+       3️⃣ On-chain Hybrid
     ===================================================== */
 
     let externalOnchainSource = ''
@@ -71,7 +87,6 @@ export async function GET() {
         if (useRss && rssItem) {
           externalOnchainSource =
             `${rssItem.source} (${rssItem.pubDate})`
-
           externalOnchainSummary =
             await summarizeExternalOnchain(rssItem)
         } else {
@@ -90,15 +105,15 @@ export async function GET() {
             summary: externalOnchainSummary,
           }),
           'EX',
-          60 * 60 * 24
+          60 * 60 * 24,
         )
       }
     } catch (err) {
-      console.error('[Hybrid Onchain ERROR]', err)
+      console.error('[ONCHAIN ERROR]', err)
     }
 
     /* =====================================================
-       3️⃣ Fusion
+       4️⃣ Fusion Intelligence
     ===================================================== */
 
     const fusion = await generateFusionIntel({
@@ -112,7 +127,7 @@ export async function GET() {
     })
 
     /* =====================================================
-       4️⃣ PDF 생성 (뉴스 + 온체인 중심)
+       5️⃣ PDF 생성
     ===================================================== */
 
     const pdfBytes = await generateVipDailyReportPdf({
@@ -132,21 +147,43 @@ export async function GET() {
       fusionPositioningPressure: fusion.positioningPressure,
     })
 
-    return new Response(new Uint8Array(pdfBytes), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': 'inline; filename="btc-vip-report.pdf"',
-        'Cache-Control': 'no-store',
-      },
-    })
-  } catch (error: any) {
-    console.error('[VIP REPORT ERROR]', error)
+    /* =====================================================
+       6️⃣ 전체 Telegram 발송
+    ===================================================== */
 
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: error?.message ?? 'unknown error',
-      }),
+    let success = 0
+    let failed = 0
+
+    for (const chatId of chatIds) {
+      try {
+        await sendVipReportPdf(
+          Number(chatId),
+          new Uint8Array(pdfBytes),
+          `VIP_Report_${Date.now()}.pdf`,
+        )
+        success++
+      } catch (err) {
+        console.error('[SEND ERROR]', chatId, err)
+        failed++
+      }
+    }
+
+    console.log(
+      `[CRON] ✅ Completed — success:${success} failed:${failed}`,
+    )
+
+    return Response.json({
+      ok: true,
+      total: chatIds.length,
+      success,
+      failed,
+    })
+
+  } catch (err: any) {
+    console.error('[CRON FATAL ERROR]', err)
+
+    return Response.json(
+      { ok: false, error: err?.message ?? 'unknown error' },
       { status: 500 },
     )
   }

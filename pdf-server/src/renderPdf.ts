@@ -6,11 +6,21 @@ export async function renderPdf(html: string): Promise<Buffer> {
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
 
-  const page = await browser.newPage()
-  await page.setContent(html, { waitUntil: 'networkidle0' })
+  try {
+    const page = await browser.newPage()
 
-  const pdf = await page.pdf({ format: 'A4' })
-  await browser.close()
+    // 🔥 networkidle0 → domcontentloaded (Cloud Run 안정화)
+    await page.setContent(html, {
+      waitUntil: 'domcontentloaded',
+    })
 
-  return Buffer.from(pdf)
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+    })
+
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
 }
