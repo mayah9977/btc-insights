@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/vip-report",
       "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/cron/send-vip-telegram",
+      "schedule": "0 22 * * *"
     }
   ]
 }
