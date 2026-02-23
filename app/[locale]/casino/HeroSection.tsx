@@ -65,7 +65,6 @@ export default function HeroSection({
       ctx.fillStyle = 'rgba(255,255,255,0.35)'
       ctx.fillRect(scanX - 2, 0, 4, h)
 
-      // 🔥 실제 픽셀 색상 읽기
       const pixel = ctx.getImageData(
         Math.min(Math.max(Math.floor(scanX), 0), w - 1),
         Math.floor(h / 2),
@@ -96,10 +95,6 @@ export default function HeroSection({
       .toString(16)
       .slice(1)
 
-  /* =========================
-     기존 코드
-  ========================= */
-
   useEffect(() => {
     const id = setInterval(() => {
       setDwell((d) => d + 1)
@@ -107,13 +102,11 @@ export default function HeroSection({
     return () => clearInterval(id)
   }, [])
 
-  const heroTitle = isLoggedIn
-    ? 'AI 기반 실시간데이터 확률적 위험 감지 모델'
-    : 'AI 기반 위험 감지 시스템 입장 전 브리핑'
+  const heroTitle =
+    'AI 실시간 데이터 기반 확률적 위험 감지 모델'
 
-  const heroDesc = isLoggedIn
-    ? '본 시스템은 매수/매도 신호가 아닌 데이터를 기반으로 위험구간을 알려 사용자의 손실을 줄이는것을 목적으로 설계되었습니다.'
-    : 'VIP 전용 판단 로직에 접근하기 전, 핵심 리스크를 확인하십시오.'
+  const heroDesc =
+    '본 시스템은 매수/매도 신호가 아닌 데이터를 기반으로 위험구간을 알려 사용자의 손실을 줄이는것을 목적으로 설계되었습니다.'
 
   const toneMap = {
     LOW: 'from-emerald-500/10',
@@ -154,23 +147,17 @@ export default function HeroSection({
         space-y-10
       `}
     >
-      {/* Grid */}
-      <div className="
-        pointer-events-none absolute inset-0 opacity-[0.05]
+      <div className="pointer-events-none absolute inset-0 opacity-[0.05]
         bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),
-            linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)]
-        bg-[size:40px_40px]
-      " />
+        linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)]
+        bg-[size:40px_40px]" />
 
       {showVignette && (
-        <div className="
-          pointer-events-none absolute inset-0
+        <div className="pointer-events-none absolute inset-0
           bg-[radial-gradient(circle,transparent_60%,rgba(0,0,0,0.6))]
-          opacity-60 transition-opacity duration-1000
-        " />
+          opacity-60 transition-opacity duration-1000" />
       )}
 
-      {/* 🔥 AI HUD BAR */}
       {isLoggedIn && (
         <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-lg">
           <canvas
@@ -190,7 +177,7 @@ export default function HeroSection({
                 `,
               }}
             >
-              AI analyzing real-time market structure...
+              Structural Risk Engine actively analyzing real-time market dynamics...
             </div>
 
             <div className="text-xs font-mono text-white/80">
@@ -200,7 +187,6 @@ export default function HeroSection({
         </div>
       )}
 
-      {/* 기존 타이틀 */}
       <div className="relative space-y-5">
         <h1 className="text-4xl md:text-5xl font-extrabold text-white">
           {heroTitle}

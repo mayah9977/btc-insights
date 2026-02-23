@@ -31,15 +31,26 @@ export default function HeroCTA({
         <div className="flex gap-4">
           <Link
             href="/ko/login"
-            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition"
+            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-zinc-400"
           >
-            로그인
+            <div className="text-xs uppercase tracking-widest text-zinc-500">
+              Authentication Required
+            </div>
+            <div className="mt-2 text-lg font-semibold text-white">
+              Access Login Portal
+            </div>
           </Link>
+
           <Link
             href="/ko/account/upgrade"
-            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition"
+            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-yellow-400"
           >
-            무료 체험
+            <div className="text-xs uppercase tracking-widest text-zinc-500">
+              Access Elevation
+            </div>
+            <div className="mt-2 text-lg font-semibold text-white">
+              Request VIP Clearance
+            </div>
           </Link>
         </div>
       )}
@@ -47,18 +58,32 @@ export default function HeroCTA({
       {isLoggedIn && !isVIP && (
         <Link
           href="/ko/account/upgrade"
-          className="block rounded-2xl border border-yellow-500/40 bg-gradient-to-br from-yellow-500/10 to-red-500/10 p-6 transition"
+          className="block rounded-2xl border border-yellow-500/40
+          bg-gradient-to-br from-yellow-500/10 to-red-500/10
+          p-6 transition hover:scale-[1.02]"
         >
-          VIP 업그레이드
+          <div className="text-xs uppercase tracking-widest text-yellow-300">
+            Access Level: Restricted
+          </div>
+          <div className="mt-2 text-xl font-semibold text-white">
+            Elevate to VIP Risk Briefing Access
+          </div>
         </Link>
       )}
 
       {isVIP && (
         <Link
           href="/ko/casino/vip"
-          className="block rounded-2xl border border-yellow-500/40 bg-gradient-to-br from-yellow-500/10 to-red-500/10 p-6 transition"
+          className="block rounded-2xl border border-yellow-500/40
+          bg-gradient-to-br from-yellow-500/10 to-red-500/10
+          p-6 transition hover:scale-[1.02]"
         >
-          VIP 시스템 입장
+          <div className="text-xs uppercase tracking-widest text-yellow-300">
+            Clearance Verified
+          </div>
+          <div className="mt-2 text-xl font-semibold text-white">
+            VIP ENTER →
+          </div>
         </Link>
       )}
     </motion.div>
