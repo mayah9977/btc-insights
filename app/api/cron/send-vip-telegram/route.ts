@@ -2,13 +2,9 @@ import { redis } from '@/lib/redis/server'
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'
 
-/* 🔥 Multi On-chain */
-import { fetchOnchainMultiSource } from '@/lib/onchain/fetchOnchainMultiSource'
+/* 🔥 Multi On-chain (RSS Only) */
+import { fetchOnchainMultiList  } from '@/lib/onchain/fetchOnchainMultiList'
 import { summarizeExternalOnchain } from '@/lib/onchain/summarizeExternalOnchain'
-
-/* 🔥 Metrics Engine */
-import { fetchOnchainMetrics } from '@/lib/onchain/fetchOnchainMetrics'
-import { summarizeOnchainMetrics } from '@/lib/onchain/summarizeOnchainMetrics'
 
 /* 🔥 Fusion Engine */
 import { generateFusionIntel } from '@/lib/vip/fusion/generateFusionIntel'
@@ -20,12 +16,33 @@ const NEWS_KEY = 'market:context:latest'
 const ONCHAIN_CACHE_KEY = 'vip:onchain:summary'
 const TELEGRAM_USERS_KEY = 'vip:telegram:users'
 
+/* =====================================================
+   ✅ KST 날짜 고정
+===================================================== */
+function getKstDateString(): string {
+  const now = new Date()
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000
+  const kst = new Date(utc + 9 * 60 * 60000)
+  return kst.toISOString().slice(0, 10)
+}
+
+/* =====================================================
+   ✅ 48시간 검증
+===================================================== */
+function isWithin48Hours(dateString?: string | null): boolean {
+  if (!dateString) return false
+  const pubDate = new Date(dateString)
+  const diffHours =
+    (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
+  return diffHours <= 48
+}
+
 export async function GET() {
   try {
     console.log('[CRON] 🚀 send-vip-telegram started')
 
     /* =====================================================
-       1️⃣ Telegram VIP 유저 목록 조회
+       1️⃣ Telegram 유저 조회
     ===================================================== */
 
     const chatIds: string[] = await redis.smembers(TELEGRAM_USERS_KEY)
@@ -58,62 +75,67 @@ export async function GET() {
     }
 
     /* =====================================================
-       3️⃣ On-chain Hybrid
+       3️⃣ On-chain (🔥 RSS Only 구조)
     ===================================================== */
 
     let externalOnchainSource = ''
     let externalOnchainSummary = ''
 
     try {
-      const cached = await redis.get(ONCHAIN_CACHE_KEY)
+      const cachedRaw = await redis.get(ONCHAIN_CACHE_KEY)
 
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        externalOnchainSource = parsed.source ?? ''
-        externalOnchainSummary = parsed.summary ?? ''
-      } else {
-        const rssItem = await fetchOnchainMultiSource()
+      let cached: any = null
+      let useCache = false
 
-        let useRss = false
-
-        if (rssItem?.pubDate) {
-          const pubDate = new Date(rssItem.pubDate)
-          const diffHours =
-            (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
-
-          if (diffHours <= 48) useRss = true
+      if (cachedRaw) {
+        cached = JSON.parse(cachedRaw)
+        if (isWithin48Hours(cached?.pubDate)) {
+          useCache = true
         }
-
-        if (useRss && rssItem) {
-          externalOnchainSource =
-            `${rssItem.source} (${rssItem.pubDate})`
-          externalOnchainSummary =
-            await summarizeExternalOnchain(rssItem)
-        } else {
-          externalOnchainSource =
-            'Internal On-Chain Metrics Engine (Daily Snapshot)'
-
-          const metrics = await fetchOnchainMetrics()
-          externalOnchainSummary =
-            await summarizeOnchainMetrics(metrics)
-        }
-
-        await redis.set(
-          ONCHAIN_CACHE_KEY,
-          JSON.stringify({
-            source: externalOnchainSource,
-            summary: externalOnchainSummary,
-          }),
-          'EX',
-          60 * 60 * 24,
-        )
       }
+
+      if (useCache && cached) {
+        externalOnchainSource = cached.source ?? ''
+        externalOnchainSummary = cached.summary ?? ''
+      } else {
+
+        const rssItems = await fetchOnchainMultiList()
+
+        if (rssItems && rssItems.length > 0) {
+
+          externalOnchainSummary =
+            await summarizeExternalOnchain(rssItems)
+
+          externalOnchainSource =
+            `Institutional On-Chain Research (${rssItems.length} reports aggregated)`
+
+          await redis.set(
+            ONCHAIN_CACHE_KEY,
+            JSON.stringify({
+              source: externalOnchainSource,
+              summary: externalOnchainSummary,
+              pubDate: rssItems[0]?.pubDate ?? null,
+            }),
+            'EX',
+            60 * 60 * 24
+          )
+
+        } else {
+
+          externalOnchainSource =
+            'Institutional On-Chain Research'
+
+          externalOnchainSummary =
+            '최근 48시간 이내의 기관 온체인 보고서를 찾을 수 없습니다.'
+        }
+      }
+
     } catch (err) {
-      console.error('[ONCHAIN ERROR]', err)
+      console.error('[ONCHAIN RSS ERROR]', err)
     }
 
     /* =====================================================
-       4️⃣ Fusion Intelligence
+       4️⃣ Fusion
     ===================================================== */
 
     const fusion = await generateFusionIntel({
@@ -130,8 +152,10 @@ export async function GET() {
        5️⃣ PDF 생성
     ===================================================== */
 
+    const kstDate = getKstDateString()
+
     const pdfBytes = await generateVipDailyReportPdf({
-      date: new Date().toISOString().slice(0, 10),
+      date: kstDate,
       market: 'BTC',
       vipLevel: 'VIP3',
 
@@ -148,7 +172,7 @@ export async function GET() {
     })
 
     /* =====================================================
-       6️⃣ 전체 Telegram 발송
+       6️⃣ Telegram 발송
     ===================================================== */
 
     let success = 0
@@ -159,7 +183,7 @@ export async function GET() {
         await sendVipReportPdf(
           Number(chatId),
           new Uint8Array(pdfBytes),
-          `VIP_Report_${Date.now()}.pdf`,
+          `VIP_Report_${kstDate}.pdf`
         )
         success++
       } catch (err) {
@@ -169,7 +193,7 @@ export async function GET() {
     }
 
     console.log(
-      `[CRON] ✅ Completed — success:${success} failed:${failed}`,
+      `[CRON] ✅ Completed — success:${success} failed:${failed}`
     )
 
     return Response.json({
@@ -184,7 +208,7 @@ export async function GET() {
 
     return Response.json(
       { ok: false, error: err?.message ?? 'unknown error' },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

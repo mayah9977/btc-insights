@@ -195,11 +195,8 @@ export default function VIPWhaleIntensityChart({
         {!history.length ? (
           <div className="h-40 rounded-lg border border-zinc-800 bg-black/30" />
         ) : (
-          <div className="h-40">
-            <ResponsiveContainer
-              width="100%"
-              height={160}
-            >
+          <div className="h-40 min-h-[160px]">
+  <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={history}>
                 <defs>
                   <linearGradient

@@ -1,19 +1,49 @@
 /* =========================================================
    API: Get Market Context (News + VIP OS 통합)
+   ✔ latest 우선
+   ✔ latest 없으면 previous fallback
+   ✔ 둘 다 없으면 안전 기본값
 ========================================================= */
 
 import { redis } from '@/lib/redis/server'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
     /* ===============================
        1️⃣ GPT 뉴스 컨텍스트
+       latest → previous fallback
     =============================== */
 
-    const newsRaw = await redis.get('market:context:latest')
-    const news = newsRaw ? JSON.parse(newsRaw) : null
+    let news: any = null
+
+    // 🔥 1-1 latest 조회
+    const latestRaw = await redis.get('market:context:latest')
+
+    if (latestRaw) {
+      try {
+        news = JSON.parse(latestRaw)
+      } catch (err) {
+        console.error('[MarketContextAPI] latest JSON parse error:', err)
+      }
+    }
+
+    // 🔥 1-2 latest 없으면 previous fallback
+    if (!news) {
+      console.warn('[MarketContextAPI] latest missing → fallback to previous')
+
+      const prevRaw = await redis.get('market:context:previous')
+
+      if (prevRaw) {
+        try {
+          news = JSON.parse(prevRaw)
+        } catch (err) {
+          console.error('[MarketContextAPI] previous JSON parse error:', err)
+        }
+      }
+    }
 
     /* ===============================
        2️⃣ VIP Intelligence SSOT
@@ -33,24 +63,30 @@ export async function GET() {
       redis.get('vip:intel:sentiment:text'),
     ])
 
-    const whale = whaleRaw ? JSON.parse(whaleRaw) : null
-    const sentiment = sentimentRaw ? JSON.parse(sentimentRaw) : null
+    let whale = null
+    let sentiment = null
+
+    try {
+      whale = whaleRaw ? JSON.parse(whaleRaw) : null
+    } catch {}
+
+    try {
+      sentiment = sentimentRaw ? JSON.parse(sentimentRaw) : null
+    } catch {}
 
     /* ===============================
-       3️⃣ UI 호환 구조로 Flatten
+       3️⃣ 응답 구조
     =============================== */
 
     return new Response(
       JSON.stringify({
         ok: true,
         data: {
-          /* 🔥 UI가 기대하는 뉴스 구조 */
           translatedHeadlines: news?.translatedHeadlines ?? [],
           summary: news?.summary ?? '',
           midLongTerm: news?.midLongTerm ?? '',
-          updatedAt: news?.updatedAt ?? Date.now(),
+          updatedAt: news?.updatedAt ?? 0, // 🔥 fallback은 Date.now() 쓰지 않음
 
-          /* 🔥 VIP Intelligence 유지 */
           vip: {
             structuralAnalysis:
               structuralRaw ??

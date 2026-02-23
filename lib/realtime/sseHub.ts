@@ -2,12 +2,16 @@ import { createRedisSubscriber } from '@/lib/redis/index'
 import type { Redis } from 'ioredis'
 
 // 🔥 Market SSOT 저장
-import { setLastOI, setLastVolume } from '@/lib/market/marketLastStateStore'
+import {
+  setLastOI,
+  setLastVolume,
+} from '@/lib/market/marketLastStateStore'
 
 /* =========================
  * Types
  * ========================= */
 export type SSEScope = 'ALERTS' | 'REALTIME' | 'VIP'
+
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>
   scope: SSEScope
@@ -41,7 +45,9 @@ export function addSSEClient(
     `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
   )
 
-  controller.enqueue(encoder.encode(`event: connected\ndata: {}\n\n`))
+  controller.enqueue(
+    encoder.encode(`event: connected\ndata: {}\n\n`),
+  )
 
   return () => {
     clientsByScope[scope].delete(client)
@@ -54,7 +60,9 @@ export function addSSEClient(
 /* =========================
  * 🔥 Redis → SSE Bridge
  * ========================= */
-const g = globalThis as typeof globalThis & { __SSE_REDIS_SUBSCRIBED__?: boolean }
+const g = globalThis as typeof globalThis & {
+  __SSE_REDIS_SUBSCRIBED__?: boolean
+}
 
 if (!g.__SSE_REDIS_SUBSCRIBED__) {
   g.__SSE_REDIS_SUBSCRIBED__ = true
@@ -82,7 +90,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
 
     /* =========================
-     * ✅ Market SSOT 저장 (REPLAY용)
+     * ✅ Market SSOT 저장 (Replay용)
      * ========================= */
     if (event?.type === 'OI_TICK') {
       try {
@@ -97,25 +105,36 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
 
     /* =========================
-     * 🔥 이벤트 → scope 매핑 (수정 핵심)
+     * 🔥 이벤트 → scope 매핑
      * ========================= */
     let targetScope: SSEScope | null = null
 
+    // ALERTS
     if (event.type === 'ALERT_TRIGGERED') {
       targetScope = 'ALERTS'
-    } else if (
+    }
+
+    // REALTIME (Market + Whale + Sentiment)
+    else if (
       event.type === 'PRICE_TICK' ||
       event.type === 'VOLUME_TICK' ||
       event.type === 'OI_TICK' ||
       event.type === 'FUNDING_RATE_TICK' ||
+      event.type === 'WHALE_INTENSITY' ||      // 🔥 Pressure Index
       event.type === 'WHALE_WARNING' ||
-      event.type === 'WHALE_INTENSITY_TICK' ||
+      event.type === 'WHALE_TRADE_FLOW' ||     // 🆕 Trade Flow Index
       event.type === 'BB_SIGNAL' ||
-      // ✅ 추가
-      event.type === 'BB_LIVE_COMMENTARY' // ✅ 추가 (핵심)
+      event.type === 'BB_LIVE_COMMENTARY' ||
+      event.type === 'SENTIMENT_UPDATE'
     ) {
       targetScope = 'REALTIME'
-    } else if (event.type === 'VIP_UPDATE') {
+    }
+
+    // VIP
+    else if (
+      event.type === 'VIP_UPDATE' ||
+      event.type === 'RISK_UPDATE'
+    ) {
       targetScope = 'VIP'
     }
 
@@ -124,14 +143,18 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     const set = clientsByScope[targetScope]
     if (!set.size) return
 
-    const payload = encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+    const payload = encoder.encode(
+      `data: ${JSON.stringify(event)}\n\n`,
+    )
 
     for (const client of set) {
       try {
         client.controller.enqueue(payload)
       } catch {
         set.delete(client)
-        console.warn(`[SSE][${targetScope}] drop closed client`)
+        console.warn(
+          `[SSE][${targetScope}] drop closed client`,
+        )
       }
     }
   })
@@ -143,19 +166,21 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 export function pushHeartbeat() {
   const ping = encoder.encode(`event: ping\ndata: {}\n\n`)
 
-  ;(Object.keys(clientsByScope) as SSEScope[]).forEach((scope) => {
-    for (const client of clientsByScope[scope]) {
-      try {
-        client.controller.enqueue(ping)
-      } catch {
-        clientsByScope[scope].delete(client)
+  ;(Object.keys(clientsByScope) as SSEScope[]).forEach(
+    (scope) => {
+      for (const client of clientsByScope[scope]) {
+        try {
+          client.controller.enqueue(ping)
+        } catch {
+          clientsByScope[scope].delete(client)
+        }
       }
-    }
-  })
+    },
+  )
 }
 
 /* =========================
- * 🔥 Market Signal Broadcaster (ADD)
+ * 🔥 Market Signal Broadcaster (placeholder)
  * ========================= */
 export function broadcastMarketSignal(event: any) {
   try {

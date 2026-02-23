@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useSpring, useMotionValue } from 'framer-motion'
 import { subscribeSentiment } from '@/lib/realtime/marketChannel'
 import { VIPSentimentFlashOverlay } from './VIPSentimentFlashOverlay'
-import VIPSentimentGuide from './VIPSentimentGuide' // ✅ 추가
+import VIPSentimentGuide from './VIPSentimentGuide'
 
 type Props = {
   symbol?: string
@@ -44,6 +44,36 @@ export default function VIPSentimentPanel({
     damping: 20,
   })
 
+  /* =========================================
+     🔥 1️⃣ 초기값 Redis에서 Hydration
+  ========================================= */
+  useEffect(() => {
+    const loadInitial = async () => {
+      try {
+        const res = await fetch('/api/market/sentiment', {
+          cache: 'no-store',
+        })
+
+        if (!res.ok) return
+
+        const json = await res.json()
+
+        if (json?.ok && Number.isFinite(json.sentiment)) {
+          motionVal.set(json.sentiment)
+          setValue(json.sentiment)
+          prevValueRef.current = json.sentiment
+        }
+      } catch (err) {
+        console.error('initial sentiment load failed', err)
+      }
+    }
+
+    loadInitial()
+  }, [])
+
+  /* =========================================
+     🔥 2️⃣ SSE 실시간 구독
+  ========================================= */
   useEffect(() => {
     const unsub = subscribeSentiment(
       symbol.toUpperCase(),
@@ -54,6 +84,7 @@ export default function VIPSentimentPanel({
 
         const enteringFear =
           sentiment < 15 && prev >= 15
+
         const enteringGreed =
           sentiment > 85 && prev <= 85
 
@@ -184,9 +215,7 @@ export default function VIPSentimentPanel({
         </div>
       </motion.div>
 
-      {/* ✅ VIP 고급 해석 가이드 연결 */}
       <VIPSentimentGuide value={value} />
-
     </>
   )
 }

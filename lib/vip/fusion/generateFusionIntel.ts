@@ -1,18 +1,22 @@
 /* =========================================================
-   Fusion Intelligence Engine (VIP Institutional Core)
-   - News + Onchain + Derivatives + Whale
-   - Tactical Bias Computation
-   - GPT Cache Applied (6h)
-   - Auto Cache Invalidation (Model/Version Based)
+   Fusion Intelligence Engine (Institutional Weighted v5)
+   - News + Onchain Institutional Weighting
+   - External Weight Config Applied
+   - Hedge-Fund Grade Structure
 ========================================================= */
 
 import { generateChatCompletion } from '@/lib/openai/server'
 import { redis } from '@/lib/redis/server'
 import { sha256 } from '@/lib/utils/hash'
 
-/* 🔥 운영용 버전 관리 */
-const FUSION_ENGINE_VERSION = 'v3' // 프롬프트 변경 시 증가
-const FUSION_MODEL = 'gpt-4o-mini' // 모델 변경 시 자동 무효화
+/* 🔥 가중치 설정 분리 파일 */
+import {
+  getAverageInstitutionWeight,
+} from '@/lib/onchain/institutionWeights'
+
+/* 🔥 버전 증가 */
+const FUSION_ENGINE_VERSION = 'v5-weight-config'
+const FUSION_MODEL = 'gpt-4o-mini'
 
 export interface FusionInput {
   newsSummary: string
@@ -31,13 +35,34 @@ export interface FusionOutput {
   positioningPressure: string
 }
 
+/* =========================================================
+   🔥 간단 Bias 점수 추출
+========================================================= */
+
+function extractBiasScore(text: string): number {
+  const bearishKeywords = ['하락', '압력', '매도', '유입 증가', '위험 확대']
+  const bullishKeywords = ['축적', '유출', '강세', '수요 증가', '공급 감소']
+
+  let score = 0
+
+  bearishKeywords.forEach(k => {
+    if (text.includes(k)) score -= 1
+  })
+
+  bullishKeywords.forEach(k => {
+    if (text.includes(k)) score += 1
+  })
+
+  if (score > 0) return 1
+  if (score < 0) return -1
+  return 0
+}
+
+/* ========================================================= */
+
 export async function generateFusionIntel(
   input: FusionInput,
 ): Promise<FusionOutput> {
-
-  /* =========================================================
-     🔥 1️⃣ 캐시 키 생성 (모델 + 버전 포함)
-  ========================================================= */
 
   const fusionKeySource = JSON.stringify(input)
 
@@ -51,42 +76,56 @@ export async function generateFusionIntel(
   }
 
   /* =========================================================
-     🔥 2️⃣ 한국어 출력 강제
+     🔥 1️⃣ Onchain 가중 점수 계산 (외부 설정 사용)
+  ========================================================= */
+
+  const biasScore = extractBiasScore(input.onchainSummary)
+
+  const avgWeight = getAverageInstitutionWeight()
+
+  const weightedScore = biasScore * avgWeight
+
+  let computedRiskLevel: 'BULLISH' | 'NEUTRAL' | 'BEARISH' = 'NEUTRAL'
+  if (weightedScore > 0.5) computedRiskLevel = 'BULLISH'
+  if (weightedScore < -0.5) computedRiskLevel = 'BEARISH'
+
+  /* =========================================================
+     🔥 2️⃣ GPT 전략 생성
   ========================================================= */
 
   const systemPrompt = `
 You are a hedge-fund level crypto macro strategist.
 
-Your task:
-Fuse news context, on-chain intelligence, whale activity,
-derivatives positioning and sentiment into a single
-institutional-grade intelligence memo.
+Fuse institutional research, macro news and positioning data
+into an institutional-grade intelligence memo.
 
-Rules:
-- Output MUST be written in Korean.
-- Professional institutional tone.
-- No marketing language.
-- No trading advice.
-- Output STRICT JSON only.
+Output MUST be Korean.
+STRICT JSON only.
+Professional tone.
+No trading advice.
 `.trim()
 
   const userPrompt = `
 [NEWS SUMMARY]
 ${input.newsSummary}
 
-[NEWS STRUCTURAL]
+[STRUCTURAL]
 ${input.newsMidLongTerm}
 
 [ONCHAIN SUMMARY]
 ${input.onchainSummary}
 
-[MARKET DATA]
+[WEIGHTED BIAS SCORE]
+Computed Institutional Bias Score: ${weightedScore}
+Derived Risk Level: ${computedRiskLevel}
+
+[DERIVATIVES DATA]
 Whale Intensity: ${input.whaleIntensity}
 Funding Rate: ${input.fundingRate}
 Open Interest: ${input.openInterest}
 Sentiment Regime: ${input.sentimentRegime}
 
-Return JSON format ONLY:
+Return JSON:
 
 {
   "tacticalBias": "...",
@@ -105,7 +144,7 @@ Return JSON format ONLY:
       {
         model: FUSION_MODEL,
         temperature: 0.25,
-        maxTokens: 800,
+        maxTokens: 900,
       },
     )
 
@@ -115,14 +154,13 @@ Return JSON format ONLY:
       tacticalBias:
         parsed.tacticalBias ?? '중립적 포지셔닝',
       structuralOutlook:
-        parsed.structuralOutlook ?? '유동성 중심의 박스권 국면',
+        parsed.structuralOutlook ?? '구조적 추세 전환 신호 제한적',
       riskRegime:
-        parsed.riskRegime ?? '균형적 변동성 환경',
+        parsed.riskRegime ?? computedRiskLevel,
       positioningPressure:
-        parsed.positioningPressure ?? '파생 포지셔닝 압력 제한적',
+        parsed.positioningPressure ?? '포지셔닝 압력 제한적',
     }
 
-    /* 🔥 3️⃣ Redis 저장 (6시간 캐시) */
     await redis.set(
       cacheKey,
       JSON.stringify(result),
@@ -137,9 +175,9 @@ Return JSON format ONLY:
 
     return {
       tacticalBias: '중립적 포지셔닝',
-      structuralOutlook: '구조적 전환 신호 부족',
-      riskRegime: '변동성 압축 구간',
-      positioningPressure: '포지셔닝 신호 불확실',
+      structuralOutlook: '구조적 신호 불확실',
+      riskRegime: computedRiskLevel,
+      positioningPressure: '포지셔닝 불확실',
     }
   }
 }

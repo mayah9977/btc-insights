@@ -2,7 +2,6 @@ import { createRedisSubscriber } from '@/lib/redis'
 import { redis } from '@/lib/redis/server'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 
-import { updateOI } from '@/lib/market/pricePolling'
 import {
   loadAllWhaleIntensityKeys,
   loadWhaleIntensityHistory,
@@ -28,10 +27,7 @@ import { buildRiskInputFromRealtime } from '@/lib/market/buildRiskInputFromRealt
 import { getActionGateState } from '@/lib/market/action/getActionGateState'
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 
-import { computeSentiment } from '@/lib/market/sentimentEngine'
-
 const STRUCTURAL_KEY = 'market:finalized:analysis'
-
 const g = globalThis as any
 
 if (!g.__MARKET_CONSUMER_STARTED__) {
@@ -51,11 +47,99 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
   })()
 
   const candle30mMap: Record<string, CandleAggregator30m> = {}
-
   const sub = createRedisSubscriber()
   const pub = createRedisSubscriber()
 
   sub.subscribe('realtime:market')
+
+  /* =====================================================
+     🔥 활성 심볼 추적 (독립 엔진용)
+  ===================================================== */
+  const activeSymbols = new Set<string>()
+
+  /* =====================================================
+     기존 이벤트 처리 (저장 + BB)
+  ===================================================== */
+
+  sub.on('message', async (_channel, raw) => {
+    try {
+      const event = JSON.parse(raw)
+      if (!event?.symbol) return
+
+      const symbol = event.symbol
+      activeSymbols.add(symbol)
+
+      /* ================= OI ================= */
+      if (event.type === 'OI_TICK') {
+        setLastOI(symbol, event.openInterest)
+        pushRollingValue(`OI_${symbol}`, event.openInterest, 50)
+      }
+
+      /* ================= VOLUME ================= */
+      if (event.type === 'VOLUME_TICK') {
+        setLastVolume(symbol, event.volume)
+      }
+
+      /* ================= FUNDING ================= */
+      if (event.type === 'FUNDING_RATE_TICK') {
+        setLastFundingRate(symbol, event.fundingRate)
+      }
+
+      /* ================= PRICE ================= */
+      if (event.type === 'PRICE_TICK') {
+        const price = event.price
+        const ts = event.ts
+
+        if (!Number.isFinite(ts)) return
+
+        pushRecentPrice(symbol, price)
+
+        candle30mMap[symbol] ??= new CandleAggregator30m(symbol)
+        const aggregator = candle30mMap[symbol]
+
+        const result = aggregator.update({ price, ts }, 0)
+        const confirmedSignal =
+          result.confirmedSignal as ConfirmedBBSignal | undefined
+
+        const liveCommentary = result.liveCommentary
+
+        if (liveCommentary) {
+          pub.publish('realtime:market', JSON.stringify(liveCommentary))
+        }
+
+        if (confirmedSignal) {
+          setLastBollingerSignal(symbol, {
+            enabled: true,
+            timeframe: '30m',
+            symbol,
+            signalType: confirmedSignal.signalType as BollingerSignalType,
+            candle: confirmedSignal.candle,
+            bands: confirmedSignal.bands,
+            confirmed: true,
+            at: confirmedSignal.at,
+          })
+
+          pub.publish('realtime:market', JSON.stringify(confirmedSignal))
+
+          const sentence =
+            BOLLINGER_SENTENCE_MAP[
+              confirmedSignal.signalType as BollingerSignalType
+            ]
+
+          if (sentence?.description) {
+            await redis.set(STRUCTURAL_KEY, sentence.description)
+          }
+        }
+      }
+
+    } catch (e) {
+      console.error('[MARKET CONSUMER] parse error', e)
+    }
+  })
+
+  /* =====================================================
+     🔥🔥🔥 독립 WHALE_INTENSITY 엔진 (1초 고정 루프)
+  ===================================================== */
 
   const whaleAvgWindowMap: Record<
     string,
@@ -87,94 +171,14 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
     return 'FLAT'
   }
 
-  sub.on('message', async (_channel, raw) => {
-    try {
-      const event = JSON.parse(raw)
-
-      /* ================= OI ================= */
-      if (event.type === 'OI_TICK') {
-        updateOI(event.symbol, event.openInterest)
-        setLastOI(event.symbol, event.openInterest)
-
-        pushRollingValue(`OI_${event.symbol}`, event.openInterest, 50)
-      }
-
-      /* ================= VOLUME ================= */
-      if (event.type === 'VOLUME_TICK') {
-        setLastVolume(event.symbol, event.volume)
-      }
-
-      /* ================= FUNDING ================= */
-      if (event.type === 'FUNDING_RATE_TICK') {
-        setLastFundingRate(event.symbol, event.fundingRate)
-      }
-
-      /* ================= PRICE ================= */
-      if (event.type === 'PRICE_TICK') {
-        const symbol = event.symbol
-        const price = event.price
-        const ts = event.ts
-
-        if (!Number.isFinite(ts)) return
-
-        pushRecentPrice(symbol, price)
-
-        candle30mMap[symbol] ??= new CandleAggregator30m(symbol)
-        const aggregator = candle30mMap[symbol]
-
-        const result = aggregator.update({ price, ts }, 0)
-        const confirmedSignal =
-          result.confirmedSignal as ConfirmedBBSignal | undefined
-
-        const liveCommentary = result.liveCommentary
-
-        if (liveCommentary) {
-          pub.publish('realtime:market', JSON.stringify(liveCommentary))
-        }
-
-        if (confirmedSignal) {
-          /* 🔥 1️⃣ 기존 상태 저장 */
-          setLastBollingerSignal(symbol, {
-            enabled: true,
-            timeframe: '30m',
-            symbol,
-            signalType:
-              confirmedSignal.signalType as BollingerSignalType,
-            candle: confirmedSignal.candle,
-            bands: confirmedSignal.bands,
-            confirmed: true,
-            at: confirmedSignal.at,
-          })
-
-          pub.publish(
-            'realtime:market',
-            JSON.stringify(confirmedSignal),
-          )
-
-          /* 🔥 2️⃣ Finalized Redis 저장 (핵심 추가) */
-          const sentence =
-            BOLLINGER_SENTENCE_MAP[
-              confirmedSignal.signalType as BollingerSignalType
-            ]
-
-          if (sentence?.description) {
-            await redis.set(
-              STRUCTURAL_KEY,
-              sentence.description,
-            )
-          }
-        }
-      }
-
-      /* ================= RISK + SENTIMENT ================= */
-      if (
-        event.type === 'PRICE_TICK' ||
-        event.type === 'OI_TICK' ||
-        event.type === 'FUNDING_RATE_TICK'
-      ) {
-        const symbol = event.symbol
+  setInterval(async () => {
+    for (const symbol of activeSymbols) {
+      try {
         const snapshot = await buildRiskInputFromRealtime(symbol)
-        if (!snapshot) return
+
+        if (!snapshot) {
+          continue
+        }
 
         const intensity = Number.isFinite(snapshot.whaleIntensity)
           ? snapshot.whaleIntensity
@@ -184,10 +188,9 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         const trend = calcTrend(intensity, avg)
 
         const isSpike =
-          intensity >= 0.7 ||
-          (avg > 0 && intensity >= avg * 1.6)
+          intensity >= 0.7 || (avg > 0 && intensity >= avg * 1.6)
 
-        pub.publish(
+        await pub.publish(
           'realtime:market',
           JSON.stringify({
             type: 'WHALE_INTENSITY',
@@ -199,22 +202,6 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             ts: Date.now(),
           }),
         )
-
-        try {
-          const sentiment = computeSentiment(snapshot)
-
-          pub.publish(
-            'realtime:market',
-            JSON.stringify({
-              type: 'SENTIMENT_UPDATE',
-              symbol,
-              sentiment,
-              ts: Date.now(),
-            }),
-          )
-        } catch (err) {
-          console.error('[Sentiment error]', err)
-        }
 
         const nextActionGateInput: ActionGateInput = {
           whalePressure: snapshot.whalePressure,
@@ -229,16 +216,13 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         const prev = getLastActionGateInput(symbol)
 
         if (JSON.stringify(prev) !== JSON.stringify(nextActionGateInput)) {
-          setActionGateState(
-            symbol,
-            getActionGateState(nextActionGateInput),
-          )
-
+          setActionGateState(symbol, getActionGateState(nextActionGateInput))
           setLastActionGateInput(symbol, nextActionGateInput)
         }
+
+      } catch (err) {
+        console.error('[INTENSITY ENGINE ERROR]', err)
       }
-    } catch (e) {
-      console.error('[MARKET CONSUMER] parse error', e)
     }
-  })
+  }, 1000)
 }

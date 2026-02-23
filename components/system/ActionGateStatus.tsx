@@ -1,3 +1,4 @@
+'use client'
 import React from 'react'
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
@@ -6,63 +7,79 @@ interface ActionGateStatusProps {
   state: ActionGateState
 }
 
-const STATE_CONFIG: Record<
-  ActionGateState,
-  {
-    icon: string
-    text: string
-    color: string
-  }
-> = {
-  OBSERVE: {
-    icon: '👁',
-    text: 'AI is observing the current market situation in real time. (AI가 실시간으로 현재 시장 상황을 관찰중입니다.)',
-    color: '#4A6FA5', // neutral blue
-  },
-  CAUTION: {
-    icon: '◔',
-    text: 'AI is observing the current market situation in real time. (AI가 실시간으로 현재 시장 상황을 관찰중입니다.)',
-    color: '#B89B5E', // muted amber
-  },
-  IGNORE: {
-    icon: '⊘',
-    text: 'AI is observing the current market situation in real time. (AI가 실시간으로 현재 시장 상황을 관찰중입니다.)',
-    color: '#7A7A7A', // neutral gray
-  },
-}
-
 export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   state,
 }) => {
-  const config = STATE_CONFIG[state]
-
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '8px 12px',
-        borderRadius: '6px',
-        backgroundColor: '#F5F6F7',
-        color: config.color,
-        fontSize: '13px',
-        lineHeight: 1.4,
-        userSelect: 'none',
-      }}
-      aria-label="Action Gate Status"
-    >
-      <span
-        style={{
-          fontSize: '14px',
-          lineHeight: 1,
-        }}
-        aria-hidden
-      >
-        {config.icon}
-      </span>
+    <>
+      <style>
+        {`
+        @keyframes gradientShift {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 100% 50%; }
+        }
 
-      <span>{config.text}</span>
-    </div>
+        @keyframes scanMove {
+          0% { left: 0%; }
+          100% { left: 100%; }
+        }
+
+        @keyframes glowPulse {
+          0% { box-shadow: 0 0 10px rgba(0,255,200,0.4); }
+          50% { box-shadow: 0 0 25px rgba(0,255,200,0.8); }
+          100% { box-shadow: 0 0 10px rgba(0,255,200,0.4); }
+        }
+
+        @keyframes textBlink {
+          from { opacity: 0.7; }
+          to { opacity: 1; }
+        }
+      `}
+      </style>
+
+      <div
+        aria-label="Action Gate Status"
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          color: '#fff',
+          fontSize: '15px', 
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          background:
+            'linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet)',
+          backgroundSize: '400% 400%',
+          animation:
+            'gradientShift 8s linear infinite, glowPulse 3s ease-in-out infinite',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        {/* 스캔 라인 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            width: '2px',
+            background: 'rgba(255,255,255,0.9)',
+            animation: 'scanMove 3s linear infinite',
+            pointerEvents: 'none',
+          }}
+        />
+
+        <span
+          style={{
+            zIndex: 1,
+            animation: 'textBlink 1.5s infinite alternate',
+          }}
+        >
+          AI is observing the current market situation in real time.
+          (AI가 실시간으로 현재 시장 상황을 관찰중입니다.)
+        </span>
+      </div>
+    </>
   )
 }

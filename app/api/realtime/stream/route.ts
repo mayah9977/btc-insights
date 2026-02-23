@@ -11,6 +11,9 @@ import {
   getLastFundingRate,
 } from '@/lib/market/marketLastStateStore'
 
+// 🔥 Sentiment SSOT (추가)
+import { getLastSentiment } from '@/lib/sentiment/sentimentLastStateStore'
+
 // =========================
 // 🔥 Server Boot (Singleton)
 // =========================
@@ -35,7 +38,6 @@ export async function GET(req: NextRequest) {
     start(controller) {
       const encoder = new TextEncoder()
 
-      // 🔥 공통 send wrapper (핵심 추가)
       function send(event: any) {
         console.log('[SSE_STREAM_SEND]', {
           type: event?.type,
@@ -55,14 +57,14 @@ export async function GET(req: NextRequest) {
       )
 
       /* =========================
-       * 2️⃣ SSE Hub 등록 (REALTIME)
+       * 2️⃣ SSE Hub 등록
        * ========================= */
       const cleanup = addSSEClient(controller, {
         scope: 'REALTIME',
       })
 
       /* =========================
-       * 3️⃣ VIP Risk Replay (SSOT)
+       * 3️⃣ VIP Risk Replay
        * ========================= */
       const lastRisk = getLastVipRisk()
       if (lastRisk) {
@@ -109,15 +111,26 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 7️⃣ 연결 종료 처리
+       * 🔥 7️⃣ Sentiment Replay (추가된 부분)
+       * ========================= */
+      const lastSentiment = getLastSentiment()
+      if (lastSentiment != null) {
+        send({
+          type: 'SENTIMENT_UPDATE',
+          symbol: 'BTCUSDT',
+          sentiment: lastSentiment,
+          ts: Date.now(),
+        })
+      }
+
+      /* =========================
+       * 8️⃣ 연결 종료 처리
        * ========================= */
       const onAbort = () => {
         cleanup()
         try {
           controller.close()
-        } catch {
-          // ignore
-        }
+        } catch {}
       }
 
       req.signal.addEventListener('abort', onAbort, {

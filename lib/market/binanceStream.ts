@@ -1,151 +1,132 @@
 import WebSocket from 'ws'
 import { onPriceUpdate } from './pricePolling'
 import { redis } from '@/lib/redis'
-import {
-  getLastOI,
-  getPrevOI,
-  getLastVolume,
-  getPrevVolume,
-} from '@/lib/market/marketLastStateStore'
-import { calcWhaleIntensity } from '@/lib/ai/calcWhaleIntensity'
-import { saveWhaleIntensity } from '@/lib/market/whaleRedisStore'
 
 const SYMBOL = 'BTCUSDT'
 const CHANNEL = 'realtime:market'
 
-/* ✅ 추가된 Redis Keys */
+/* =========================
+ * Redis Keys
+ * ========================= */
 const PRICE_KEY = `market:last:price:${SYMBOL}`
-const OI_KEY = `market:last:oi:${SYMBOL}`
 const FUNDING_KEY = `market:last:funding:${SYMBOL}`
 
 /* =========================
- * 🔥 AggTrade Stream
+ * Streams
  * ========================= */
 const tradeWs = new WebSocket(
   'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
 )
 
-/* =========================
- * 🔥 Mark Price Stream
- * ========================= */
 const markPriceWs = new WebSocket(
   'wss://stream.binance.com:9443/ws/btcusdt@markPrice@1s',
 )
 
-let volumeBufferUSD = 0
+/* =========================
+ * Buffers (1초 집계)
+ * ========================= */
+let totalVolumeBufferUSD = 0
+let whaleVolumeBufferUSD = 0
+
+const WHALE_THRESHOLD_USD = 200_000 // 🔥 고래 기준
 
 /* =========================
  * 1초 루프
  * ========================= */
 setInterval(async () => {
   const now = Date.now()
-  const volume = Math.round(volumeBufferUSD)
 
-  if (volume > 0) {
+  const totalVolume = Math.round(totalVolumeBufferUSD)
+  const whaleVolume = Math.round(whaleVolumeBufferUSD)
+
+  if (totalVolume > 0) {
     try {
-      /* 1️⃣ Volume publish */
+      /* =========================
+       * 1️⃣ 전체 Volume Publish
+       * ========================= */
       await redis.publish(
         CHANNEL,
         JSON.stringify({
           type: 'VOLUME_TICK',
           symbol: SYMBOL,
-          volume,
+          volume: totalVolume,
           ts: now,
         }),
       )
 
-      /* 2️⃣ Whale Intensity 계산 */
-      const lastOI = getLastOI(SYMBOL)
-      const prevOI = getPrevOI(SYMBOL)
-      const lastVolume = getLastVolume(SYMBOL)
-      const prevVolume = getPrevVolume(SYMBOL)
+      /* =========================
+       * 2️⃣ 🆕 Whale Trade Flow 계산
+       * ========================= */
+      const ratio =
+        totalVolume > 0
+          ? whaleVolume / totalVolume
+          : 0
 
-      if (
-        lastOI !== undefined &&
-        prevOI !== undefined &&
-        lastVolume !== undefined &&
-        prevVolume !== undefined
-      ) {
-        const oiDelta = Math.abs(lastOI - prevOI)
-        const volumeDelta =
-          prevVolume > 0 ? lastVolume / prevVolume : 0
-
-        const intensityLabel = calcWhaleIntensity({
-          oiDelta,
-          volumeDelta,
-          absoluteVolume: volume,
-          volumeShock: volumeDelta,
-        })
-
-        const raw =
-          oiDelta * 0.04 +
-          Math.max(0, volumeDelta - 1) * 0.6
-
-        const normalized =
-          1 - Math.exp(-raw * 1.6)
-
-        const intensity =
-          intensityLabel === 'HIGH'
-            ? Math.max(0.8, normalized)
-            : intensityLabel === 'MEDIUM'
-            ? Math.max(0.45, normalized)
-            : normalized
-
-        /* 3️⃣ Redis 저장 (🔥 추가됨) */
-        await saveWhaleIntensity(SYMBOL, intensity)
-
-        /* 4️⃣ SSE publish */
-        await redis.publish(
-          CHANNEL,
-          JSON.stringify({
-            type: 'WHALE_INTENSITY_TICK',
-            symbol: SYMBOL,
-            intensity,
-            avg: normalized,
-            trend: intensity > 0.5 ? 'UP' : 'FLAT',
-            isSpike: intensity > 0.85,
-            ts: now,
-          }),
-        )
-      }
+      await redis.publish(
+        CHANNEL,
+        JSON.stringify({
+          type: 'WHALE_TRADE_FLOW',
+          symbol: SYMBOL,
+          ratio: Math.max(0, Math.min(1, ratio)),
+          whaleVolume,
+          totalVolume,
+          ts: now,
+        }),
+      )
     } catch (e) {
-      console.error('[WHALER_ENGINE_ERROR]', e)
+      console.error('[TRADE_FLOW_ENGINE_ERROR]', e)
     }
   }
 
-  volumeBufferUSD = 0
+  /* =========================
+   * 버퍼 초기화
+   * ========================= */
+  totalVolumeBufferUSD = 0
+  whaleVolumeBufferUSD = 0
 }, 1000)
 
 /* =========================
- * AggTrade (가격)
+ * AggTrade Stream
  * ========================= */
 tradeWs.on('message', async raw => {
   try {
     const data = JSON.parse(raw.toString())
+
     const price = Number(data.p)
     const qty = Number(data.q)
 
     if (!Number.isFinite(price) || !Number.isFinite(qty)) return
 
-    volumeBufferUSD += price * qty
+    const tradeUSD = price * qty
 
-    /* 🔥 PRICE Redis 저장 추가 */
+    /* 전체 체결 누적 */
+    totalVolumeBufferUSD += tradeUSD
+
+    /* 고래 체결 누적 */
+    if (tradeUSD >= WHALE_THRESHOLD_USD) {
+      whaleVolumeBufferUSD += tradeUSD
+    }
+
+    /* 최신 가격 저장 */
     await redis.set(PRICE_KEY, String(price))
 
+    /* 기존 Price Engine 유지 */
     await onPriceUpdate(SYMBOL, price, qty)
-  } catch {}
+  } catch (e) {
+    console.error('[AGG_TRADE_PARSE_ERROR]', e)
+  }
 })
 
 /* =========================
- * Funding
+ * Funding Stream
  * ========================= */
 markPriceWs.on('message', async raw => {
   try {
     const data = JSON.parse(raw.toString())
     const fundingRate = Number(data.r)
+
     if (!Number.isFinite(fundingRate)) return
 
-    /* 🔥 FUNDING Redis 저장 추가 */
     await redis.set(FUNDING_KEY, String(fundingRate))
 
     await redis.publish(
@@ -157,5 +138,7 @@ markPriceWs.on('message', async raw => {
         ts: Date.now(),
       }),
     )
-  } catch {}
+  } catch (e) {
+    console.error('[FUNDING_PARSE_ERROR]', e)
+  }
 })

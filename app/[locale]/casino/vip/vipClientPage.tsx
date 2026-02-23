@@ -23,6 +23,7 @@ import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
 import BtcLiveChart from '@/components/charts/BtcLiveChart'
 import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
+import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart' // 🔥 추가
 import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
 import { VIPOverviewDashboard } from '@/components/vip/VIPOverviewDashboard'
 import { VIPJudgement } from '@/components/vip/VIPJudgement'
@@ -125,11 +126,13 @@ export default function VIPClientPage({
           riskLevel={riskLevel as any}
         />
 
+        {/* 🔥 추가된 위치 (Intensity 바로 아래, Sentiment 위) */}
+        <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
+
         <VIPSentimentPanel symbol="BTCUSDT" />
 
         <BtcLiveChart riskLevel={riskLevel as any} />
 
-        {/* 🔥 위치 이동 완료 */}
         <VIPFortunePanel />
 
         <VIPTodayJudgementCard />
@@ -165,11 +168,13 @@ export default function VIPClientPage({
           riskLevel={riskLevel as any}
         />
 
+        {/* 🔥 추가된 위치 (Intensity 바로 아래, Sentiment 위) */}
+        <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
+
         <VIPSentimentPanel symbol="BTCUSDT" />
 
         <BtcLiveChart riskLevel={riskLevel as any} />
 
-        {/* 🔥 위치 이동 완료 */}
         <VIPFortunePanel />
 
         <VIPJudgementTimeline />

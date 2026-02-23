@@ -24,39 +24,24 @@ type Options = {
   limit?: number
 }
 
-export function useWhaleIntensityHistory(
-  options: Options = {},
-) {
-  const {
-    symbol = 'BTCUSDT',
-    limit = 30,
-  } = options
-
+export function useWhaleIntensityHistory(options: Options = {}) {
+  const { symbol = 'BTCUSDT', limit = 30 } = options
   const upperSymbol = symbol.toUpperCase()
 
-  const [history, setHistory] =
-    useState<WhaleIntensityPoint[]>([])
-
-  const [flagEvents, setFlagEvents] =
-    useState<WhaleFlagEvent[]>([])
-
-  const [initialized, setInitialized] =
-    useState(false)
+  const [history, setHistory] = useState<WhaleIntensityPoint[]>([])
+  const [flagEvents, setFlagEvents] = useState<WhaleFlagEvent[]>([])
+  const [initialized, setInitialized] = useState(false)
 
   /* =========================
-   * 🔥 내부 에너지 상태
+   * 내부 상태
    * ========================= */
-  const [targetValue, setTargetValue] =
-    useState(0)
+  const [displayValue, setDisplayValue] = useState(0)
 
-  const [displayValue, setDisplayValue] =
-    useState(0)
-
+  const targetValueRef = useRef(0)
+  const displayValueRef = useRef(0) // ✅ interval에서 최신값 읽기용
   const velocityRef = useRef(0)
 
-  const trendRef =
-    useRef<'UP' | 'DOWN' | 'FLAT'>('FLAT')
-
+  const trendRef = useRef<'UP' | 'DOWN' | 'FLAT'>('FLAT')
   const spikeRef = useRef(false)
 
   /* =========================
@@ -66,32 +51,25 @@ export function useWhaleIntensityHistory(
     let cancelled = false
     setInitialized(false)
 
-    fetch(
-      `/api/market/whale-intensity?symbol=${upperSymbol}`,
-    )
+    fetch(`/api/market/whale-intensity?symbol=${upperSymbol}`)
       .then(r => r.json())
       .then(d => {
         if (cancelled) return
 
         if (Array.isArray(d?.history)) {
-          const mapped =
-            d.history.slice(-limit).map(
-              (v: number, i: number) => ({
-                ts:
-                  Date.now() -
-                  (limit - i) * 1000,
-                value: v,
-                trend: 'FLAT',
-                isSpike: false,
-              }),
-            )
+          const mapped = d.history.slice(-limit).map((v: number, i: number) => ({
+            ts: Date.now() - (limit - i) * 1000,
+            value: v,
+            trend: 'FLAT',
+            isSpike: false,
+          }))
 
           setHistory(mapped)
 
           if (mapped.length > 0) {
-            const last =
-              mapped[mapped.length - 1].value
-            setTargetValue(last)
+            const last = mapped[mapped.length - 1].value
+            targetValueRef.current = last
+            displayValueRef.current = last
             setDisplayValue(last)
           }
         }
@@ -114,37 +92,30 @@ export function useWhaleIntensityHistory(
   useEffect(() => {
     if (!initialized) return
 
-    const unsubIntensity =
-      subscribeWhaleIntensity(
-        upperSymbol,
-        (
-          intensity,
-          avg,
-          trend,
-          isSpike,
-        ) => {
-          setTargetValue(intensity)
-          trendRef.current = trend
-          spikeRef.current = isSpike
-        },
-      )
+    const unsubIntensity = subscribeWhaleIntensity(
+      upperSymbol,
+      (intensity, avg, trend, isSpike) => {
+        targetValueRef.current = intensity
+        trendRef.current = trend
+        spikeRef.current = isSpike
+      },
+    )
 
-    const unsubWarning =
-      subscribeWhaleWarning(
-        upperSymbol,
-        (value, avg, ts) => {
-          setFlagEvents(prev =>
-            [
-              ...prev,
-              {
-                ts: ts ?? Date.now(),
-                value,
-                avg,
-              },
-            ].slice(-10),
-          )
-        },
-      )
+    const unsubWarning = subscribeWhaleWarning(
+      upperSymbol,
+      (value, avg, ts) => {
+        setFlagEvents(prev =>
+          [
+            ...prev,
+            {
+              ts: ts ?? Date.now(),
+              value,
+              avg,
+            },
+          ].slice(-10),
+        )
+      },
+    )
 
     return () => {
       unsubIntensity()
@@ -153,24 +124,24 @@ export function useWhaleIntensityHistory(
   }, [upperSymbol, initialized])
 
   /* =========================
-   * 🔥 3️⃣ 스프링 기반 60fps 보간 엔진
+   * 3️⃣ RAF 보간 엔진 (1회만)
    * ========================= */
   useEffect(() => {
     let frame: number
-
     const stiffness = 0.15
     const damping = 0.85
 
     const animate = () => {
       setDisplayValue(prev => {
-        const diff = targetValue - prev
+        const diff = targetValueRef.current - prev
 
         velocityRef.current =
-          velocityRef.current * damping +
-          diff * stiffness
+          velocityRef.current * damping + diff * stiffness
 
-        const next =
-          prev + velocityRef.current
+        const next = prev + velocityRef.current
+
+        // ✅ interval에서 최신값 사용
+        displayValueRef.current = next
 
         return next
       })
@@ -180,47 +151,28 @@ export function useWhaleIntensityHistory(
 
     frame = requestAnimationFrame(animate)
 
-    return () =>
-      cancelAnimationFrame(frame)
-  }, [targetValue])
+    return () => cancelAnimationFrame(frame)
+  }, [])
 
   /* =========================
-   * 🔥 4️⃣ 에너지 시각화 레이어
+   * 4️⃣ 시각화 히스토리 기록 (interval 1회만)
    * ========================= */
   useEffect(() => {
     const interval = setInterval(() => {
       setHistory(prev => {
-        const last =
-          prev[prev.length - 1]
+        const last = prev[prev.length - 1]
+        const dv = displayValueRef.current
 
-        const previousValue =
-          last?.value ?? displayValue
+        const previousValue = last?.value ?? dv
+        const velocity = dv - previousValue
 
-        const velocity =
-          displayValue - previousValue
+        const velocityBoost = velocity * 0.6
+        const microNoise = (Math.random() - 0.5) * 0.012
+        const wave = 0.008 * Math.sin(Date.now() / 280)
+        const spikeBoost = spikeRef.current ? 0.02 : 0
 
-        const velocityBoost =
-          velocity * 0.6
-
-        const microNoise =
-          (Math.random() - 0.5) * 0.012
-
-        const wave =
-          0.008 *
-          Math.sin(Date.now() / 280)
-
-        const spikeBoost =
-          spikeRef.current ? 0.02 : 0
-
-        const visual =
-          displayValue +
-          velocityBoost +
-          microNoise +
-          wave +
-          spikeBoost
-
-        const clamped =
-          Math.max(0, Math.min(1, visual))
+        const visual = dv + velocityBoost + microNoise + wave + spikeBoost
+        const clamped = Math.max(0, Math.min(1, visual))
 
         return [
           ...prev,
@@ -232,11 +184,10 @@ export function useWhaleIntensityHistory(
           },
         ].slice(-limit)
       })
-    }, 120) // 약 8fps 기록
+    }, 120)
 
-    return () =>
-      clearInterval(interval)
-  }, [displayValue, limit])
+    return () => clearInterval(interval)
+  }, [limit]) // ✅ displayValue 제거 (핵심)
 
   return {
     history,

@@ -25,13 +25,12 @@ export interface StoredMarketContext {
 }
 
 /* =========================================================
-   Save Market Context (Institutional Safe Version)
+   Save Market Context (Final Stabilized Version)
 
    ✔ 새 데이터 유효할 때만 교체
-   ✔ 기존 latest → previous 백업
-   ✔ previous 24시간 보관
-   ✔ 실패 시 기존 유지
-   ✔ 실패 로깅
+   ✔ latest는 절대 expire 안 함
+   ✔ previous는 48시간 유지
+   ✔ 저장 실패 시 기존 latest 유지
 ========================================================= */
 
 export async function saveMarketContext(
@@ -46,15 +45,18 @@ export async function saveMarketContext(
     data.translatedHeadlines &&
     data.translatedHeadlines.length > 0
 
+  /* ===============================
+     ❌ 유효하지 않으면 기존 latest 유지
+  =============================== */
   if (!isValid) {
-    console.warn('[ContextStore] ❌ Invalid context → keeping previous')
+    console.warn('[ContextStore] ❌ Invalid context → keeping latest')
 
-    const previousRaw = await redis.get(LATEST_KEY)
-    if (previousRaw) {
+    const latestRaw = await redis.get(LATEST_KEY)
+    if (latestRaw) {
       try {
-        return JSON.parse(previousRaw) as StoredMarketContext
+        return JSON.parse(latestRaw) as StoredMarketContext
       } catch (err) {
-        console.error('[ContextStore] JSON parse error (previous):', err)
+        console.error('[ContextStore] latest JSON parse error:', err)
       }
     }
 
@@ -68,7 +70,7 @@ export async function saveMarketContext(
 
   try {
     /* ===============================
-       1️⃣ 기존 latest 백업
+       1️⃣ 기존 latest → previous (48시간 유지)
     =============================== */
     const currentLatest = await redis.get(LATEST_KEY)
 
@@ -77,28 +79,26 @@ export async function saveMarketContext(
         PREVIOUS_KEY,
         currentLatest,
         'EX',
-        60 * 60 * 24 // 24시간 유지
+        60 * 60 * 48 // ✅ 48시간 유지
       )
     }
 
     /* ===============================
-       2️⃣ 새 데이터 저장
+       2️⃣ latest 저장 (TTL 제거)
     =============================== */
     await redis.set(
       LATEST_KEY,
-      JSON.stringify(payload),
-      'EX',
-      60 * 60 * 12 // latest 12시간 유지
+      JSON.stringify(payload)
+      // ❗ EX 제거 → 절대 만료되지 않음
     )
 
-    console.log('[ContextStore] ✅ Market context updated safely')
+    console.log('[ContextStore] ✅ Market context updated (no TTL)')
 
     return payload
 
   } catch (error) {
     console.error('[ContextStore] ❌ Save failed:', error)
 
-    // 저장 실패 시 기존 유지
     const fallback = await redis.get(LATEST_KEY)
     if (fallback) {
       return JSON.parse(fallback) as StoredMarketContext

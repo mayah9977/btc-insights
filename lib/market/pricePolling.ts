@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { redis } from '@/lib/redis'
 import { handlePriceTick } from '@/lib/alerts/alertEngine'
 import { fetchCurrentMarketPrice } from '@/lib/market/fetchCurrentMarketPrice'
@@ -7,14 +6,8 @@ import { calculateMarketPressure } from '@/lib/market/marketPressure'
 import { calculateRiskLevel } from '@/lib/vip/riskEngine'
 import { broadcastVipRiskUpdate } from '@/lib/vip/vipSSEHub'
 
-import { saveWhaleIntensity } from '@/lib/market/whaleRedisStore'
 import type { RiskLevel } from '@/lib/vip/riskEngine'
-
 import { interpretRealtimeRisk } from '@/lib/realtime/realtimeRiskInterpreter'
-
-// ✅ 추가
-import { pushRealtimeUpdate } from '@/lib/realtime/pushRealtimeUpdate'
-import { SSE_EVENT } from '@/lib/realtime/types'
 
 /* =========================
  * Internal State (SSOT)
@@ -22,24 +15,7 @@ import { SSE_EVENT } from '@/lib/realtime/types'
 
 const lastPriceMap: Record<string, number> = {}
 const priceWindowMap: Record<string, number[]> = {}
-const lastOIMap: Record<string, number> = {}
-
-const tradeVolumeWindowMap: Record<string, number[]> = {}
-const whaleIntensityHistoryMap: Record<string, number[]> = {}
 const prevRiskLevelMap: Record<string, RiskLevel> = {}
-
-/* =========================
- * Cache API
- * ========================= */
-
-export function updateOI(symbol: string, oi: number) {
-  if (!Number.isFinite(oi)) return
-  lastOIMap[symbol.toUpperCase()] = oi
-}
-
-export function getOI(symbol: string): number | undefined {
-  return lastOIMap[symbol.toUpperCase()]
-}
 
 /* =========================
  * REALTIME PRICE + QTY FEED
@@ -72,93 +48,24 @@ export async function onPriceUpdate(
   if (priceWindow.length > 30) priceWindow.shift()
   if (priceWindow.length < 10) return
 
-  /* 4️⃣ 변동성 */
+  /* =========================
+   * 변동성 계산
+   * ========================= */
   const { score: volatilityScore } =
     calculateMarketPressure(upper, price)
 
   /* =========================
-   * 체결량 기반 분석
-   * ========================= */
-
-  const volumeWindow =
-    tradeVolumeWindowMap[upper] ??
-    (tradeVolumeWindowMap[upper] = [])
-
-  const tradeUSD = qty * price
-
-  volumeWindow.push(tradeUSD)
-  if (volumeWindow.length > 20) volumeWindow.shift()
-
-  const totalVolume = volumeWindow.reduce((a, b) => a + b, 0)
-  const avgVolume = totalVolume / volumeWindow.length
-
-  /* =========================
-   * ✅ Volume SSE 송출 (핵심 추가)
-   * ========================= */
-  pushRealtimeUpdate({
-    type: SSE_EVENT.VOLUME_TICK,
-    symbol: upper,
-    volume: Math.round(totalVolume),
-    ts: Date.now(),
-  })
-
-  const isLargeTrade =
-    tradeUSD > avgVolume * 3 && tradeUSD > 100_000
-
-  /* =========================
-   * 🐋 whaleIntensity 계산
-   * ========================= */
-
-  const oi = getOI(upper)
-  let whaleIntensity = 0
-
-  if (typeof oi === 'number') {
-    const oiScore = Math.min(1, oi / 1_000_000_000)
-    const volumeScore = Math.min(1, totalVolume / 500_000)
-
-    whaleIntensity = oiScore * 0.5 + volumeScore * 0.5
-    if (isLargeTrade) whaleIntensity += 0.15
-    whaleIntensity = Math.min(1, whaleIntensity)
-  }
-
-  const history =
-    whaleIntensityHistoryMap[upper] ??
-    (whaleIntensityHistoryMap[upper] = [])
-
-  history.push(whaleIntensity)
-  if (history.length > 30) history.shift()
-
-  saveWhaleIntensity(upper, whaleIntensity)
-
-  const avgWhale =
-    history.reduce((a, b) => a + b, 0) / history.length
-
-  const prev =
-    history.length >= 2
-      ? history[history.length - 2]
-      : whaleIntensity
-
-  const whaleTrend: 'UP' | 'DOWN' | 'FLAT' =
-    whaleIntensity > prev
-      ? 'UP'
-      : whaleIntensity < prev
-      ? 'DOWN'
-      : 'FLAT'
-
-  const isSpike = whaleIntensity > avgWhale * 1.3
-
-  /* =========================
    * 🔥 Risk 계산
+   * (WhaleIntensity는 buildRiskInputFromRealtime에서만 계산)
    * ========================= */
 
   const extremeSignal =
-    whaleIntensity > 0.85 &&
-    Math.abs(volatilityScore) > 0.25
+    Math.abs(volatilityScore) > 0.35
 
   const nextRiskLevel = calculateRiskLevel({
     volatility: Math.abs(volatilityScore),
     aiScore: 60,
-    whaleIntensity,
+    whaleIntensity: 0, // ⚠ Pressure 엔진에서 계산됨
     extremeSignal,
   })
 
@@ -167,20 +74,20 @@ export async function onPriceUpdate(
   prevRiskLevelMap[upper] = nextRiskLevel
 
   /* =========================
-   * 🔥 리스크 해석 (SSOT)
+   * 리스크 해석
    * ========================= */
 
   const interpreted = interpretRealtimeRisk({
     riskLevel: nextRiskLevel,
     prevRiskLevel,
-    whaleIntensity,
-    avgWhale,
-    whaleTrend,
-    isSpike,
+    whaleIntensity: 0, // Pressure 엔진 SSOT 사용
+    avgWhale: 0,
+    whaleTrend: 'FLAT',
+    isSpike: false,
   })
 
   /* =========================
-   * 📡 VIP RISK UPDATE
+   * VIP RISK UPDATE
    * ========================= */
 
   broadcastVipRiskUpdate({

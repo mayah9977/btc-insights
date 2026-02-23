@@ -1,4 +1,8 @@
-import { redis } from '@/lib/redis/server'
+/* =========================================================
+   Internal On-chain Metrics (DISABLED)
+   - Deprecated: Numerical snapshot engine removed
+   - Replaced by Institutional RSS Intelligence
+========================================================= */
 
 export interface OnchainMetricsSnapshot {
   exchangeNetflow: number
@@ -8,31 +12,15 @@ export interface OnchainMetricsSnapshot {
   whaleBalanceChange: number
 }
 
-function toNum(v: unknown, fallback = 0) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : fallback
-}
-
+/* 🔥 완전 비활성화 */
 export async function fetchOnchainMetrics(): Promise<OnchainMetricsSnapshot> {
-  const [
-    netflow,
-    activeAddr,
-    sopr,
-    mvrv,
-    whaleBalance,
-  ] = await Promise.all([
-    redis.get('onchain:exchange:netflow'),
-    redis.get('onchain:active:addresses'),
-    redis.get('onchain:sopr'),
-    redis.get('onchain:mvrv'),
-    redis.get('onchain:whale:balance-change'),
-  ])
+  console.warn('[OnchainMetrics] Internal metrics engine disabled')
 
   return {
-    exchangeNetflow: toNum(netflow),
-    activeAddresses: toNum(activeAddr),
-    sopr: toNum(sopr),
-    mvrv: toNum(mvrv),
-    whaleBalanceChange: toNum(whaleBalance),
+    exchangeNetflow: 0,
+    activeAddresses: 0,
+    sopr: 0,
+    mvrv: 0,
+    whaleBalanceChange: 0,
   }
 }

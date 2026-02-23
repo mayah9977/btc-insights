@@ -6,15 +6,24 @@
     },
     {
       "path": "/api/cron/generate-context",
-      "schedule": "0 0 * * *"
+      "schedule": "0 21 * * *"
     },
     {
       "path": "/api/cron/vip-report",
-      "schedule": "5 0 * * *"
+      "schedule": "5 21 * * *"
     },
     {
       "path": "/api/cron/send-vip-telegram",
       "schedule": "0 22 * * *"
+    },
+
+    {
+      "path": "/api/cron/update-sentiment",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/update-sentiment",
+      "schedule": "0 12 * * *"
     }
   ]
 }

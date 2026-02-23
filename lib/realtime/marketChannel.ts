@@ -69,7 +69,7 @@ export function subscribeMarketVolume(
 
 /**
  * =========================
- * Market: Whale Intensity (🔥 확장형)
+ * 🐋 Whale Pressure (Composite Index)
  * =========================
  */
 export function subscribeWhaleIntensity(
@@ -98,6 +98,41 @@ export function subscribeWhaleIntensity(
           data.avg,
           data.trend,
           data.isSpike,
+          data.ts,
+        )
+      }
+    },
+  )
+}
+
+/**
+ * =========================
+ * 🆕 Whale Trade Flow (AggTrade 기반)
+ * =========================
+ */
+export function subscribeWhaleTradeFlow(
+  symbol: string,
+  cb: (
+    ratio: number,
+    whaleVolume: number,
+    totalVolume: number,
+    ts?: number,
+  ) => void,
+) {
+  return sseManager.subscribe(
+    SSE_EVENT.WHALE_TRADE_FLOW,
+    (data: {
+      symbol: string
+      ratio: number
+      whaleVolume: number
+      totalVolume: number
+      ts?: number
+    }) => {
+      if (data.symbol === symbol) {
+        cb(
+          data.ratio,
+          data.whaleVolume,
+          data.totalVolume,
           data.ts,
         )
       }

@@ -1,13 +1,9 @@
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { redis } from '@/lib/redis/server'
 
-/* 🔥 Multi On-chain */
-import { fetchOnchainMultiSource } from '@/lib/onchain/fetchOnchainMultiSource'
+/* 🔥 Multi On-chain (RSS Only) */
+import { fetchOnchainMultiList } from '@/lib/onchain/fetchOnchainMultiList'
 import { summarizeExternalOnchain } from '@/lib/onchain/summarizeExternalOnchain'
-
-/* 🔥 Metrics Engine */
-import { fetchOnchainMetrics } from '@/lib/onchain/fetchOnchainMetrics'
-import { summarizeOnchainMetrics } from '@/lib/onchain/summarizeOnchainMetrics'
 
 /* 🔥 Fusion Engine */
 import { generateFusionIntel } from '@/lib/vip/fusion/generateFusionIntel'
@@ -17,6 +13,27 @@ export const dynamic = 'force-dynamic'
 
 const NEWS_KEY = 'market:context:latest'
 const ONCHAIN_CACHE_KEY = 'vip:onchain:summary'
+
+/* =====================================================
+   ✅ KST 날짜 고정
+===================================================== */
+function getKstDateString(): string {
+  const now = new Date()
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000
+  const kst = new Date(utc + 9 * 60 * 60000)
+  return kst.toISOString().slice(0, 10)
+}
+
+/* =====================================================
+   ✅ 48시간 검증
+===================================================== */
+function isWithin48Hours(dateString?: string | null): boolean {
+  if (!dateString) return false
+  const pubDate = new Date(dateString)
+  const diffHours =
+    (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
+  return diffHours <= 48
+}
 
 export async function GET() {
   try {
@@ -42,59 +59,63 @@ export async function GET() {
     }
 
     /* =====================================================
-       2️⃣ On-chain (Hybrid)
+       2️⃣ On-chain (🔥 RSS Only 구조)
     ===================================================== */
 
     let externalOnchainSource = ''
     let externalOnchainSummary = ''
 
     try {
-      const cached = await redis.get(ONCHAIN_CACHE_KEY)
+      const cachedRaw = await redis.get(ONCHAIN_CACHE_KEY)
 
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        externalOnchainSource = parsed.source ?? ''
-        externalOnchainSummary = parsed.summary ?? ''
-      } else {
-        const rssItem = await fetchOnchainMultiSource()
+      let cached: any = null
+      let useCache = false
 
-        let useRss = false
-
-        if (rssItem?.pubDate) {
-          const pubDate = new Date(rssItem.pubDate)
-          const diffHours =
-            (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
-
-          if (diffHours <= 48) useRss = true
+      if (cachedRaw) {
+        cached = JSON.parse(cachedRaw)
+        if (isWithin48Hours(cached?.pubDate)) {
+          useCache = true
         }
-
-        if (useRss && rssItem) {
-          externalOnchainSource =
-            `${rssItem.source} (${rssItem.pubDate})`
-
-          externalOnchainSummary =
-            await summarizeExternalOnchain(rssItem)
-        } else {
-          externalOnchainSource =
-            'Internal On-Chain Metrics Engine (Daily Snapshot)'
-
-          const metrics = await fetchOnchainMetrics()
-          externalOnchainSummary =
-            await summarizeOnchainMetrics(metrics)
-        }
-
-        await redis.set(
-          ONCHAIN_CACHE_KEY,
-          JSON.stringify({
-            source: externalOnchainSource,
-            summary: externalOnchainSummary,
-          }),
-          'EX',
-          60 * 60 * 24
-        )
       }
+
+      if (useCache && cached) {
+        externalOnchainSource = cached.source ?? ''
+        externalOnchainSummary = cached.summary ?? ''
+      } else {
+
+        /* 🔥 다중 RSS 수집 */
+        const rssItems = await fetchOnchainMultiList()
+
+        if (rssItems && rssItems.length > 0) {
+
+          externalOnchainSummary =
+            await summarizeExternalOnchain(rssItems)
+
+          externalOnchainSource =
+            `Institutional On-Chain Research (${rssItems.length} reports aggregated)`
+
+          await redis.set(
+            ONCHAIN_CACHE_KEY,
+            JSON.stringify({
+              source: externalOnchainSource,
+              summary: externalOnchainSummary,
+              pubDate: rssItems[0]?.pubDate ?? null,
+            }),
+            'EX',
+            60 * 60 * 24,
+          )
+
+        } else {
+
+          /* 🔥 RSS 없으면 공백 처리 (Internal 제거) */
+          externalOnchainSource = 'Institutional On-Chain Research'
+          externalOnchainSummary =
+            '최근 48시간 이내의 기관 온체인 보고서를 찾을 수 없습니다.'
+        }
+      }
+
     } catch (err) {
-      console.error('[Hybrid Onchain ERROR]', err)
+      console.error('[Onchain RSS ERROR]', err)
     }
 
     /* =====================================================
@@ -112,11 +133,13 @@ export async function GET() {
     })
 
     /* =====================================================
-       4️⃣ PDF 생성 (뉴스 + 온체인 중심)
+       4️⃣ PDF 생성
     ===================================================== */
 
+    const kstDate = getKstDateString()
+
     const pdfBytes = await generateVipDailyReportPdf({
-      date: new Date().toISOString().slice(0, 10),
+      date: kstDate,
       market: 'BTC',
       vipLevel: 'VIP3',
 
@@ -135,10 +158,11 @@ export async function GET() {
     return new Response(new Uint8Array(pdfBytes), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'inline; filename="btc-vip-report.pdf"',
+        'Content-Disposition': `inline; filename="VIP_Report_${kstDate}.pdf"`,
         'Cache-Control': 'no-store',
       },
     })
+
   } catch (error: any) {
     console.error('[VIP REPORT ERROR]', error)
 

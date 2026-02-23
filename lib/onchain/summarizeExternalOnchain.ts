@@ -1,52 +1,88 @@
 /* =========================================================
-   External On-chain AI Summarizer
-   - OpenAI 기반
-   - VIP 리포트 전용 요약 스타일
+   External On-chain AI Summarizer (Institutional v3)
+   - Multi-Article Aggregated Summary
+   - Hedge-Fund Grade Tone
    - GPT Cache Applied (48h)
+   - fetchOnchainMultiList.ts 타입 연동
 ========================================================= */
 
 import { generateChatCompletion } from '@/lib/openai/server'
 import { redis } from '@/lib/redis/server'
 import { sha256 } from '@/lib/utils/hash'
-import type { ExternalOnchainRssItem } from './fetchOnchainRss'
+import type { ExternalOnchainRssItem } from './fetchOnchainMultiList'
 
 if (typeof window !== 'undefined') {
   throw new Error('[Onchain Summarizer] server-only module')
 }
 
-export async function summarizeExternalOnchain(
-  item: ExternalOnchainRssItem,
-): Promise<string> {
-  if (!item?.content) return ''
+/* =========================================================
+   🔥 다중 기사 종합 요약
+========================================================= */
 
-  /* 🔥 1️⃣ 캐시 키 생성 */
-  const hashKey = sha256(item.title + item.content)
-  const cacheKey = `gpt:onchain:rss:${hashKey}`
+export async function summarizeExternalOnchain(
+  items: ExternalOnchainRssItem[],
+): Promise<string> {
+
+  if (!items || items.length === 0) return ''
+
+  /* =========================================================
+     🔥 1️⃣ 캐시 키 생성 (기사 배열 기반)
+  ========================================================= */
+
+  const combinedHashSource = items
+    .map(i => `${i.source}|${i.title}|${i.pubDate}`)
+    .join('||')
+
+  const hashKey = sha256(combinedHashSource)
+  const cacheKey = `gpt:onchain:rss:multi:${hashKey}`
 
   const cached = await redis.get(cacheKey)
-  if (cached) {
-    return cached
-  }
+  if (cached) return cached
 
-  const systemPrompt = `
-You are a professional crypto on-chain research analyst.
-Summarize the provided analysis into an institutional-grade daily intelligence note.
+  /* =========================================================
+     🔥 2️⃣ 기사 통합 텍스트 구성
+  ========================================================= */
 
-Rules:
-- Maximum 6 bullet points
-- Focus on BTC positioning
-- Highlight short-term risk bias
-- No marketing tone
-- Use professional hedge-fund style language
-- Output in Korean
-`
-
-  const userPrompt = `
+  const combinedContent = items
+    .map((item, index) => `
+[Report ${index + 1}]
+Source: ${item.source}
+Date: ${item.pubDate}
 Title: ${item.title}
 
-Content:
 ${item.content}
-`
+`)
+    .join('\n\n')
+
+  /* =========================================================
+     🔥 Institutional Prompt
+  ========================================================= */
+
+  const systemPrompt = `
+You are a senior crypto on-chain strategist at a hedge fund.
+
+Your task is to synthesize multiple institutional research reports
+into a unified daily intelligence briefing.
+
+Rules:
+- Output in Korean
+- Maximum 8 bullet points
+- Focus on BTC positioning
+- Identify short-term risk bias
+- Mention structural implications if relevant
+- No marketing tone
+- No speculation beyond provided reports
+- Professional institutional tone
+`.trim()
+
+  const userPrompt = `
+다음은 최근 48시간 이내의 기관 온체인 리서치 보고서들입니다.
+
+이들을 종합하여
+"기관 보고서 ${items.length}건 통합 분석" 형태로 정리하세요.
+
+${combinedContent}
+`.trim()
 
   try {
     const summary = await generateChatCompletion(
@@ -56,14 +92,14 @@ ${item.content}
       ],
       {
         model: 'gpt-4o-mini',
-        temperature: 0.3,
-        maxTokens: 600,
+        temperature: 0.25,
+        maxTokens: 900,
       },
     )
 
     const trimmed = summary.trim()
 
-    /* 🔥 2️⃣ Redis 저장 (48시간) */
+    /* 🔥 3️⃣ Redis 캐시 저장 (48시간) */
     await redis.set(cacheKey, trimmed, 'EX', 60 * 60 * 48)
 
     return trimmed
