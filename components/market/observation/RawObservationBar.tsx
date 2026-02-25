@@ -46,10 +46,11 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
       />
 
       <div className="relative px-4 py-6">
-        <div className="flex flex-wrap items-center gap-16">
+        {/* 🔥 모바일 안전 구조 */}
+        <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:items-center md:gap-16">
 
           {/* ================= OI ================= */}
-          <div className="flex items-baseline gap-5">
+          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
               Open Interest (미결제약정)
             </span>
@@ -63,7 +64,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
           </div>
 
           {/* ================= Volume ================= */}
-          <div className="flex items-baseline gap-5">
+          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
               Volume (거래량)
             </span>
@@ -72,15 +73,13 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
               value={volumeState.volume}
               size="lg"
               glowMode="direction"
-              suffix={
-                volumeState.volume != null ? ' K' : ''
-              }
+              suffix={volumeState.volume != null ? ' K' : ''}
               className="font-bold text-emerald-400 tracking-wide"
             />
           </div>
 
           {/* ================= Funding ================= */}
-          <div className="flex items-baseline gap-5">
+          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
               Funding Rate (펀딩비)
             </span>
