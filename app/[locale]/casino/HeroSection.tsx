@@ -1,5 +1,4 @@
 'use client'
-
 import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { useVipOverviewStore } from '@/lib/vip/overviewStore'
@@ -139,7 +138,7 @@ export default function HeroSection({
       className={`
         relative overflow-hidden
         rounded-3xl border border-vipBorder
-        bg-vipCard p-12
+        bg-vipCard p-6 md:p-12
         shadow-[0_40px_120px_rgba(0,0,0,0.8)]
         bg-gradient-to-br ${gradientTone}
         ${brightness}

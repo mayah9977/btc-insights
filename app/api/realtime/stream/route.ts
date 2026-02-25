@@ -11,12 +11,12 @@ import {
   getLastFundingRate,
 } from '@/lib/market/marketLastStateStore'
 
-// 🔥 Sentiment SSOT (추가)
+// 🔥 Sentiment SSOT
 import { getLastSentiment } from '@/lib/sentiment/sentimentLastStateStore'
 
-// =========================
-// 🔥 Server Boot (Singleton)
-// =========================
+/* =========================
+ * 🔥 Server Boot (Singleton)
+ * ========================= */
 const g = globalThis as typeof globalThis & {
   __MARKET_BOOTSTRAPPED__?: boolean
 }
@@ -39,10 +39,15 @@ export async function GET(req: NextRequest) {
       const encoder = new TextEncoder()
 
       function send(event: any) {
-        console.log('[SSE_STREAM_SEND]', {
-          type: event?.type,
-          symbol: event?.symbol,
-        })
+        /* =====================================
+           🥇 Dev 환경에서만 로그 출력
+        ===================================== */
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[SSE_STREAM_SEND]', {
+            type: event?.type,
+            symbol: event?.symbol,
+          })
+        }
 
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
@@ -111,7 +116,7 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 🔥 7️⃣ Sentiment Replay (추가된 부분)
+       * 7️⃣ Sentiment Replay
        * ========================= */
       const lastSentiment = getLastSentiment()
       if (lastSentiment != null) {

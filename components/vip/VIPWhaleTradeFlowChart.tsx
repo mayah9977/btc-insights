@@ -139,7 +139,7 @@ export default function VIPWhaleTradeFlowChart({
         </div>
       </div>
 
-      <div className="h-40 min-h-[160px]">
+      <div className="h-40 min-h-[160px] min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={visualHistory}>
             <defs>

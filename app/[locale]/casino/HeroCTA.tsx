@@ -12,10 +12,9 @@ export default function HeroCTA({
   isVIP: boolean
   autoScale?: boolean
 }) {
-  const scaleAnim =
-    autoScale
-      ? { scale: [1, 1.04, 1] }
-      : {}
+  const scaleAnim = autoScale
+    ? { scale: [1, 1.04, 1] }
+    : {}
 
   return (
     <motion.div
@@ -28,10 +27,10 @@ export default function HeroCTA({
       className="pt-6"
     >
       {!isLoggedIn && (
-        <div className="flex gap-4">
+        <div className="flex flex-col md:flex-row gap-4">
           <Link
             href="/ko/login"
-            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-zinc-400"
+            className="w-full rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-zinc-400"
           >
             <div className="text-xs uppercase tracking-widest text-zinc-500">
               Authentication Required
@@ -43,7 +42,7 @@ export default function HeroCTA({
 
           <Link
             href="/ko/account/upgrade"
-            className="flex-1 rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-yellow-400"
+            className="w-full rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-yellow-400"
           >
             <div className="text-xs uppercase tracking-widest text-zinc-500">
               Access Elevation
@@ -58,7 +57,7 @@ export default function HeroCTA({
       {isLoggedIn && !isVIP && (
         <Link
           href="/ko/account/upgrade"
-          className="block rounded-2xl border border-yellow-500/40
+          className="block w-full rounded-2xl border border-yellow-500/40
           bg-gradient-to-br from-yellow-500/10 to-red-500/10
           p-6 transition hover:scale-[1.02]"
         >
@@ -74,7 +73,7 @@ export default function HeroCTA({
       {isVIP && (
         <Link
           href="/ko/casino/vip"
-          className="block rounded-2xl border border-yellow-500/40
+          className="block w-full rounded-2xl border border-yellow-500/40
           bg-gradient-to-br from-yellow-500/10 to-red-500/10
           p-6 transition hover:scale-[1.02]"
         >

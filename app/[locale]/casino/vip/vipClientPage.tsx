@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
 import { useWhaleWarning } from '@/lib/realtime/useWhaleWarning'
 import { useVipExtremeNotifier } from '@/lib/vip/useVipExtremeNotifier'
@@ -23,7 +23,7 @@ import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
 import BtcLiveChart from '@/components/charts/BtcLiveChart'
 import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
-import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart' // 🔥 추가
+import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart'
 import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
 import { VIPOverviewDashboard } from '@/components/vip/VIPOverviewDashboard'
 import { VIPJudgement } from '@/components/vip/VIPJudgement'
@@ -38,7 +38,6 @@ import VIPRiskAvoidanceCard from '@/components/vip/VIPRiskAvoidanceCard'
 import VIPDailySnapshot from '@/components/vip/VIPDailySnapshot'
 import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
 import { RawObservationBar } from '@/components/market/observation/RawObservationBar'
-
 import VIPSentimentPanel from '@/components/vip/VIPSentimentPanel'
 import VIPFortunePanel from '@/components/vip/VIPFortunePanel'
 
@@ -56,6 +55,18 @@ export default function VIPClientPage({
   vip3Metrics,
 }: Props) {
 
+  /* =========================
+   * 🔥 모바일 판별 (hidden 제거)
+   * ========================= */
+  const [isMobile, setIsMobile] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   useEffect(() => {
     startLiveRiskTicker()
   }, [])
@@ -69,7 +80,6 @@ export default function VIPClientPage({
 
   useVipExtremeNotifier(userId, rawRiskLevel)
 
-  const { timeline } = useVipJudgementStore()
   const whaleWarning = useWhaleWarning('BTCUSDT')
   const { price } = useRealtimePrice('BTCUSDT')
   const btcPrice = price ?? 0
@@ -89,6 +99,8 @@ export default function VIPClientPage({
     monthlySummary.avoidedExtremeCount > 0 ||
     todayAvoidedLossPercent > 0 ||
     hasExtremeInRiskHistory
+
+  if (isMobile === null) return null
 
   return (
     <>
@@ -112,88 +124,66 @@ export default function VIPClientPage({
       />
 
       {/* ================= MOBILE ================= */}
-      <VIPMobileLayout>
+      {isMobile && (
+        <VIPMobileLayout>
+          {shouldRenderAvoidanceSummary && (
+            <VIPSummaryCards
+              weekly={weeklySummary}
+              monthly={monthlySummary}
+            />
+          )}
 
-        {shouldRenderAvoidanceSummary && (
-          <VIPSummaryCards
-            weekly={weeklySummary}
-            monthly={monthlySummary}
-          />
-        )}
-
-        <VIPWhaleIntensityChart
-          symbol="BTCUSDT"
-          riskLevel={riskLevel as any}
-        />
-
-        {/* 🔥 추가된 위치 (Intensity 바로 아래, Sentiment 위) */}
-        <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
-
-        <VIPSentimentPanel symbol="BTCUSDT" />
-
-        <BtcLiveChart riskLevel={riskLevel as any} />
-
-        <VIPFortunePanel />
-
-        <VIPTodayJudgementCard />
-        <VIPJudgementTimeline />
-        <VIP3AdvancedMetrics {...vip3Metrics} />
-        <VIP30DayEvasionBadge
-          avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
-        />
-        <VIPCompareTable />
-        <VIPRiskAvoidanceCard />
-        <VIPDailySnapshot />
-        <VIPOverviewDashboard />
-        <VIPJudgement />
-        <VIPRiskPanel />
-        <VIPRiskScenarioHeatmap />
-        <VIPNoEntryReason riskLevel={riskLevel as any} />
-        <VIPLossAvoidanceLog />
-
-      </VIPMobileLayout>
+          <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel as any} />
+          <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
+          <VIPSentimentPanel symbol="BTCUSDT" />
+          <BtcLiveChart riskLevel={riskLevel as any} />
+          <VIPFortunePanel />
+          <VIPTodayJudgementCard />
+          <VIPJudgementTimeline />
+          <VIP3AdvancedMetrics {...vip3Metrics} />
+          <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+          <VIPCompareTable />
+          <VIPRiskAvoidanceCard />
+          <VIPDailySnapshot />
+          <VIPOverviewDashboard />
+          <VIPJudgement />
+          <VIPRiskPanel />
+          <VIPRiskScenarioHeatmap />
+          <VIPNoEntryReason riskLevel={riskLevel as any} />
+          <VIPLossAvoidanceLog />
+        </VIPMobileLayout>
+      )}
 
       {/* ================= DESKTOP ================= */}
-      <main className="hidden md:block space-y-10">
+      {!isMobile && (
+        <main className="space-y-10">
+          {shouldRenderAvoidanceSummary && (
+            <VIPSummaryCards
+              weekly={weeklySummary}
+              monthly={monthlySummary}
+            />
+          )}
 
-        {shouldRenderAvoidanceSummary && (
-          <VIPSummaryCards
-            weekly={weeklySummary}
-            monthly={monthlySummary}
-          />
-        )}
-
-        <VIPWhaleIntensityChart
-          symbol="BTCUSDT"
-          riskLevel={riskLevel as any}
-        />
-
-        {/* 🔥 추가된 위치 (Intensity 바로 아래, Sentiment 위) */}
-        <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
-
-        <VIPSentimentPanel symbol="BTCUSDT" />
-
-        <BtcLiveChart riskLevel={riskLevel as any} />
-
-        <VIPFortunePanel />
-
-        <VIPJudgementTimeline />
-        <VIP3AdvancedMetrics {...vip3Metrics} />
-        <VIP30DayEvasionBadge
-          avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
-        />
-        <VIPCompareTable />
-        <VIPRiskAvoidanceCard />
-        <VIPDailySnapshot />
-        <VIPOverviewDashboard />
-        <VIPJudgement />
-        <VIPRiskPanel />
-        <VIPRiskScenarioHeatmap />
-        <VIPNoEntryReason riskLevel={riskLevel as any} />
-        <VIPLossAvoidanceLog />
-        <NotificationHistoryView />
-
-      </main>
+          <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel as any} />
+          <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
+          <VIPSentimentPanel symbol="BTCUSDT" />
+          <BtcLiveChart riskLevel={riskLevel as any} />
+          <VIPFortunePanel />
+          <VIPJudgementTimeline />
+          <VIP3AdvancedMetrics {...vip3Metrics} />
+          <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+          <VIPCompareTable />
+          <VIPRiskAvoidanceCard />
+          <VIPDailySnapshot />
+          <VIPOverviewDashboard />
+          <VIPJudgement />
+          <VIPRiskPanel />
+          <VIPRiskScenarioHeatmap />
+          <VIPNoEntryReason riskLevel={riskLevel as any} />
+          <VIPLossAvoidanceLog />
+          <NotificationHistoryView />
+        </main>
+      )}
     </>
   )
 }
