@@ -1,6 +1,11 @@
 import './styles/globals.css'
 import ClientBootstrap from './ClientBootstrap'
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -8,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className="bg-neutral-950 text-white antialiased">
+      <body className="bg-neutral-950 text-white antialiased overflow-x-hidden">
         <ClientBootstrap />
         {children}
       </body>
