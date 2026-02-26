@@ -16,6 +16,7 @@ export type LiveRiskState = {
   whaleAccelerated: boolean
   whalePulse: boolean
   marketPulse: MarketPulse
+  durationSec: number // ✅ 추가 (에러 해결 핵심)
 }
 
 export type LiveRiskStore = {
@@ -91,6 +92,8 @@ export const useLiveRiskState =
         safeLevel === 'HIGH' ||
         safeLevel === 'EXTREME'
 
+      const now = Date.now()
+
       /* =========================
        * 최초 진입
        * ========================= */
@@ -104,6 +107,7 @@ export const useLiveRiskState =
             whaleAccelerated: !!whaleAccelerated,
             whalePulse: shouldPulse,
             marketPulse,
+            durationSec: 0, // ✅ 최초 진입
           },
         })
 
@@ -112,17 +116,27 @@ export const useLiveRiskState =
       }
 
       /* =========================
-       * 동일 단계면 set 금지 (🔥 핵심 최적화)
+       * 동일 단계
        * ========================= */
       if (prev.level === safeLevel) {
-        // whaleAccelerated 또는 marketPulse만 바뀐 경우만 업데이트
         const nextWhaleAccelerated =
           whaleAccelerated ?? prev.whaleAccelerated
+
+        const durationSec = Math.floor(
+          (now - prev.startedAt) / 1000,
+        )
 
         if (
           nextWhaleAccelerated === prev.whaleAccelerated &&
           marketPulse === prev.marketPulse
         ) {
+          // durationSec만 갱신
+          set({
+            state: {
+              ...prev,
+              durationSec,
+            },
+          })
           return
         }
 
@@ -131,6 +145,7 @@ export const useLiveRiskState =
             ...prev,
             whaleAccelerated: nextWhaleAccelerated,
             marketPulse,
+            durationSec,
           },
         })
 
@@ -142,7 +157,7 @@ export const useLiveRiskState =
       }
 
       /* =========================
-       * 단계 변경 시에만 set
+       * 단계 변경
        * ========================= */
       const direction = compareRisk(
         prev.level,
@@ -158,6 +173,7 @@ export const useLiveRiskState =
           whaleAccelerated: !!whaleAccelerated,
           whalePulse: shouldPulse,
           marketPulse,
+          durationSec: 0, // 단계 바뀌면 리셋
         },
       })
 
