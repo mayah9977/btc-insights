@@ -1,3 +1,6 @@
 {
+  "name": "dist-poller-disabled",
+  "private": true,
+  "description": "Deprecated poller package. No longer used.",
   "type": "commonjs"
 }

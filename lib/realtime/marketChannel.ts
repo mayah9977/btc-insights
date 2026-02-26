@@ -1,77 +1,97 @@
 import { sseManager } from './sseConnectionManager'
 import { SSE_EVENT } from './types'
 
-/**
- * =========================
- * Market: Open Interest
- * =========================
- */
+/* =========================================================
+ * 🔧 내부 유틸: Symbol 안전 비교
+ * ========================================================= */
+function isSameSymbol(a?: string, b?: string) {
+  return a?.toUpperCase() === b?.toUpperCase()
+}
+
+/* =========================================================
+ * Market: Open Interest (🔥 Drift 포함)
+ * ========================================================= */
 export function subscribeOpenInterest(
   symbol: string,
-  cb: (oi: number) => void,
+  cb: (
+    openInterest: number,
+    delta: number,
+    direction: 'UP' | 'DOWN' | 'FLAT',
+    ts?: number,
+  ) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.OI_TICK,
     (data: {
       symbol: string
       openInterest: number
+      delta: number
+      direction: 'UP' | 'DOWN' | 'FLAT'
+      ts?: number
     }) => {
-      if (data.symbol === symbol) {
-        cb(data.openInterest)
+      if (isSameSymbol(data.symbol, safeSymbol)) {
+        cb(
+          data.openInterest,
+          data.delta,
+          data.direction,
+          data.ts,
+        )
       }
     },
   )
 }
 
-/**
- * =========================
+/* =========================================================
  * Market: Price
- * =========================
- */
+ * ========================================================= */
 export function subscribeMarketPrice(
   symbol: string,
-  cb: (price: number) => void,
+  cb: (price: number, ts?: number) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.PRICE_TICK,
     (data: {
       symbol: string
       price: number
+      ts?: number
     }) => {
-      if (data.symbol === symbol) {
-        cb(data.price)
+      if (isSameSymbol(data.symbol, safeSymbol)) {
+        cb(data.price, data.ts)
       }
     },
   )
 }
 
-/**
- * =========================
+/* =========================================================
  * Market: Volume
- * =========================
- */
+ * ========================================================= */
 export function subscribeMarketVolume(
   symbol: string,
-  cb: (volume: number) => void,
+  cb: (volume: number, ts?: number) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.VOLUME_TICK,
     (data: {
       symbol: string
       volume: number
+      ts?: number
     }) => {
-      if (data.symbol === symbol) {
-        cb(data.volume)
+      if (isSameSymbol(data.symbol, safeSymbol)) {
+        cb(data.volume, data.ts)
       }
     },
   )
 }
 
-/**
- * =========================
+/* =========================================================
  * 🐋 Whale Pressure (Composite Index)
- * =========================
- */
+ * ========================================================= */
 export function subscribeWhaleIntensity(
   symbol: string,
   cb: (
@@ -82,6 +102,8 @@ export function subscribeWhaleIntensity(
     ts?: number,
   ) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.WHALE_INTENSITY,
     (data: {
@@ -92,7 +114,7 @@ export function subscribeWhaleIntensity(
       isSpike: boolean
       ts?: number
     }) => {
-      if (data.symbol === symbol) {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(
           data.intensity,
           data.avg,
@@ -105,11 +127,9 @@ export function subscribeWhaleIntensity(
   )
 }
 
-/**
- * =========================
- * 🆕 Whale Trade Flow (AggTrade 기반)
- * =========================
- */
+/* =========================================================
+ * 🆕 Whale Trade Flow
+ * ========================================================= */
 export function subscribeWhaleTradeFlow(
   symbol: string,
   cb: (
@@ -119,6 +139,8 @@ export function subscribeWhaleTradeFlow(
     ts?: number,
   ) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.WHALE_TRADE_FLOW,
     (data: {
@@ -128,7 +150,7 @@ export function subscribeWhaleTradeFlow(
       totalVolume: number
       ts?: number
     }) => {
-      if (data.symbol === symbol) {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(
           data.ratio,
           data.whaleVolume,
@@ -140,15 +162,15 @@ export function subscribeWhaleTradeFlow(
   )
 }
 
-/**
- * =========================
- * Market: Whale Warning (flag)
- * =========================
- */
+/* =========================================================
+ * Whale Warning
+ * ========================================================= */
 export function subscribeWhaleWarning(
   symbol: string,
   cb: (value: number, avg: number, ts?: number) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.WHALE_WARNING,
     (data: {
@@ -157,7 +179,7 @@ export function subscribeWhaleWarning(
       avgWhale: number
       ts?: number
     }) => {
-      if (data.symbol === symbol) {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(
           data.whaleIntensity,
           data.avgWhale,
@@ -168,15 +190,15 @@ export function subscribeWhaleWarning(
   )
 }
 
-/**
- * =========================
- * 🔥 Market: Sentiment (Fear / Greed)
- * =========================
- */
+/* =========================================================
+ * 🔥 Market: Sentiment
+ * ========================================================= */
 export function subscribeSentiment(
   symbol: string,
   cb: (sentiment: number, ts?: number) => void,
 ) {
+  const safeSymbol = symbol?.toUpperCase()
+
   return sseManager.subscribe(
     SSE_EVENT.SENTIMENT_UPDATE,
     (data: {
@@ -184,7 +206,7 @@ export function subscribeSentiment(
       sentiment: number
       ts?: number
     }) => {
-      if (data.symbol === symbol) {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.sentiment, data.ts)
       }
     },

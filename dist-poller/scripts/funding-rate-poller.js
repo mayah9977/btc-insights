@@ -1,45 +1,17 @@
 "use strict";
 
-Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * ⚠ DISABLED FILE
+ *
+ * This poller has been deprecated.
+ * Funding rate is now handled via Binance Futures WebSocket (markPrice@1s).
+ *
+ * Do NOT re-enable unless architecture is changed.
+ */
 
-const { redis } = require("../lib/redis/index.js");
+console.warn(
+  "[FUNDING RATE POLLER] DISABLED - handled by WebSocket stream",
+);
 
-const SYMBOL = "BTCUSDT";
-const INTERVAL_MS = 5000;
-
-let lastFundingRate = null;
-
-console.log("[FUNDING RATE POLLER] started:", SYMBOL);
-
-setInterval(async () => {
-  console.log("[FUNDING RATE POLLER] tick", Date.now()); // ✅ 추가된 검증 로그
-
-  try {
-    const r = await fetch(
-      `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${SYMBOL}`,
-    );
-    if (!r.ok) return;
-
-    const data = await r.json();
-    const fundingRate = Number(data?.lastFundingRate);
-
-    if (!Number.isFinite(fundingRate)) return;
-    if (fundingRate === lastFundingRate) return;
-
-    lastFundingRate = fundingRate;
-
-    await redis.publish(
-      "realtime:market",
-      JSON.stringify({
-        type: "FUNDING_RATE_TICK",
-        symbol: SYMBOL,
-        fundingRate,
-        ts: Date.now(),
-      }),
-    );
-
-    console.log("[FUNDING_RATE]", SYMBOL, fundingRate);
-  } catch (e) {
-    console.error("[FUNDING RATE POLLER ERROR]", e);
-  }
-}, INTERVAL_MS);
+// 안전하게 아무 것도 실행하지 않음
+process.exit(0);

@@ -1,17 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
-import { useWhaleWarning } from '@/lib/realtime/useWhaleWarning'
-import { useVipExtremeNotifier } from '@/lib/vip/useVipExtremeNotifier'
-import { useStableRiskLevel } from '@/lib/vip/useStableRiskLevel'
+import dynamic from 'next/dynamic'
+
 import { useVipKpi } from '@/lib/vip/useVipKpi'
-import { useLatestRiskEvent } from '@/lib/vip/useLatestRiskEvent'
-import { useVipJudgementStore } from '@/lib/vip/judgementStore'
-import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
 import { useVipRiskHistoryStore } from '@/lib/vip/riskHistoryStore'
 import { useVipHistoryStore } from '@/lib/vip/historyStore'
-import { startLiveRiskTicker } from '@/lib/realtime/liveRiskTicker'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPLiveStatusStrip from '@/components/vip/VIPLiveStatusStrip'
@@ -21,7 +15,6 @@ import VIPCompareTable from '@/components/vip/VIPCompareTable'
 import VIP30DayEvasionBadge from '@/components/vip/VIP30DayEvasionBadge'
 import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
-import BtcLiveChart from '@/components/charts/BtcLiveChart'
 import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
 import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart'
 import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
@@ -41,6 +34,14 @@ import { RawObservationBar } from '@/components/market/observation/RawObservatio
 import VIPSentimentPanel from '@/components/vip/VIPSentimentPanel'
 import VIPFortunePanel from '@/components/vip/VIPFortunePanel'
 
+/* =========================
+   🔥 Chart Dynamic Import
+========================= */
+const BtcLiveChart = dynamic(
+  () => import('@/components/charts/BtcLiveChart'),
+  { ssr: false }
+)
+
 type Props = {
   userId: string
   weeklySummary: any
@@ -56,8 +57,8 @@ export default function VIPClientPage({
 }: Props) {
 
   /* =========================
-   * 🔥 모바일 판별 (hidden 제거)
-   * ========================= */
+     🔥 모바일 판별
+  ========================= */
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -67,27 +68,12 @@ export default function VIPClientPage({
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  useEffect(() => {
-    startLiveRiskTicker()
-  }, [])
-
-  const liveRisk = useLiveRiskState(s => s.state)
-  const rawRiskLevel = liveRisk?.level ?? 'LOW'
-
-  const riskLevel = useStableRiskLevel(rawRiskLevel, {
-    settleDelayMs: 3000,
-  })
-
-  useVipExtremeNotifier(userId, rawRiskLevel)
-
-  const whaleWarning = useWhaleWarning('BTCUSDT')
-  const { price } = useRealtimePrice('BTCUSDT')
-  const btcPrice = price ?? 0
-
+  /* =========================
+     KPI 관련 (정적 데이터)
+  ========================= */
   const { avoidedExtremeCount = 0, avoidedLossUSD = 0 } = useVipKpi()
   const { todayAvoidedLossPercent = 0 } = useVipHistoryStore()
   const { history } = useVipRiskHistoryStore()
-  const latestRiskEvent = useLatestRiskEvent()
 
   const hasExtremeInRiskHistory = useMemo(
     () => history.some(h => h.level === 'EXTREME'),
@@ -104,8 +90,8 @@ export default function VIPClientPage({
 
   return (
     <>
+      {/* 🔥 KPI는 내부에서 실시간 처리하도록 이동 권장 */}
       <VIPTopKPIBar
-        btcPrice={btcPrice}
         avoidedExtremeCount={avoidedExtremeCount}
         avoidedLossUSD={avoidedLossUSD}
       />
@@ -114,14 +100,9 @@ export default function VIPClientPage({
       <RawObservationBar symbol="BTCUSDT" />
       <VIPLiveStatusStrip />
 
-      {whaleWarning && riskLevel !== 'EXTREME' && (
-        <VIPWhaleWarningBanner symbol="BTCUSDT" />
-      )}
+      <VIPWhaleWarningBanner symbol="BTCUSDT" />
 
-      <VIPNoEntryReasonBanner
-        riskLevel={riskLevel as any}
-        reason={latestRiskEvent?.reason}
-      />
+      <VIPNoEntryReasonBanner />
 
       {/* ================= MOBILE ================= */}
       {isMobile && (
@@ -133,10 +114,10 @@ export default function VIPClientPage({
             />
           )}
 
-          <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel as any} />
+          <VIPWhaleIntensityChart symbol="BTCUSDT" />
           <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
           <VIPSentimentPanel symbol="BTCUSDT" />
-          <BtcLiveChart riskLevel={riskLevel as any} />
+          <BtcLiveChart riskLevel="LOW" />
           <VIPFortunePanel />
           <VIPTodayJudgementCard />
           <VIPJudgementTimeline />
@@ -149,7 +130,7 @@ export default function VIPClientPage({
           <VIPJudgement />
           <VIPRiskPanel />
           <VIPRiskScenarioHeatmap />
-          <VIPNoEntryReason riskLevel={riskLevel as any} />
+          <VIPNoEntryReason />
           <VIPLossAvoidanceLog />
         </VIPMobileLayout>
       )}
@@ -164,10 +145,10 @@ export default function VIPClientPage({
             />
           )}
 
-          <VIPWhaleIntensityChart symbol="BTCUSDT" riskLevel={riskLevel as any} />
+          <VIPWhaleIntensityChart symbol="BTCUSDT" />
           <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
           <VIPSentimentPanel symbol="BTCUSDT" />
-          <BtcLiveChart riskLevel={riskLevel as any} />
+          <BtcLiveChart riskLevel="LOW" />
           <VIPFortunePanel />
           <VIPJudgementTimeline />
           <VIP3AdvancedMetrics {...vip3Metrics} />
@@ -179,7 +160,7 @@ export default function VIPClientPage({
           <VIPJudgement />
           <VIPRiskPanel />
           <VIPRiskScenarioHeatmap />
-          <VIPNoEntryReason riskLevel={riskLevel as any} />
+          <VIPNoEntryReason />
           <VIPLossAvoidanceLog />
           <NotificationHistoryView />
         </main>

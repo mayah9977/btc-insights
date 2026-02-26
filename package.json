@@ -7,7 +7,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "poller": "node -r ts-node/register/transpile-only scripts/price-poller.ts",
     "cron:vip-kpi": "tsx scripts/cron/aggregateVipKpi.ts"
   },
   "dependencies": {

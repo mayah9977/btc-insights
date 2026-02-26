@@ -20,7 +20,7 @@ if (!g.__BINANCE_STREAM_STARTED__) {
    * ========================= */
 
   const SYMBOL = 'BTCUSDT'
-  const CHANNEL = 'realtime:market'
+  const CHANNEL = 'realtime:raw'
 
   const PRICE_KEY = `market:last:price:${SYMBOL}`
   const FUNDING_KEY = `market:last:funding:${SYMBOL}`
@@ -29,12 +29,14 @@ if (!g.__BINANCE_STREAM_STARTED__) {
    * WebSocket Streams
    * ========================= */
 
+  // Spot Trade
   const tradeWs = new WebSocket(
     'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
   )
 
+  // ✅ Futures MarkPrice (Funding + OI 같이 처리)
   const markPriceWs = new WebSocket(
-    'wss://stream.binance.com:9443/ws/btcusdt@markPrice@1s',
+    'wss://fstream.binance.com/ws/btcusdt@markPrice@1s',
   )
 
   /* =========================
@@ -58,7 +60,6 @@ if (!g.__BINANCE_STREAM_STARTED__) {
 
     if (totalVolume > 0) {
       try {
-        /* 1️⃣ Volume Publish */
         await redis.publish(
           CHANNEL,
           JSON.stringify({
@@ -69,7 +70,6 @@ if (!g.__BINANCE_STREAM_STARTED__) {
           }),
         )
 
-        /* 2️⃣ Whale Trade Flow Publish */
         const ratio =
           totalVolume > 0
             ? whaleVolume / totalVolume
@@ -91,13 +91,12 @@ if (!g.__BINANCE_STREAM_STARTED__) {
       }
     }
 
-    /* 버퍼 초기화 */
     totalVolumeBufferUSD = 0
     whaleVolumeBufferUSD = 0
   }, 1000)
 
   /* =========================
-   * AggTrade Stream
+   * PRICE STREAM
    * ========================= */
 
   tradeWs.on('message', async raw => {
@@ -119,6 +118,16 @@ if (!g.__BINANCE_STREAM_STARTED__) {
 
       await redis.set(PRICE_KEY, String(price))
 
+      await redis.publish(
+        CHANNEL,
+        JSON.stringify({
+          type: 'PRICE_TICK',
+          symbol: SYMBOL,
+          price,
+          ts: Date.now(),
+        }),
+      )
+
       await onPriceUpdate(SYMBOL, price, qty)
 
     } catch (e) {
@@ -126,32 +135,62 @@ if (!g.__BINANCE_STREAM_STARTED__) {
     }
   })
 
-  /* =========================
-   * Funding Stream
-   * ========================= */
+  /* =====================================================
+     🔥 MARK PRICE STREAM
+     Funding + OI 동시 처리 (정답 구조)
+  ===================================================== */
+
+  markPriceWs.on('open', () => {
+    console.log('[MARK_PRICE WS CONNECTED]')
+  })
 
   markPriceWs.on('message', async raw => {
     try {
       const data = JSON.parse(raw.toString())
+      const now = Date.now()
+
       const fundingRate = Number(data.r)
+      const openInterest = Number(data.i) // 🔥 OI는 i 필드
 
-      if (!Number.isFinite(fundingRate)) return
+      // ✅ Funding 처리
+      if (Number.isFinite(fundingRate)) {
+        await redis.set(FUNDING_KEY, String(fundingRate))
 
-      await redis.set(FUNDING_KEY, String(fundingRate))
+        await redis.publish(
+          CHANNEL,
+          JSON.stringify({
+            type: 'FUNDING_RATE_TICK',
+            symbol: SYMBOL,
+            fundingRate,
+            ts: now,
+          }),
+        )
+      }
 
-      await redis.publish(
-        CHANNEL,
-        JSON.stringify({
-          type: 'FUNDING_RATE_TICK',
-          symbol: SYMBOL,
-          fundingRate,
-          ts: Date.now(),
-        }),
-      )
+      // 🔥 OI 처리 (여기서 같이 발행)
+      if (Number.isFinite(openInterest)) {
+        await redis.publish(
+          CHANNEL,
+          JSON.stringify({
+            type: 'OI_TICK',
+            symbol: SYMBOL,
+            openInterest,
+            ts: now,
+          }),
+        )
+      }
 
     } catch (e) {
-      console.error('[FUNDING_PARSE_ERROR]', e)
+      console.error('[MARK_PRICE_PARSE_ERROR]', e)
     }
+  })
+
+  markPriceWs.on('error', err => {
+    console.error('[MARK_PRICE_WS_ERROR]', err)
+  })
+
+  markPriceWs.on('close', () => {
+    console.warn('[MARK_PRICE_WS_CLOSED]')
   })
 
   /* =========================
@@ -161,9 +200,4 @@ if (!g.__BINANCE_STREAM_STARTED__) {
   tradeWs.on('error', err => {
     console.error('[TRADE_WS_ERROR]', err)
   })
-
-  markPriceWs.on('error', err => {
-    console.error('[MARK_PRICE_WS_ERROR]', err)
-  })
-
 }

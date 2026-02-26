@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
 import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
-import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
+import { useRealtimeFundingRate } from '@/lib/realtime/useRealtimeFundingRate' // ✅ 수정
 import { NumericAnimatedValue } from '@/components/ui/NumericAnimatedValue'
 
 interface RawObservationBarProps {
@@ -13,7 +13,10 @@ interface RawObservationBarProps {
 export function RawObservationBar({ symbol }: RawObservationBarProps) {
   const oiState = useRealtimeOI(symbol)
   const volumeState = useRealtimeVolume(symbol)
-  const { fundingRate } = useRealtimeMarket(symbol)
+
+  // ✅ Funding 훅 교체
+  const fundingState = useRealtimeFundingRate(symbol)
+  const fundingRate = fundingState.fundingRate
 
   return (
     <motion.div
@@ -46,7 +49,6 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
       />
 
       <div className="relative px-4 py-6">
-        {/* 🔥 모바일 안전 구조 */}
         <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:items-center md:gap-16">
 
           {/* ================= OI ================= */}

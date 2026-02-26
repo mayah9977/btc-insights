@@ -5,8 +5,8 @@ import {
 } from './whaleEffects'
 import { handleRiskUpdate } from './vipEffects'
 
-/* 🔥 UI BRIDGE */
 import { applyRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
+import { applyLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
 
 type Handler = (data: any) => void
 
@@ -23,6 +23,11 @@ class SSEConnectionManager {
   private handlers = new Map<string, Set<Handler>>()
   private refCount = 0
 
+  // 🔥 재연결 관리
+  private reconnectAttempts = 0
+  private reconnectTimer: any = null
+  private scope: 'realtime' | 'vip' = 'realtime'
+
   static getInstance() {
     if (!this.instance) {
       this.instance = new SSEConnectionManager()
@@ -30,10 +35,25 @@ class SSEConnectionManager {
     return this.instance
   }
 
+  /* =========================
+   * 🔌 Connect
+   * ========================= */
   private connect() {
     if (this.es) return
 
-    this.es = new EventSource('/api/realtime/stream')
+    const url =
+      this.scope === 'vip'
+        ? '/api/realtime/stream?scope=vip'
+        : '/api/realtime/stream'
+
+    this.es = new EventSource(url)
+
+    this.es.onopen = () => {
+      this.reconnectAttempts = 0
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[SSE] connected:', this.scope)
+      }
+    }
 
     this.es.onmessage = (e) => {
       let msg: any
@@ -47,9 +67,6 @@ class SSEConnectionManager {
       const type = msg?.type
       if (!type) return
 
-      /* =========================
-       * 🔇 로그 최소화
-       * ========================= */
       if (
         process.env.NODE_ENV !== 'production' &&
         !MARKET_EVENTS.has(type)
@@ -58,7 +75,7 @@ class SSEConnectionManager {
       }
 
       /* =========================
-       * 🔥 VIP RISK UPDATE
+       * VIP
        * ========================= */
       if (type === 'RISK_UPDATE') {
         try {
@@ -69,7 +86,7 @@ class SSEConnectionManager {
       }
 
       /* =========================
-       * 🐋 Whale Effects
+       * Whale Effects
        * ========================= */
       if (type === SSE_EVENT.WHALE_INTENSITY) {
         handleWhaleIntensityEffect({
@@ -92,21 +109,10 @@ class SSEConnectionManager {
         })
       }
 
-      /* =====================================================
-       * 🔍 2️⃣ SSE 레벨 실제 수신 값 확인 (중요)
-       * ===================================================== */
-
+      /* =========================
+       * Bollinger
+       * ========================= */
       if (type === SSE_EVENT.BB_SIGNAL) {
-        console.log(
-          '[SSE CONFIRMED]',
-          'signalType:',
-          msg.signalType,
-          '| confirmed:',
-          msg.confirmed,
-          '| timeframe:',
-          msg.timeframe
-        )
-
         try {
           applyRealtimeBollingerSignal(msg)
         } catch (err) {
@@ -114,20 +120,16 @@ class SSEConnectionManager {
         }
       }
 
-      if (type === 'BB_LIVE_COMMENTARY') {
-        console.log(
-          '[SSE LIVE]',
-          'signalType:',
-          msg.signalType,
-          '| confirmed:',
-          msg.confirmed,
-          '| timeframe:',
-          msg.timeframe
-        )
+      if (type === SSE_EVENT.BB_LIVE_COMMENTARY) {
+        try {
+          applyLiveBollingerCommentary(msg)
+        } catch (err) {
+          console.error('[BB_LIVE_COMMENTARY error]', err)
+        }
       }
 
       /* =========================
-       * 📡 Fan-out
+       * Fan-out
        * ========================= */
       this.handlers.get(type)?.forEach((handler) => {
         try {
@@ -146,12 +148,37 @@ class SSEConnectionManager {
       })
     }
 
-    this.es.onerror = (err) => {
-      console.error('[SSE] connection error', err)
+    /* =========================
+     * 🔁 Auto Reconnect (Exponential Backoff)
+     * ========================= */
+    this.es.onerror = () => {
+      this.es?.close()
+      this.es = null
+
+      const delay = Math.min(
+        1000 * 2 ** this.reconnectAttempts,
+        10000
+      )
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[SSE] reconnecting in', delay, 'ms')
+      }
+
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectAttempts++
+        this.connect()
+      }, delay)
     }
   }
 
-  subscribe(type: string, handler: Handler) {
+  /* =========================
+   * 🔔 Subscribe
+   * ========================= */
+  subscribe(type: string, handler: Handler, options?: { scope?: 'vip' }) {
+    if (options?.scope === 'vip') {
+      this.scope = 'vip'
+    }
+
     this.connect()
     this.refCount++
 
@@ -166,6 +193,9 @@ class SSEConnectionManager {
       this.refCount--
 
       if (this.refCount <= 0) {
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer)
+        }
         this.es?.close()
         this.es = null
       }

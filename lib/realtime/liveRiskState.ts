@@ -11,10 +11,8 @@ export type MarketPulse = 'STABLE' | 'ACCELERATING'
 export type LiveRiskState = {
   level: RiskLevel
   startedAt: number
-  updatedAt: number
   prevLevel: RiskLevel | null
   direction: RiskDirection
-  durationSec: number
   whaleAccelerated: boolean
   whalePulse: boolean
   marketPulse: MarketPulse
@@ -103,8 +101,6 @@ export const useLiveRiskState =
             prevLevel: null,
             direction: 'STABLE',
             startedAt: ts,
-            updatedAt: ts,
-            durationSec: 0,
             whaleAccelerated: !!whaleAccelerated,
             whalePulse: shouldPulse,
             marketPulse,
@@ -116,24 +112,15 @@ export const useLiveRiskState =
       }
 
       /* =========================
-       * 동일 단계 유지 (🔥 핵심 수정)
+       * 동일 단계면 set 금지 (🔥 핵심 최적화)
        * ========================= */
       if (prev.level === safeLevel) {
-        const newDuration = Math.floor(
-          (ts - prev.startedAt) / 1000,
-        )
-
+        // whaleAccelerated 또는 marketPulse만 바뀐 경우만 업데이트
         const nextWhaleAccelerated =
           whaleAccelerated ?? prev.whaleAccelerated
 
-        const nextWhalePulse =
-          shouldPulse || prev.whalePulse
-
-        // 🔥 아무 값도 안 바뀌면 set 금지
         if (
-          newDuration === prev.durationSec &&
           nextWhaleAccelerated === prev.whaleAccelerated &&
-          nextWhalePulse === prev.whalePulse &&
           marketPulse === prev.marketPulse
         ) {
           return
@@ -142,10 +129,7 @@ export const useLiveRiskState =
         set({
           state: {
             ...prev,
-            updatedAt: ts,
-            durationSec: newDuration,
             whaleAccelerated: nextWhaleAccelerated,
-            whalePulse: nextWhalePulse,
             marketPulse,
           },
         })
@@ -158,7 +142,7 @@ export const useLiveRiskState =
       }
 
       /* =========================
-       * 단계 변경
+       * 단계 변경 시에만 set
        * ========================= */
       const direction = compareRisk(
         prev.level,
@@ -171,8 +155,6 @@ export const useLiveRiskState =
           prevLevel: prev.level,
           direction,
           startedAt: ts,
-          updatedAt: ts,
-          durationSec: 0,
           whaleAccelerated: !!whaleAccelerated,
           whalePulse: shouldPulse,
           marketPulse,

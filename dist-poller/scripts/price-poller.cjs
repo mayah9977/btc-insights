@@ -1,42 +1,17 @@
 'use strict'
 
-const { redis } = require('../lib/redis/index.js')
+/**
+ * ⚠ DISABLED FILE
+ *
+ * Price polling via REST API has been deprecated.
+ * Real-time price is now handled via Binance WebSocket (aggTrade stream).
+ *
+ * Do NOT re-enable unless architecture changes.
+ */
 
-const SYMBOL = 'BTCUSDT'
-const INTERVAL_MS = 3000
+console.warn(
+  '[PRICE POLLER] DISABLED - WebSocket architecture active',
+)
 
-let lastPrice = null
-
-console.log('[POLLER] started:', SYMBOL)
-
-setInterval(async () => {
-  try {
-    const res = await fetch(
-      `https://api.binance.com/api/v3/ticker/price?symbol=${SYMBOL}`,
-    )
-    if (!res.ok) return
-
-    const data = await res.json()
-    const price = Number(data?.price)
-
-    if (!Number.isFinite(price)) return
-    if (price === lastPrice) return
-
-    lastPrice = price
-
-    console.log('[POLLING]', SYMBOL, price)
-
-    // ✅ poller는 PRICE_TICK만 발행
-    await redis.publish(
-      'realtime:market',
-      JSON.stringify({
-        type: 'PRICE_TICK',
-        symbol: SYMBOL,
-        price,
-        ts: Date.now(),
-      }),
-    )
-  } catch (e) {
-    console.error('[POLLER ERROR]', e)
-  }
-}, INTERVAL_MS)
+// 실행 즉시 종료 (안전)
+process.exit(0)

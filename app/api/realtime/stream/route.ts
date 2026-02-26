@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { addSSEClient } from '@/lib/realtime/sseHub'
+import { addSSEClient, SSEScope } from '@/lib/realtime/sseHub'
 
 // 🔥 VIP Risk SSOT
 import { getLastVipRisk } from '@/lib/vip/vipLastRiskStore'
@@ -7,6 +7,7 @@ import { getLastVipRisk } from '@/lib/vip/vipLastRiskStore'
 // 🔥 Market SSOT
 import {
   getLastOI,
+  getPrevOI,
   getLastVolume,
   getLastFundingRate,
 } from '@/lib/market/marketLastStateStore'
@@ -34,21 +35,15 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+  const scopeParam = req.nextUrl.searchParams.get('scope')
+  const scope: SSEScope =
+    scopeParam === 'vip' ? 'VIP' : 'REALTIME'
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const encoder = new TextEncoder()
 
       function send(event: any) {
-        /* =====================================
-           🥇 Dev 환경에서만 로그 출력
-        ===================================== */
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[SSE_STREAM_SEND]', {
-            type: event?.type,
-            symbol: event?.symbol,
-          })
-        }
-
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
         )
@@ -62,76 +57,108 @@ export async function GET(req: NextRequest) {
       )
 
       /* =========================
-       * 2️⃣ SSE Hub 등록
+       * 2️⃣ SSE Hub 등록 (scope 적용)
        * ========================= */
-      const cleanup = addSSEClient(controller, {
-        scope: 'REALTIME',
-      })
+      const cleanup = addSSEClient(controller, { scope })
 
       /* =========================
-       * 3️⃣ VIP Risk Replay
+       * 3️⃣ Heartbeat
        * ========================= */
-      const lastRisk = getLastVipRisk()
-      if (lastRisk) {
-        send({
-          type: 'RISK_UPDATE',
-          ...lastRisk,
-        })
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(
+            encoder.encode(`event: ping\ndata: {}\n\n`)
+          )
+        } catch {}
+      }, 15000)
+
+      /* =========================
+       * 4️⃣ VIP Risk Replay
+       * ========================= */
+      if (scope === 'VIP') {
+        const lastRisk = getLastVipRisk()
+        if (lastRisk) {
+          send({
+            type: 'RISK_UPDATE',
+            ...lastRisk,
+          })
+        }
       }
 
       /* =========================
-       * 4️⃣ Market OI Replay
+       * 5️⃣ OI Replay (🔥 Drift 포함)
        * ========================= */
-      const oi = getLastOI('BTCUSDT')
+      const symbol = 'BTCUSDT'
+      const oi = getLastOI(symbol)
+      const prevOi = getPrevOI(symbol)
+
       if (oi !== undefined) {
+        const delta =
+          typeof prevOi === 'number'
+            ? oi - prevOi
+            : 0
+
+        const direction =
+          delta > 0
+            ? 'UP'
+            : delta < 0
+            ? 'DOWN'
+            : 'FLAT'
+
         send({
           type: 'OI_TICK',
-          symbol: 'BTCUSDT',
+          symbol,
           openInterest: oi,
+          delta,
+          direction,
+          ts: Date.now(),
         })
       }
 
       /* =========================
-       * 5️⃣ Market Volume Replay
+       * 6️⃣ Volume Replay
        * ========================= */
-      const volume = getLastVolume('BTCUSDT')
+      const volume = getLastVolume(symbol)
       if (volume !== undefined) {
         send({
           type: 'VOLUME_TICK',
-          symbol: 'BTCUSDT',
+          symbol,
           volume,
+          ts: Date.now(),
         })
       }
 
       /* =========================
-       * 6️⃣ Market Funding Rate Replay
+       * 7️⃣ Funding Replay
        * ========================= */
-      const fundingRate = getLastFundingRate('BTCUSDT')
+      const fundingRate = getLastFundingRate(symbol)
       if (fundingRate != null) {
         send({
           type: 'FUNDING_RATE_TICK',
-          symbol: 'BTCUSDT',
+          symbol,
           fundingRate,
+          ts: Date.now(),
         })
       }
 
       /* =========================
-       * 7️⃣ Sentiment Replay
+       * 8️⃣ Sentiment Replay
        * ========================= */
       const lastSentiment = getLastSentiment()
       if (lastSentiment != null) {
         send({
           type: 'SENTIMENT_UPDATE',
-          symbol: 'BTCUSDT',
+          symbol,
           sentiment: lastSentiment,
           ts: Date.now(),
         })
       }
 
       /* =========================
-       * 8️⃣ 연결 종료 처리
+       * 9️⃣ 연결 종료 처리
        * ========================= */
       const onAbort = () => {
+        clearInterval(heartbeat)
         cleanup()
         try {
           controller.close()
@@ -149,6 +176,7 @@ export async function GET(req: NextRequest) {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'Transfer-Encoding': 'chunked',
       'X-Accel-Buffering': 'no',
     },
   })

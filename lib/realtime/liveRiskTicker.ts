@@ -1,27 +1,23 @@
 // lib/realtime/liveRiskTicker.ts
-import { useLiveRiskState } from './liveRiskState'
 
-let timer: NodeJS.Timeout | null = null
+/**
+ * 🔥 Performance Optimized
+ *
+ * 기존:
+ * - 1초마다 liveRiskState.update() 호출
+ * - durationSec 갱신 목적
+ *
+ * 현재:
+ * - durationSec store 제거
+ * - 리스크는 SSE 기반 업데이트만 사용
+ *
+ * 따라서 ticker는 더 이상 사용하지 않음.
+ */
 
 export function startLiveRiskTicker() {
-  if (timer) return
-
-  timer = setInterval(() => {
-    const state = useLiveRiskState.getState().state
-    if (!state) return
-
-    // ❗ level은 그대로, 시간만 흐르게
-    useLiveRiskState.getState().update({
-      level: state.level,
-      ts: Date.now(),
-      whaleAccelerated: state.whaleAccelerated,
-    })
-  }, 1000)
+  // 🔕 no-op (intentionally disabled)
 }
 
 export function stopLiveRiskTicker() {
-  if (timer) {
-    clearInterval(timer)
-    timer = null
-  }
+  // 🔕 no-op (intentionally disabled)
 }

@@ -1,10 +1,10 @@
-import { createRedisSubscriber } from '@/lib/redis/index'
+import { createRedisSubscriber } from '@/lib/redis'
 import type { Redis } from 'ioredis'
 
-// 🔥 Market SSOT 저장
 import {
   setLastOI,
   setLastVolume,
+  setLastFundingRate,
 } from '@/lib/market/marketLastStateStore'
 
 /* =========================
@@ -38,7 +38,6 @@ export function addSSEClient(
   const scope: SSEScope = options?.scope ?? 'REALTIME'
 
   const client: Client = { controller, scope }
-
   clientsByScope[scope].add(client)
 
   console.log(
@@ -60,6 +59,11 @@ export function addSSEClient(
 /* =========================
  * 🔥 Redis → SSE Bridge
  * ========================= */
+
+// 🔥 채널 분리 (최신 구조)
+const DERIVED_PUBLIC = 'realtime:derived:public'
+const DERIVED_VIP = 'realtime:derived:vip'
+
 const g = globalThis as typeof globalThis & {
   __SSE_REDIS_SUBSCRIBED__?: boolean
 }
@@ -69,7 +73,9 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 
   const sub: Redis = createRedisSubscriber()
 
-  sub.subscribe('realtime:market')
+  // 🔥 두 채널 구독
+  sub.subscribe(DERIVED_PUBLIC)
+  sub.subscribe(DERIVED_VIP)
 
   sub.on('subscribe', (channel: string, count: number) => {
     console.log('[SSE] Redis subscribed:', channel, 'count=', count)
@@ -79,7 +85,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     console.error('[SSE] Redis error', err)
   })
 
-  sub.on('message', (_channel: string, message: string) => {
+  sub.on('message', (channel: string, message: string) => {
     let event: any
 
     try {
@@ -104,38 +110,25 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
       } catch {}
     }
 
+    if (event?.type === 'FUNDING_RATE_TICK') {
+      try {
+        setLastFundingRate(event.symbol, event.fundingRate)
+      } catch {}
+    }
+
     /* =========================
-     * 🔥 이벤트 → scope 매핑
+     * 🔥 channel 기반 scope 결정
      * ========================= */
     let targetScope: SSEScope | null = null
 
-    // ALERTS
-    if (event.type === 'ALERT_TRIGGERED') {
-      targetScope = 'ALERTS'
-    }
-
-    // REALTIME (Market + Whale + Sentiment)
-    else if (
-      event.type === 'PRICE_TICK' ||
-      event.type === 'VOLUME_TICK' ||
-      event.type === 'OI_TICK' ||
-      event.type === 'FUNDING_RATE_TICK' ||
-      event.type === 'WHALE_INTENSITY' ||      // 🔥 Pressure Index
-      event.type === 'WHALE_WARNING' ||
-      event.type === 'WHALE_TRADE_FLOW' ||     // 🆕 Trade Flow Index
-      event.type === 'BB_SIGNAL' ||
-      event.type === 'BB_LIVE_COMMENTARY' ||
-      event.type === 'SENTIMENT_UPDATE'
-    ) {
-      targetScope = 'REALTIME'
-    }
-
-    // VIP
-    else if (
-      event.type === 'VIP_UPDATE' ||
-      event.type === 'RISK_UPDATE'
-    ) {
+    if (channel === DERIVED_VIP) {
       targetScope = 'VIP'
+    } else if (channel === DERIVED_PUBLIC) {
+      if (event.type === 'ALERT_TRIGGERED') {
+        targetScope = 'ALERTS'
+      } else {
+        targetScope = 'REALTIME'
+      }
     }
 
     if (!targetScope) return
@@ -152,9 +145,7 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
         client.controller.enqueue(payload)
       } catch {
         set.delete(client)
-        console.warn(
-          `[SSE][${targetScope}] drop closed client`,
-        )
+        console.warn(`[SSE][${targetScope}] drop closed client`)
       }
     }
   })
@@ -182,10 +173,6 @@ export function pushHeartbeat() {
 /* =========================
  * 🔥 Market Signal Broadcaster (placeholder)
  * ========================= */
-export function broadcastMarketSignal(event: any) {
-  try {
-    return
-  } catch (e) {
-    console.error('[SSE] broadcastMarketSignal error', e)
-  }
+export function broadcastMarketSignal(_event: any) {
+  return
 }

@@ -6,50 +6,98 @@
  */
 
 /* =====================================================
+ * 🔧 내부 유틸
+ * ===================================================== */
+function normalize(symbol: string) {
+  return symbol?.toUpperCase()
+}
+
+function isValidNumber(v: any): v is number {
+  return typeof v === 'number' && Number.isFinite(v)
+}
+
+/* =====================================================
  * OI / VOLUME (Last / Prev)
  * ===================================================== */
 const lastOI = new Map<string, number>()
-const lastVolume = new Map<string, number>()
-
 const prevOI = new Map<string, number>()
+
+const lastVolume = new Map<string, number>()
 const prevVolume = new Map<string, number>()
 
 /* -------------------------
  * Open Interest
  * ------------------------- */
 export function setLastOI(symbol: string, oi: number) {
-  const last = lastOI.get(symbol)
-  if (Number.isFinite(last)) {
-    prevOI.set(symbol, last as number)
+  if (!isValidNumber(oi)) return
+
+  const key = normalize(symbol)
+  const last = lastOI.get(key)
+
+  if (isValidNumber(last)) {
+    prevOI.set(key, last)
   }
-  lastOI.set(symbol, oi)
+
+  lastOI.set(key, oi)
 }
 
 export function getLastOI(symbol: string) {
-  return lastOI.get(symbol)
+  return lastOI.get(normalize(symbol))
 }
 
 export function getPrevOI(symbol: string) {
-  return prevOI.get(symbol)
+  return prevOI.get(normalize(symbol))
+}
+
+/**
+ * 🔥 Replay용 Drift 계산 포함 반환
+ */
+export function getLastOIDerived(symbol: string) {
+  const key = normalize(symbol)
+  const current = lastOI.get(key)
+  const prev = prevOI.get(key)
+
+  if (!isValidNumber(current)) return null
+
+  const delta =
+    isValidNumber(prev) ? current - prev : 0
+
+  const direction =
+    delta > 0
+      ? 'UP'
+      : delta < 0
+      ? 'DOWN'
+      : 'FLAT'
+
+  return {
+    openInterest: current,
+    delta,
+    direction,
+  }
 }
 
 /* -------------------------
  * Volume
  * ------------------------- */
 export function setLastVolume(symbol: string, volume: number) {
-  const last = lastVolume.get(symbol)
-  if (Number.isFinite(last)) {
-    prevVolume.set(symbol, last as number)
+  if (!isValidNumber(volume)) return
+
+  const key = normalize(symbol)
+  const last = lastVolume.get(key)
+
+  if (isValidNumber(last)) {
+    prevVolume.set(key, last)
   }
-  lastVolume.set(symbol, volume)
+
+  lastVolume.set(key, volume)
 }
 
 export function getLastVolume(symbol: string) {
-  return lastVolume.get(symbol)
+  return lastVolume.get(normalize(symbol))
 }
 
 export function getPrevVolume(symbol: string) {
-  return prevVolume.get(symbol)
+  return prevVolume.get(normalize(symbol))
 }
 
 /* =====================================================
@@ -58,11 +106,12 @@ export function getPrevVolume(symbol: string) {
 const lastFundingRateMap = new Map<string, number>()
 
 export function setLastFundingRate(symbol: string, fundingRate: number) {
-  lastFundingRateMap.set(symbol, fundingRate)
+  if (!isValidNumber(fundingRate)) return
+  lastFundingRateMap.set(normalize(symbol), fundingRate)
 }
 
 export function getLastFundingRate(symbol: string) {
-  return lastFundingRateMap.get(symbol)
+  return lastFundingRateMap.get(normalize(symbol))
 }
 
 /* =====================================================
@@ -72,12 +121,14 @@ const recentPriceMap = new Map<string, number[]>()
 const MAX_PRICE_BUFFER = 200
 
 export function pushRecentPrice(symbol: string, price: number) {
-  if (!Number.isFinite(price)) return
+  if (!isValidNumber(price)) return
 
-  let arr = recentPriceMap.get(symbol)
+  const key = normalize(symbol)
+
+  let arr = recentPriceMap.get(key)
   if (!arr) {
     arr = []
-    recentPriceMap.set(symbol, arr)
+    recentPriceMap.set(key, arr)
   }
 
   arr.push(price)
@@ -87,55 +138,45 @@ export function pushRecentPrice(symbol: string, price: number) {
   }
 }
 
-export function getRecentPrices(
-  symbol: string,
-  n: number,
-): number[] {
-  const arr = recentPriceMap.get(symbol)
+export function getRecentPrices(symbol: string, n: number): number[] {
+  const arr = recentPriceMap.get(normalize(symbol))
   if (!arr || arr.length < n) return []
   return arr.slice(-n)
 }
 
 export function getLastPrice(symbol: string): number | undefined {
-  const arr = recentPriceMap.get(symbol)
+  const arr = recentPriceMap.get(normalize(symbol))
   if (!arr || arr.length === 0) return undefined
   return arr[arr.length - 1]
 }
 
 /* =====================================================
- * 🔥 BB_SIGNAL SSOT (ADD)
+ * 🔥 BB_SIGNAL SSOT
  * ===================================================== */
 import type { BollingerSignal } from '@/lib/market/actionGate/signalType'
 
-// symbol → last confirmed BB_SIGNAL
 const lastBollingerSignalMap = new Map<
   string,
   BollingerSignal | null
 >()
 
-/**
- * 저장
- * - marketRealtimeConsumer 에서 호출
- */
 export function setLastBollingerSignal(
   symbol: string,
   signal: BollingerSignal,
 ) {
-  lastBollingerSignalMap.set(symbol, signal)
+  lastBollingerSignalMap.set(normalize(symbol), signal)
 }
 
-/**
- * 조회
- * - buildRiskInputFromRealtime 에서 사용
- */
 export function getLastBollingerSignal(
   symbol: string,
 ): BollingerSignal | null {
-  return lastBollingerSignalMap.get(symbol) ?? null
+  return (
+    lastBollingerSignalMap.get(normalize(symbol)) ?? null
+  )
 }
 
 /* =====================================================
- * Action Gate SSOT (Interpretation Authority)
+ * Action Gate SSOT
  * ===================================================== */
 const actionGateStateMap = new Map<
   string,
@@ -148,20 +189,20 @@ export function setActionGateState(
   symbol: string,
   state: 'OBSERVE' | 'CAUTION' | 'IGNORE',
 ) {
-  actionGateStateMap.set(symbol, state)
+  actionGateStateMap.set(normalize(symbol), state)
 }
 
 export function getActionGateState(symbol: string) {
-  return actionGateStateMap.get(symbol)
+  return actionGateStateMap.get(normalize(symbol))
 }
 
 export function setLastActionGateInput(
   symbol: string,
   input: any,
 ) {
-  lastActionGateInputMap.set(symbol, input)
+  lastActionGateInputMap.set(normalize(symbol), input)
 }
 
 export function getLastActionGateInput(symbol: string) {
-  return lastActionGateInputMap.get(symbol)
+  return lastActionGateInputMap.get(normalize(symbol))
 }

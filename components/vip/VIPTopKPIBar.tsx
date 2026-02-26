@@ -2,19 +2,22 @@
 
 import { motion } from 'framer-motion'
 import { useSystemGuideStore } from '@/lib/vip/systemGuideStore'
+import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
 import VIPSystemGuideModal from './VIPSystemGuideModal'
 
 type Props = {
-  btcPrice: number
   avoidedExtremeCount: number
-  avoidedLossUSD: number // ⛔ 사용하지 않음 (호환성 유지)
+  avoidedLossUSD?: number // 호환성 유지 (사용 안함)
 }
 
 export default function VIPTopKPIBar({
-  btcPrice,
   avoidedExtremeCount,
 }: Props) {
   const openGuide = useSystemGuideStore(s => s.open)
+
+  // 🔥 실시간 가격은 내부에서 직접 구독
+  const { price } = useRealtimePrice('BTCUSDT')
+  const btcPrice = price ?? 0
 
   return (
     <>
@@ -70,7 +73,7 @@ export default function VIPTopKPIBar({
             </p>
           </div>
 
-          {/* 🔥 시스템 활용방법 (클릭 가능) */}
+          {/* 🔥 시스템 활용방법 */}
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -92,7 +95,7 @@ export default function VIPTopKPIBar({
             </p>
           </motion.div>
 
-          {/* 🔥 시스템 설명 및 주의사항 (클릭 가능) */}
+          {/* 🔥 시스템 설명 */}
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -116,7 +119,6 @@ export default function VIPTopKPIBar({
         </div>
       </motion.div>
 
-      {/* 🔥 모달 연결 */}
       <VIPSystemGuideModal />
     </>
   )

@@ -1,15 +1,20 @@
+'use client'
+
+import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
 import { generateRiskSentence } from '@/lib/vip/riskSentence'
-import type { RiskLevel } from '@/lib/vip/riskEngine'
+import type { RiskLevel } from '@/lib/vip/riskTypes'
 
 type Props = {
-  riskLevel: RiskLevel
   reasons?: string[]
 }
 
 export default function VIPNoEntryReason({
-  riskLevel,
   reasons = [],
 }: Props) {
+  // 🔥 내부에서 실시간 리스크 구독
+  const live = useLiveRiskState(s => s.state)
+  const riskLevel: RiskLevel = live?.level ?? 'LOW'
+
   if (riskLevel === 'LOW') return null
 
   return (

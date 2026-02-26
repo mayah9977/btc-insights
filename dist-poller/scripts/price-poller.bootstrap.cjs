@@ -1,12 +1,17 @@
 "use strict";
 
-const path = require("path");
-const dotenv = require("dotenv");
+/**
+ * ⚠ DISABLED BOOTSTRAP
+ *
+ * Poller architecture has been deprecated.
+ * Real-time data is now handled via Binance WebSocket streams.
+ *
+ * This bootstrap does nothing intentionally.
+ */
 
-// ✅ ENV 먼저 로드
-dotenv.config({
-  path: path.resolve(process.cwd(), ".env.local"),
-});
+console.warn(
+  "[PRICE POLLER BOOTSTRAP] DISABLED - WebSocket architecture active",
+);
 
-// ✅ 그 다음 poller 로직
-require("./price-poller.cjs");
+// 즉시 종료 (안전)
+process.exit(0);

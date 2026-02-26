@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
-import { useRealtimeMarket } from '@/lib/realtime/useRealtimeMarket'
+import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
 import type { RiskLevel } from '@/lib/vip/riskTypes'
 
 const RISK_COLOR: Record<RiskLevel, string> = {
@@ -13,29 +13,38 @@ const RISK_COLOR: Record<RiskLevel, string> = {
   EXTREME: 'text-red-500',
 }
 
-export default function VIPLiveStatusStrip() {
+function VIPLiveStatusStripComponent() {
+  /* =========================
+     🔥 Zustand Selector 분리
+  ========================= */
+
   const live = useLiveRiskState(s => s.state)
   const triggerWhalePulse = useLiveRiskState(s => s.triggerWhalePulse)
-  const { volume } = useRealtimeMarket('BTCUSDT')
+
+  /* =========================
+     🔥 통합 Market 훅 제거
+     → Volume 전용 훅 사용 (렌더 격리)
+  ========================= */
+
+  const { volume } = useRealtimeVolume('BTCUSDT')
 
   const prevVolumeRef = useRef<number | null>(null)
 
-  /* ---------------------------
-     체결량 방향 계산
-  --------------------------- */
+  /* =========================
+     체결량 변화 계산
+  ========================= */
 
-  const prevVolume = prevVolumeRef.current
-  const delta =
-    volume != null && prevVolume != null
-      ? volume - prevVolume
-      : 0
+  const delta = useMemo(() => {
+    if (volume == null || prevVolumeRef.current == null) return 0
+    return volume - prevVolumeRef.current
+  }, [volume])
 
   const glowColor =
     delta > 0
-      ? 'rgba(250,204,21,0.9)'   // 상승 = 골드
+      ? 'rgba(250,204,21,0.9)'
       : delta < 0
-      ? 'rgba(239,68,68,0.9)'    // 하락 = 레드
-      : 'rgba(16,185,129,0.7)'   // 유지 = 에메랄드
+      ? 'rgba(239,68,68,0.9)'
+      : 'rgba(16,185,129,0.7)'
 
   useEffect(() => {
     if (volume != null) {
@@ -43,44 +52,47 @@ export default function VIPLiveStatusStrip() {
     }
   }, [volume])
 
+  /* =========================
+     Whale Pulse Trigger
+  ========================= */
+
   useEffect(() => {
     if (!live || volume == null) return
 
-    const preExtreme = (live as any)?.preExtreme === true
-
     const isWhalePulse =
-      live.whaleAccelerated &&
-      (volume > 500_000 || (preExtreme && volume > 250_000))
+      live.whaleAccelerated && volume > 500_000
 
     if (isWhalePulse) triggerWhalePulse()
-  }, [live, volume, triggerWhalePulse])
+  }, [live?.whaleAccelerated, volume, triggerWhalePulse])
 
   if (!live) return null
 
   const {
     level,
     direction,
-    whaleAccelerated,
     whalePulse,
-    durationSec,
+    startedAt,
   } = live
 
-  const preExtreme = (live as any)?.preExtreme === true
   const isExtreme = level === 'EXTREME'
 
+  /* =========================
+     🔥 duration 직접 계산
+     (store tick 제거 상태 유지)
+  ========================= */
+
+  const durationSec =
+    level !== 'LOW'
+      ? Math.floor((Date.now() - startedAt) / 1000)
+      : 0
+
   const durationText =
-    level !== 'LOW' &&
-    typeof durationSec === 'number' &&
-    durationSec > 0
+    level !== 'LOW' && durationSec > 0
       ? `· ${Math.floor(durationSec / 60)}분 ${durationSec % 60}초 유지 중`
       : ''
 
   const volumeKey =
     volume != null ? `vol-${volume}` : 'vol-empty'
-
-  /* ---------------------------
-     상단 숫자와 동일 애니메이션
-  --------------------------- */
 
   const numericPulse = {
     initial: { scale: 1 },
@@ -103,8 +115,6 @@ export default function VIPLiveStatusStrip() {
         y: 0,
         backgroundColor: isExtreme
           ? 'rgba(69,10,10,0.65)'
-          : preExtreme
-          ? 'rgba(24,24,27,0.92)'
           : 'rgba(9,9,11,0.85)',
       }}
       transition={{ duration: 0.6 }}
@@ -114,7 +124,6 @@ export default function VIPLiveStatusStrip() {
         backdrop-blur overflow-hidden
       "
     >
-      {/* 상단 흐름 유지 */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
         animate={{
@@ -134,14 +143,14 @@ export default function VIPLiveStatusStrip() {
         }}
       />
 
-      {/* 🔥 위 숫자와 동일 text-sm 통일 */}
-      <div className="
+      <div
+        className="
         relative max-w-7xl mx-auto
         px-4 py-2
         flex flex-wrap items-center gap-x-8 gap-y-1
         text-sm
-      ">
-
+      "
+      >
         {/* VIP 보호 */}
         <div className="flex items-center gap-2 text-zinc-300">
           <span className="text-emerald-400">🛡</span>
@@ -183,10 +192,13 @@ export default function VIPLiveStatusStrip() {
         {/* 관측 */}
         <div className="flex items-center gap-2 text-zinc-400">
           <span>🐋</span>
-          <span>Observing real-time market conditions. ( 실시간 시장을 모니터링중입니다. )</span>
+          <span>
+            Observing real-time market conditions.
+            ( 실시간 시장을 모니터링중입니다. )
+          </span>
         </div>
 
-        {/* 🔥 실시간 체결량 (상단 숫자와 동일 애니메이션) */}
+        {/* 실시간 체결량 */}
         <motion.div
           key={volumeKey}
           variants={numericPulse}
@@ -220,3 +232,9 @@ export default function VIPLiveStatusStrip() {
     </motion.div>
   )
 }
+
+/* =========================
+   🔥 React.memo 적용
+========================= */
+
+export default React.memo(VIPLiveStatusStripComponent)
