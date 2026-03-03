@@ -29,6 +29,27 @@ const clientsByScope: Record<SSEScope, Set<Client>> = {
 }
 
 /* =========================
+ * 🔥 내부 브로드캐스트 유틸
+ * ========================= */
+function broadcastToScope(scope: SSEScope, event: any) {
+  const clients = clientsByScope[scope]
+  if (!clients.size) return
+
+  const payload = encoder.encode(
+    `data: ${JSON.stringify(event)}\n\n`,
+  )
+
+  for (const client of clients) {
+    try {
+      client.controller.enqueue(payload)
+    } catch {
+      clients.delete(client)
+      console.warn(`[SSE][${scope}] drop closed client`)
+    }
+  }
+}
+
+/* =========================
  * SSE Client 등록
  * ========================= */
 export function addSSEClient(
@@ -60,7 +81,6 @@ export function addSSEClient(
  * 🔥 Redis → SSE Bridge
  * ========================= */
 
-// 🔥 채널 분리 (최신 구조)
 const DERIVED_PUBLIC = 'realtime:derived:public'
 const DERIVED_VIP = 'realtime:derived:vip'
 
@@ -73,7 +93,6 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 
   const sub: Redis = createRedisSubscriber()
 
-  // 🔥 두 채널 구독
   sub.subscribe(DERIVED_PUBLIC)
   sub.subscribe(DERIVED_VIP)
 
@@ -117,36 +136,25 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
 
     /* =========================
-     * 🔥 channel 기반 scope 결정
+     * 🔥 Scope 분기
      * ========================= */
-    let targetScope: SSEScope | null = null
 
+    // 1️⃣ VIP 전용 이벤트
     if (channel === DERIVED_VIP) {
-      targetScope = 'VIP'
-    } else if (channel === DERIVED_PUBLIC) {
-      if (event.type === 'ALERT_TRIGGERED') {
-        targetScope = 'ALERTS'
-      } else {
-        targetScope = 'REALTIME'
-      }
+      broadcastToScope('VIP', event)
+      return
     }
 
-    if (!targetScope) return
-
-    const set = clientsByScope[targetScope]
-    if (!set.size) return
-
-    const payload = encoder.encode(
-      `data: ${JSON.stringify(event)}\n\n`,
-    )
-
-    for (const client of set) {
-      try {
-        client.controller.enqueue(payload)
-      } catch {
-        set.delete(client)
-        console.warn(`[SSE][${targetScope}] drop closed client`)
+    // 2️⃣ PUBLIC 이벤트
+    if (channel === DERIVED_PUBLIC) {
+      if (event?.type === 'ALERT_TRIGGERED') {
+        broadcastToScope('ALERTS', event)
+        return
       }
+
+      broadcastToScope('REALTIME', event)
+      broadcastToScope('VIP', event)
+      return
     }
   })
 }
@@ -171,8 +179,9 @@ export function pushHeartbeat() {
 }
 
 /* =========================
- * 🔥 Market Signal Broadcaster (placeholder)
+ * 🔥 Market Signal Broadcaster
  * ========================= */
-export function broadcastMarketSignal(_event: any) {
-  return
+export function broadcastMarketSignal(event: any) {
+  broadcastToScope('REALTIME', event)
+  broadcastToScope('VIP', event)
 }

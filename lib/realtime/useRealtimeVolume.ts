@@ -1,23 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { subscribeMarketVolume } from '@/lib/realtime/marketChannel'
 
 type RealtimeVolumeState = {
   volume: number | null
+  rolling10s: number
   connected: boolean
   lastUpdatedAt: number | null
 }
 
 const INITIAL: RealtimeVolumeState = {
   volume: null,
+  rolling10s: 0,
   connected: false,
   lastUpdatedAt: null,
 }
 
 export function useRealtimeVolume(symbol: string) {
-  const [state, setState] =
-    useState<RealtimeVolumeState>(INITIAL)
+  const [volume, setVolume] = useState<number | null>(null)
+  const [history, setHistory] = useState<number[]>([])
+  const [connected, setConnected] = useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
 
   useEffect(() => {
     if (!symbol) return
@@ -26,20 +30,32 @@ export function useRealtimeVolume(symbol: string) {
 
     const unsubscribe = subscribeMarketVolume(
       upperSymbol,
-      (volume) => {
-        setState({
-          volume,
-          connected: true,
-          lastUpdatedAt: Date.now(),
+      (v) => {
+        setVolume(v)
+        setConnected(true)
+        setLastUpdatedAt(Date.now())
+
+        setHistory(prev => {
+          const next = [...prev.slice(-9), v]
+          return next
         })
       },
     )
 
     return () => {
       unsubscribe()
-      setState(s => ({ ...s, connected: false }))
+      setConnected(false)
     }
   }, [symbol])
 
-  return state
+  const rolling10s = useMemo(() => {
+    return history.reduce((a, b) => a + b, 0)
+  }, [history])
+
+  return {
+    volume,
+    rolling10s,
+    connected,
+    lastUpdatedAt,
+  }
 }

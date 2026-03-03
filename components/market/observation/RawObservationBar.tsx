@@ -54,7 +54,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
           {/* ================= OI ================= */}
           <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Open Interest (미결제약정)
+              Open Interest(미결제약정)
             </span>
 
             <NumericAnimatedValue
@@ -68,7 +68,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
           {/* ================= Volume ================= */}
           <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Volume (거래량)
+              Volume(거래량)
             </span>
 
             <NumericAnimatedValue
@@ -83,7 +83,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
           {/* ================= Funding ================= */}
           <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
             <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Funding Rate (펀딩비)
+              Funding Rate(펀딩비)
             </span>
 
             <NumericAnimatedValue

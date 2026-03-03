@@ -3,11 +3,17 @@
 import {
   getLastPrice,
   getLastOI,
-  getPrevOI,
   getLastVolume,
   getPrevVolume,
   getLastFundingRate,
   getLastBollingerSignal,
+  getLastMACD,
+
+  getLastWhaleTradeUSD,
+  getLastTotalTradeUSD,
+  getLastWhaleBuyUSD,
+  getLastWhaleSellUSD,
+  getWhaleCVD,
 } from '@/lib/market/marketLastStateStore'
 
 import {
@@ -16,191 +22,198 @@ import {
 } from '@/lib/market/statsRolling'
 
 import { calculateVolatilityFromCandles } from '@/lib/market/calcRealtimeVolatility'
-import { detectWhale } from '@/lib/detectWhale'
-import { deriveBollingerObservation } from '@/lib/market/actionGate/deriveBollingerObservation'
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
+import type { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
-/* =======================================================
-   🔥 확장된 Snapshot 타입
-======================================================= */
+/* ======================================================= */
+/* 🔥 OI Snapshot Map (즉시 반응 구조 핵심) */
+/* ======================================================= */
+
+const lastSnapshotOIMap = new Map<string, number>()
+
+/* ======================================================= */
 
 export interface RealtimeRiskSnapshot extends ActionGateInput {
-  /* 기본 */
   price: number
   volatility: number
   whaleIntensity: number
   fundingRate: number
 
-  /* 🔥 추가 확장 */
   openInterest: number
   prevOpenInterest: number
+  oiDelta: number
   oiDeltaRatio: number
+
   volumeRatio: number
+
   fundingBias: 'LONG_HEAVY' | 'SHORT_HEAVY' | 'NEUTRAL'
 
-  /* 리스크 */
   extremeSignal: boolean
   preExtreme: boolean
   marketPulse: 'ACCELERATING' | 'STABLE'
 
+  whaleNetRatio: number
+  whaleRatio: number
+
+  whaleAvg: number
+  whaleTrend: 'UP' | 'DOWN' | 'FLAT'
+
+  whaleVolume: number
+  totalVolume: number
+
+  whaleBuyVolume: number
+  whaleSellVolume: number
+  whaleNetPressure: number
+
+  whaleCVD: number
+
+  tradeUSD: number
   ts: number
 }
+
+/* ======================================================= */
 
 export async function buildRiskInputFromRealtime(
   symbol: string,
 ): Promise<RealtimeRiskSnapshot | null> {
 
-  /* ================= PRICE ================= */
-
-  const priceRaw = getLastPrice(symbol)
-  if (priceRaw == null || !Number.isFinite(priceRaw)) return null
-  const price = priceRaw
-
-  /* ================= VOLATILITY ================= */
+  const price = getLastPrice(symbol)
+  if (price == null || !Number.isFinite(price)) return null
 
   const volatilityRaw = await calculateVolatilityFromCandles(symbol)
-  if (volatilityRaw == null || !Number.isFinite(volatilityRaw)) return null
-  const volatility = volatilityRaw
 
-  /* ================= OI ================= */
+  const volatility =
+    volatilityRaw != null && Number.isFinite(volatilityRaw)
+      ? volatilityRaw
+      : 0
 
-  const lastOIRaw = getLastOI(symbol)
-  const prevOIRaw = getPrevOI(symbol)
+  /* ================= OI (🔥 즉시 반응 구조) ================= */
 
-  if (
-    lastOIRaw == null ||
-    prevOIRaw == null ||
-    !Number.isFinite(lastOIRaw) ||
-    !Number.isFinite(prevOIRaw) ||
-    prevOIRaw === 0
-  ) return null
+  const openInterest = getLastOI(symbol) ?? 0
 
-  const openInterest = lastOIRaw
-  const prevOpenInterest = prevOIRaw
+  const prevSnapshotOI =
+    lastSnapshotOIMap.get(symbol) ?? openInterest
+
+  const oiDelta = openInterest - prevSnapshotOI
 
   const oiDeltaRatio =
-    (openInterest - prevOpenInterest) /
-    prevOpenInterest
+    prevSnapshotOI !== 0
+      ? oiDelta / prevSnapshotOI
+      : 0
 
-  const oiEnergy =
-    Math.tanh(Math.abs(oiDeltaRatio) * 2.4)
+  // 🔥 스냅샷 업데이트
+  lastSnapshotOIMap.set(symbol, openInterest)
 
-  /* ================= VOLUME ================= */
+  /* ================= Volume ================= */
 
-  const lastVolumeRaw = getLastVolume(symbol)
-  const prevVolumeRaw = getPrevVolume(symbol)
+  const lastVolume = getLastVolume(symbol) ?? 0
+  const prevVolume = getPrevVolume(symbol)
 
-  if (
-    lastVolumeRaw == null ||
-    prevVolumeRaw == null ||
-    !Number.isFinite(lastVolumeRaw) ||
-    !Number.isFinite(prevVolumeRaw) ||
-    prevVolumeRaw === 0
-  ) return null
+  const safePrevVolume =
+    prevVolume != null &&
+    Number.isFinite(prevVolume) &&
+    prevVolume !== 0
+      ? prevVolume
+      : lastVolume || 1
 
-  const volumeRatio = lastVolumeRaw / prevVolumeRaw
+  const volumeRatio =
+    safePrevVolume !== 0
+      ? lastVolume / safePrevVolume
+      : 1
 
-  const volumeEnergy =
-    Math.tanh(Math.sqrt(volumeRatio) * 1.6)
+  /* ================= Whale Intensity ================= */
 
-  /* ================= VOLATILITY ENERGY ================= */
-
-  const volatilityEnergy =
-    1 - Math.exp(-volatility * 3.2)
-
-  /* ================= DRIFT ================= */
+  const oiEnergy = Math.min(1, Math.abs(oiDeltaRatio) * 15)
+  const volumeEnergy = Math.min(1, Math.log(volumeRatio + 1) * 1.4)
+  const volatilityEnergy = Math.min(1, volatility * 1.2)
 
   const rollingMean = getRollingMean(`OI_${symbol}`)
   const rollingStd = getRollingStd(`OI_${symbol}`)
 
   let driftEnergy = 0
 
-  if (
-    rollingMean != null &&
-    rollingStd != null &&
-    rollingStd > 0
-  ) {
+  if (rollingMean && rollingStd && rollingStd > 0) {
     const drift =
       Math.abs(openInterest - rollingMean) /
       (rollingStd + 1e-6)
 
-    driftEnergy = Math.tanh(drift * 1.4)
+    driftEnergy = Math.min(1, drift * 0.6)
   }
 
-  /* ================= RAW INTENSITY ================= */
+  const whaleIntensity = Math.max(
+    0,
+    Math.min(
+      1,
+      0.35 * oiEnergy +
+      0.30 * volumeEnergy +
+      0.20 * volatilityEnergy +
+      0.15 * driftEnergy
+    ),
+  )
 
-  const raw =
-    0.32 * oiEnergy +
-    0.28 * volumeEnergy +
-    0.22 * volatilityEnergy +
-    0.18 * driftEnergy
+  /* ================= Trade Flow ================= */
 
-  const baseIntensity =
-    Math.tanh(raw * 1.2)
+  const totalTradeUSD = getLastTotalTradeUSD(symbol) ?? 0
+  const whaleTradeUSD = getLastWhaleTradeUSD(symbol) ?? 0
 
-  const microPulse =
-    0.015 * Math.sin(Date.now() / 2000)
+  const whaleBuyVolume = getLastWhaleBuyUSD(symbol) ?? 0
+  const whaleSellVolume = getLastWhaleSellUSD(symbol) ?? 0
 
-  const whaleIntensity =
-    Math.max(
-      0.03,
-      Math.min(1, baseIntensity + microPulse),
-    )
+  const whaleRatio =
+    totalTradeUSD > 0
+      ? whaleTradeUSD / totalTradeUSD
+      : 0
 
-  /* ================= WHALE DETECT ================= */
+  const whaleNetPressureRaw =
+    whaleBuyVolume - whaleSellVolume
 
-  const whaleDetected = detectWhale({
-    prevOI: prevOpenInterest,
-    currentOI: openInterest,
-    recentVolume: lastVolumeRaw,
-    avgVolume: prevVolumeRaw,
-  })
+  const whaleNetRatio =
+    totalTradeUSD > 0
+      ? whaleNetPressureRaw / totalTradeUSD
+      : 0
 
-  /* ================= EXTREME ================= */
+  const whaleNetPressure =
+    Math.max(-1, Math.min(1, whaleNetRatio))
+
+  const whaleCVD = getWhaleCVD(symbol)
+
+  /* ================= Funding ================= */
+
+  const fundingRate = getLastFundingRate(symbol) ?? 0
+
+  let fundingBias: 'LONG_HEAVY' | 'SHORT_HEAVY' | 'NEUTRAL' = 'NEUTRAL'
+
+  if (fundingRate > 0.0015) fundingBias = 'LONG_HEAVY'
+  else if (fundingRate < -0.0015) fundingBias = 'SHORT_HEAVY'
+
+  /* ================= Risk Flags ================= */
 
   const extremeSignal =
-    whaleDetected &&
-    whaleIntensity > 0.85 &&
-    volatility > 0.6
+    whaleRatio > 0.6 && whaleIntensity > 0.8
 
   const preExtreme =
-    whaleIntensity > 0.65 &&
-    volatility > 0.45
+    whaleRatio > 0.4
 
   const marketPulse =
     preExtreme ? 'ACCELERATING' : 'STABLE'
 
-  /* ================= BB ================= */
+  /* ================= Bollinger ================= */
 
   const lastBB = getLastBollingerSignal(symbol)
 
-  const bollingerObservation = lastBB?.enabled
-    ? deriveBollingerObservation(lastBB.signalType)
-    : { bollingerRegime: 'NEUTRAL' as const }
-
-  /* ================= FUNDING ================= */
-
-  const fundingRaw = getLastFundingRate(symbol)
-  const fundingRate =
-    fundingRaw != null && Number.isFinite(fundingRaw)
-      ? fundingRaw
-      : 0
-
-  let fundingBias: 'LONG_HEAVY' | 'SHORT_HEAVY' | 'NEUTRAL'
-
-  if (fundingRate > 0.0005) fundingBias = 'LONG_HEAVY'
-  else if (fundingRate < -0.0005) fundingBias = 'SHORT_HEAVY'
-  else fundingBias = 'NEUTRAL'
-
-  /* ================= ACTION GATE ================= */
+  const bollingerSignal: BollingerSignalType | null =
+    lastBB?.enabled
+      ? (lastBB.signalType as BollingerSignalType)
+      : null
 
   const whalePressure: ActionGateInput['whalePressure'] =
-    whaleIntensity > 0.55 ? 'ELEVATED' : 'NORMAL'
+    whaleIntensity > 0.82
+      ? 'EXTREME'
+      : whaleIntensity > 0.60
+        ? 'ELEVATED'
+        : 'NORMAL'
 
-  const participationState: ActionGateInput['participationState'] =
-    volumeEnergy > 0.3 && oiEnergy > 0.2
-      ? 'HEALTHY'
-      : 'WEAKENING'
+  const macd = getLastMACD(symbol)
 
   return {
     price,
@@ -208,10 +221,11 @@ export async function buildRiskInputFromRealtime(
     whaleIntensity,
     fundingRate,
 
-    /* 🔥 확장 */
     openInterest,
-    prevOpenInterest,
+    prevOpenInterest: prevSnapshotOI,
+    oiDelta,
     oiDeltaRatio,
+
     volumeRatio,
     fundingBias,
 
@@ -219,14 +233,28 @@ export async function buildRiskInputFromRealtime(
     preExtreme,
     marketPulse,
 
+    bollingerSignal,
     whalePressure,
-    participationState,
-    bollingerRegime:
-      bollingerObservation.bollingerRegime,
-    elliott: { possible: true },
-    trend: { valid: true },
-    fibonacci: { overextended: false },
-    momentum: { valid: true },
+    macd,
+
+    whaleNetRatio,
+    whaleRatio,
+
+    whaleAvg: 0,
+    whaleTrend:
+      whaleNetRatio > 0 ? 'UP' :
+      whaleNetRatio < 0 ? 'DOWN' : 'FLAT',
+
+    whaleVolume: whaleTradeUSD,
+    totalVolume: totalTradeUSD,
+
+    whaleBuyVolume,
+    whaleSellVolume,
+    whaleNetPressure,
+
+    whaleCVD,
+
+    tradeUSD: totalTradeUSD,
 
     ts: Date.now(),
   }

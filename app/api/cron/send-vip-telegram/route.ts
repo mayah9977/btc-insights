@@ -3,7 +3,7 @@ import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'
 
 /* 🔥 Multi On-chain (RSS Only) */
-import { fetchOnchainMultiList  } from '@/lib/onchain/fetchOnchainMultiList'
+import { fetchOnchainMultiList } from '@/lib/onchain/fetchOnchainMultiList'
 import { summarizeExternalOnchain } from '@/lib/onchain/summarizeExternalOnchain'
 
 /* 🔥 Fusion Engine */
@@ -40,6 +40,24 @@ function isWithin48Hours(dateString?: string | null): boolean {
 export async function GET() {
   try {
     console.log('[CRON] 🚀 send-vip-telegram started')
+
+    /* =====================================================
+       🚨 Daily Send Lock (KST 기준 1회만 허용)
+    ===================================================== */
+
+    const kstDate = getKstDateString()
+    const dailyLockKey = `vip:telegram:daily:${kstDate}`
+
+    // NX = 이미 존재하면 실패
+    const alreadyExists = await redis.setnx(dailyLockKey, '1')
+
+if (alreadyExists === 0) {
+  console.log('[CRON] ⚠ Already sent today. Skipping.')
+  return Response.json({ ok: true, skipped: true })
+}
+
+// TTL 24시간 설정
+await redis.expire(dailyLockKey, 60 * 60 * 24)
 
     /* =====================================================
        1️⃣ Telegram 유저 조회
@@ -98,11 +116,9 @@ export async function GET() {
         externalOnchainSource = cached.source ?? ''
         externalOnchainSummary = cached.summary ?? ''
       } else {
-
         const rssItems = await fetchOnchainMultiList()
 
         if (rssItems && rssItems.length > 0) {
-
           externalOnchainSummary =
             await summarizeExternalOnchain(rssItems)
 
@@ -119,9 +135,7 @@ export async function GET() {
             'EX',
             60 * 60 * 24
           )
-
         } else {
-
           externalOnchainSource =
             'Institutional On-Chain Research'
 
@@ -129,7 +143,6 @@ export async function GET() {
             '최근 48시간 이내의 기관 온체인 보고서를 찾을 수 없습니다.'
         }
       }
-
     } catch (err) {
       console.error('[ONCHAIN RSS ERROR]', err)
     }
@@ -151,8 +164,6 @@ export async function GET() {
     /* =====================================================
        5️⃣ PDF 생성
     ===================================================== */
-
-    const kstDate = getKstDateString()
 
     const pdfBytes = await generateVipDailyReportPdf({
       date: kstDate,

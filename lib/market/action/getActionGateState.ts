@@ -1,111 +1,103 @@
-// lib/market/action/getActionGateState.ts
+import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 
-/**
- * 최종 행동 게이트 상태
- * - OBSERVE : 구조적 해석 가능
- * - CAUTION : 해석은 가능하나 사고 제한 필요
- * - IGNORE  : 해석 자체 금지
- */
-export type ActionGateState =
-  | 'OBSERVE'
-  | 'CAUTION'
-  | 'IGNORE'
+export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
-/**
- * 각 관측 필터의 결과를 그대로 전달받는다
- * (이 파일은 계산을 하지 않는다. 오직 결합만 한다)
- */
-type ActionGateInput = {
-  // 최상위 행동 데이터
-  whalePressure: 'NORMAL' | 'ELEVATED' | 'EXTREME'
-  participationState: 'HEALTHY' | 'WEAKENING' | 'COLLAPSED' // OI / Volume / Funding 종합 상태
-
-  // Observation Filters
-  bollingerRegime: 'EXPANDED' | 'COMPRESSING' | 'NEUTRAL'
-  elliott: { possible: boolean }
-  trend: { valid: boolean }
-  fibonacci: { overextended: boolean }
-  momentum: { valid: boolean }
+export interface ActionGateResult {
+  state: ActionGateState
+  score: number
+  reasons: string[]
 }
 
-/**
- * Action Gate
- * ❌ 매수 / 매도
- * ❌ 방향
- * ❌ 타이밍
- * ❌ RiskEngine 개입
- * ✅ 오직 해석 허용 상태만 판단
- */
+/* =======================================================
+   🔥 EMA 기반 OI Ratio 스무딩 (리스크 감지 전용)
+======================================================= */
+
+const EMA_ALPHA = 0.4
+let emaOiRatio: number | null = null
+
+function getEmaOiRatio(current: number) {
+  if (emaOiRatio === null) {
+    emaOiRatio = current
+  } else {
+    emaOiRatio =
+      EMA_ALPHA * current +
+      (1 - EMA_ALPHA) * emaOiRatio
+  }
+
+  return emaOiRatio
+}
+
+/* =======================================================
+   🔒 Action Gate (Risk Mode Filter)
+   역할:
+   - 방향 결정 ❌
+   - 리스크 차단 / 약화 모드 전환 전용
+======================================================= */
+
 export function getActionGateState(
-  input: ActionGateInput
-): ActionGateState {
+  input: ActionGateInput,
+): ActionGateResult {
+
   const {
     whalePressure,
-    participationState,
-    bollingerRegime,
-    elliott,
-    trend,
-    fibonacci,
-    momentum
+    fundingRate,
+    oiDeltaRatio,
   } = input
 
-  /**
-   * 1️⃣ 즉시 IGNORE 조건
-   * 구조 언어 사용 자체가 불가능한 상태
-   */
+  const reasons: string[] = []
+  const absFunding = Math.abs(fundingRate)
 
-  // 대자본이 극단적으로 구조를 왜곡
+  const smoothedOiRatio = getEmaOiRatio(oiDeltaRatio)
+  const absOiRatio = Math.abs(smoothedOiRatio)
+
+  /* =======================================================
+     1️⃣ 즉시 차단 조건 (BLOCK MODE)
+  ======================================================= */
+
   if (whalePressure === 'EXTREME') {
-    return 'IGNORE'
+    reasons.push('Whale EXTREME')
+    return { state: 'IGNORE', score: 999, reasons }
   }
 
-  // 참여 구조 붕괴 (OI / Volume / Funding)
-  if (participationState === 'COLLAPSED') {
-    return 'IGNORE'
+  if (absFunding >= 0.0025 && absOiRatio >= 0.00012) {
+    reasons.push('Funding + OI extreme spike')
+    return { state: 'IGNORE', score: 999, reasons }
   }
 
-  // 파동 언어 자체 사용 불가
-  if (!elliott.possible) {
-    return 'IGNORE'
+  /* =======================================================
+     2️⃣ 약화 모드 (CAUTION MODE)
+  ======================================================= */
+
+  let score = 0
+
+  if (whalePressure === 'ELEVATED') {
+    score += 2
+    reasons.push('Whale elevated')
   }
 
-  /**
-   * 기본 상태는 OBSERVE
-   */
-  let state: ActionGateState = 'OBSERVE'
-
-  /**
-   * 2️⃣ CAUTION 전이 조건
-   * 해석은 가능하나 사고 제한 필요
-   */
-
-  // 추세 사고 불가
-  if (!trend.valid) {
-    state = 'CAUTION'
+  if (absFunding >= 0.0015) {
+    score += 2
+    reasons.push('Funding strong bias')
+  } else if (absFunding >= 0.0010) {
+    score += 1
+    reasons.push('Funding mild bias')
   }
 
-  // 변동성 이미 소모
-  if (bollingerRegime === 'EXPANDED') {
-    state = 'CAUTION'
+  if (absOiRatio >= 0.00009) {
+    score += 2
+    reasons.push('OI strong spike')
+  } else if (absOiRatio >= 0.00004) {
+    score += 1
+    reasons.push('OI mild spike')
   }
 
-  // 구조 과장
-  if (fibonacci.overextended) {
-    state = 'CAUTION'
+  if (score >= 3) {
+    return { state: 'CAUTION', score, reasons }
   }
 
-  // 구조적 설득력 붕괴
-  if (!momentum.valid) {
-    state = 'CAUTION'
-  }
+  /* =======================================================
+     3️⃣ 정상 모드
+  ======================================================= */
 
-  /**
-   * COMPRESSING은 경고지만 차단은 아님
-   * (압력 누적 상태)
-   */
-  if (bollingerRegime === 'COMPRESSING') {
-    state = 'CAUTION'
-  }
-
-  return state
+  return { state: 'OBSERVE', score, reasons }
 }

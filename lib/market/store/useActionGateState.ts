@@ -1,34 +1,20 @@
-import { useEffect, useState } from 'react'
+'use client'
+
+import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
 import type { ActionGateState } from '@/components/system/ActionGateStatus'
-import { getActionGateState } from '@/lib/market/store/actionGateStore'
 
 const DEFAULT_STATE: ActionGateState = 'OBSERVE'
-const POLL_INTERVAL_MS = 500
 
-export function useActionGateState(symbol: string): ActionGateState {
-  const [state, setState] = useState<ActionGateState>(
-    getActionGateState(symbol) ?? DEFAULT_STATE,
-  )
+export function useActionGateState(
+  symbol: string,
+): ActionGateState {
 
-  useEffect(() => {
-    let mounted = true
+  return useMasterMarketStore((store) => {
+    const state = store.state
 
-    const tick = () => {
-      const next =
-        getActionGateState(symbol) ?? DEFAULT_STATE
+    if (!state) return DEFAULT_STATE
+    if (state.symbol !== symbol) return DEFAULT_STATE
 
-      setState(prev => (prev !== next ? next : prev))
-    }
-
-    tick() // initial sync
-
-    const id = setInterval(tick, POLL_INTERVAL_MS)
-
-    return () => {
-      mounted = false
-      clearInterval(id)
-    }
-  }, [symbol])
-
-  return state
+    return state.actionGate ?? DEFAULT_STATE
+  })
 }

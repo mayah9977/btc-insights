@@ -23,10 +23,9 @@ class SSEConnectionManager {
   private handlers = new Map<string, Set<Handler>>()
   private refCount = 0
 
-  // 🔥 재연결 관리
+  /* 🔁 reconnect 관리 */
   private reconnectAttempts = 0
   private reconnectTimer: any = null
-  private scope: 'realtime' | 'vip' = 'realtime'
 
   static getInstance() {
     if (!this.instance) {
@@ -36,22 +35,18 @@ class SSEConnectionManager {
   }
 
   /* =========================
-   * 🔌 Connect
+   * 🔌 Connect (🔥 VIP SCOPE)
    * ========================= */
   private connect() {
     if (this.es) return
 
-    const url =
-      this.scope === 'vip'
-        ? '/api/realtime/stream?scope=vip'
-        : '/api/realtime/stream'
-
-    this.es = new EventSource(url)
+    // ✅ VIP scope로 연결 (핵심 수정)
+    this.es = new EventSource('/api/realtime/stream?scope=vip')
 
     this.es.onopen = () => {
       this.reconnectAttempts = 0
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[SSE] connected:', this.scope)
+        console.log('[SSE] connected: VIP')
       }
     }
 
@@ -71,11 +66,11 @@ class SSEConnectionManager {
         process.env.NODE_ENV !== 'production' &&
         !MARKET_EVENTS.has(type)
       ) {
-        console.log('[SSE RAW]', msg)
+        console.log('[SSE EVENT]', msg)
       }
 
       /* =========================
-       * VIP
+       * VIP Risk
        * ========================= */
       if (type === 'RISK_UPDATE') {
         try {
@@ -149,7 +144,7 @@ class SSEConnectionManager {
     }
 
     /* =========================
-     * 🔁 Auto Reconnect (Exponential Backoff)
+     * 🔁 Auto Reconnect
      * ========================= */
     this.es.onerror = () => {
       this.es?.close()
@@ -174,11 +169,7 @@ class SSEConnectionManager {
   /* =========================
    * 🔔 Subscribe
    * ========================= */
-  subscribe(type: string, handler: Handler, options?: { scope?: 'vip' }) {
-    if (options?.scope === 'vip') {
-      this.scope = 'vip'
-    }
-
+  subscribe(type: string, handler: Handler) {
     this.connect()
     this.refCount++
 

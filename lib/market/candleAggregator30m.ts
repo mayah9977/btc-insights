@@ -4,6 +4,10 @@ import { evaluateRealtimeBollinger } from './evaluateRealtimeBollinger'
 import { preload30mCloses } from './preload30mCloses'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
+/* 🔥 추가 */
+import { calculateMACD } from '@/lib/market/macd'
+import { setLastMACD } from '@/lib/market/marketLastStateStore'
+
 /* ============================================================
  * Types
  * ============================================================ */
@@ -61,7 +65,6 @@ export class CandleAggregator30m {
   private current?: Candle30m
   private readonly intervalMs = 30 * 60 * 1000
 
-  // 🔥 Prev 상태 저장 (구조 완성 핵심)
   private prevConfirmedSignalType?: BollingerSignalType
   private prevRealtimeSignalType?: BollingerSignalType
 
@@ -76,7 +79,7 @@ export class CandleAggregator30m {
 
   private async initialize() {
     try {
-      const closes = await preload30mCloses(this.symbol, 20)
+      const closes = await preload30mCloses(this.symbol, 50)
       this.closes = closes
       console.log('[BB_PRELOAD_DONE]', {
         symbol: this.symbol,
@@ -97,7 +100,7 @@ export class CandleAggregator30m {
 
   private pushClose(close: number) {
     this.closes.push(close)
-    if (this.closes.length > 200) {
+    if (this.closes.length > 300) {
       this.closes.shift()
     }
   }
@@ -125,9 +128,10 @@ export class CandleAggregator30m {
       let confirmedSignal: ConfirmedBBSignal | undefined
 
       if (finished) {
-        // 🔥 SSOT: 확정 종가만 push
+        /* 🔥 확정 종가 push */
         this.pushClose(finished.close)
 
+        /* 🔥 ① Bollinger 계산 */
         const bbConfirmed = calculateBollingerBands({
           closes: this.closes,
         })
@@ -140,7 +144,7 @@ export class CandleAggregator30m {
             close: finished.close,
             upperBand: bbConfirmed.upperBand,
             lowerBand: bbConfirmed.lowerBand,
-            prevSignalType: this.prevConfirmedSignalType, // ✅ prev 전달
+            prevSignalType: this.prevConfirmedSignalType,
           })
 
           if (result.enabled) {
@@ -158,13 +162,19 @@ export class CandleAggregator30m {
               at: Date.now(),
             }
 
-            // 🔥 Confirmed prev 업데이트
             this.prevConfirmedSignalType = result.signalType
           }
         }
+
+        /* 🔥 ② MACD 계산 (확정봉 기준) */
+        const macdResult = calculateMACD(this.closes)
+
+        if (macdResult) {
+          setLastMACD(this.symbol, macdResult)
+        }
       }
 
-      // 🔁 새 봉 시작
+      /* 🔁 새 봉 시작 */
       this.current = {
         openTime,
         closeTime: openTime + this.intervalMs,
@@ -211,14 +221,13 @@ export class CandleAggregator30m {
       close: this.current.close,
       upperBand: bbRealtime.upperBand,
       lowerBand: bbRealtime.lowerBand,
-      prevSignalType: this.prevRealtimeSignalType, // ✅ prev 전달
+      prevSignalType: this.prevRealtimeSignalType,
     })
 
     if (!rtResult.enabled) {
       return {}
     }
 
-    // 🔥 Realtime prev 업데이트
     this.prevRealtimeSignalType = rtResult.signalType
 
     const liveCommentary: LiveBollingerCommentary = {

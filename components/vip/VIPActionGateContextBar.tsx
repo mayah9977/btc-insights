@@ -3,11 +3,13 @@
 import React, { useEffect, useMemo } from 'react'
 import { ActionGateStatus } from '@/components/system/ActionGateStatus'
 import { ActionGateRenderer } from '@/components/market/interpretation'
-import { useActionGateState } from '@/lib/market/store/useActionGateState'
+import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+
+import { useMasterMarketStream } from '@/lib/realtime/useMasterMarketStream'
 
 interface VIPActionGateContextBarProps {
   symbol: string
@@ -16,8 +18,22 @@ interface VIPActionGateContextBarProps {
 export const VIPActionGateContextBar: React.FC<
   VIPActionGateContextBarProps
 > = ({ symbol }) => {
-  // 1️⃣ Action Gate 상태
-  const gate = useActionGateState(symbol)
+
+  // ✅ 0️⃣ Master Stream 구독 (SSE → Zustand)
+  useMasterMarketStream(symbol)
+
+  // ✅ Zustand store 구독 (Reactive)
+  const masterState = useMasterMarketStore((s) => s.state)
+
+  const gate = masterState?.actionGate ?? 'OBSERVE'
+
+  // 🔥 MARKET_STATE 수신 확인 로그
+  useEffect(() => {
+    console.log('[VIP MARKET_STATE RECEIVED]', {
+      symbol,
+      gate,
+    })
+  }, [gate, symbol])
 
   // 2️⃣ Confirmed (30m close)
   const confirmed = useRealtimeBollingerSignal()
@@ -25,9 +41,7 @@ export const VIPActionGateContextBar: React.FC<
   // 3️⃣ Live (진행 중 30m)
   const live = useLiveBollingerCommentary()
 
-  // 4️⃣ 🔥 UI 전용 병합 로직
-  // - 6번(긴급 급락)은 항상 최우선
-  // - 그 외에는 confirmed 우선, 없으면 live
+  // 4️⃣ UI 병합 로직
   const effectiveSignal = useMemo(() => {
     if (
       confirmed?.signalType ===
@@ -38,7 +52,7 @@ export const VIPActionGateContextBar: React.FC<
     return confirmed ?? live
   }, [confirmed, live])
 
-  // ✅ 1️⃣ 가장 정확한 1차 체크: 실제 signalType 수치(값) 로그
+  // 디버그 로그
   useEffect(() => {
     console.log(
       '[DEBUG][VIPActionGate] CONFIRMED:',
@@ -52,10 +66,8 @@ export const VIPActionGateContextBar: React.FC<
 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-      {/* 상태 표시 */}
-      <ActionGateStatus state={gate} />
+      <ActionGateStatus state={gate} symbol={symbol} />
 
-      {/* 🔥 최종 signalType 전달 */}
       <ActionGateRenderer
         gate={gate}
         signalType={effectiveSignal?.signalType}

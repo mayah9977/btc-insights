@@ -9,7 +9,6 @@ export type WhaleTradeFlowPoint = {
   whaleVolume: number
   totalVolume: number
   isSpike?: boolean
-  visualRatio?: number // 🔥 추가 (빌드에러 해결)
 }
 
 type Options = {
@@ -27,18 +26,40 @@ export function useWhaleTradeFlow(options: Options = {}) {
     const unsubscribe = subscribeWhaleTradeFlow(
       upper,
       (ratio, whaleVolume, totalVolume, ts) => {
+        const rawTs = ts ?? Date.now()
+
+        // 🔥 초 단위 정규화 (정렬 안정성)
+        const normalizedTs = Math.floor(rawTs / 1000) * 1000
+
         setHistory(prev => {
-          const next: WhaleTradeFlowPoint[] = [
-            ...prev,
-            {
-              ts: ts ?? Date.now(),
+          const existingIndex = prev.findIndex(
+            p => p.ts === normalizedTs,
+          )
+
+          let next = [...prev]
+
+          if (existingIndex >= 0) {
+            // 🔥 같은 초면 update (push 금지)
+            next[existingIndex] = {
+              ts: normalizedTs,
               ratio,
               whaleVolume,
               totalVolume,
-            },
-          ].slice(-limit)
+            }
+          } else {
+            next.push({
+              ts: normalizedTs,
+              ratio,
+              whaleVolume,
+              totalVolume,
+            })
+          }
 
-          return next
+          // 🔥 ts 기준 정렬 유지
+          next.sort((a, b) => a.ts - b.ts)
+
+          // 🔥 길이 제한
+          return next.slice(-limit)
         })
       },
     )
@@ -46,9 +67,9 @@ export function useWhaleTradeFlow(options: Options = {}) {
     return () => unsubscribe()
   }, [upper, limit])
 
-  /* =========================
-   🔥 Spike 계산 (최근 평균 대비 1.8배)
-  ========================= */
+  /* =====================================================
+     Spike 계산 (최근 평균 대비 1.8배)
+  ===================================================== */
 
   const enhancedHistory = useMemo(() => {
     if (history.length < 10) return history

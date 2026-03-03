@@ -1,85 +1,168 @@
 'use client'
-import React from 'react'
+
+import React, { useEffect, useRef, useState } from 'react'
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
 interface ActionGateStatusProps {
-  state: ActionGateState
+  state?: ActionGateState
+  symbol?: string
 }
 
 export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
-  state,
+  state = 'OBSERVE',
+  symbol,
 }) => {
+
+  /* =========================
+     🔥 디버그 로그 (실제 수신 상태 확인)
+  ========================= */
+
+  useEffect(() => {
+    console.log('[ActionGateStatus] render', {
+      symbol,
+      state,
+    })
+  }, [state, symbol])
+
+  /* =========================
+     🎨 상태별 색상 결정
+  ========================= */
+
+  const getOverlayColor = () => {
+    switch (state) {
+      case 'CAUTION':
+        return 'bg-yellow-900/40'
+      case 'IGNORE':
+        return 'bg-red-900/40'
+      case 'OBSERVE':
+      default:
+        return 'bg-black/30'
+    }
+  }
+
+  const getBorderColor = () => {
+    switch (state) {
+      case 'CAUTION':
+        return 'border-yellow-500/40'
+      case 'IGNORE':
+        return 'border-red-500/40'
+      default:
+        return 'border-white/10'
+    }
+  }
+
+  /* =========================
+     🎨 RGB Canvas Logic
+  ========================= */
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const scanTRef = useRef(0)
+  const dirRef = useRef<1 | -1>(1)
+
+  const [rgb, setRgb] = useState({ r: 113, g: 218, b: 203 })
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width
+      canvas.height = rect.height
+    }
+
+    resize()
+    window.addEventListener('resize', resize)
+
+    const draw = () => {
+      const w = canvas.width
+      const h = canvas.height
+
+      scanTRef.current += 0.002 * dirRef.current
+      if (scanTRef.current >= 1) dirRef.current = -1
+      if (scanTRef.current <= 0) dirRef.current = 1
+
+      const scanX = scanTRef.current * w
+
+      const grad = ctx.createLinearGradient(0, 0, w, 0)
+      grad.addColorStop(0, 'hsl(0, 90%, 55%)')
+      grad.addColorStop(0.2, 'hsl(40, 90%, 55%)')
+      grad.addColorStop(0.4, 'hsl(120, 90%, 55%)')
+      grad.addColorStop(0.6, 'hsl(200, 90%, 55%)')
+      grad.addColorStop(0.8, 'hsl(260, 90%, 55%)')
+      grad.addColorStop(1, 'hsl(330, 90%, 55%)')
+
+      ctx.clearRect(0, 0, w, h)
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, w, h)
+
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'
+      ctx.fillRect(scanX - 2, 0, 4, h)
+
+      const pixel = ctx.getImageData(
+        Math.min(Math.max(Math.floor(scanX), 0), w - 1),
+        Math.floor(h / 2),
+        1,
+        1
+      ).data
+
+      setRgb({
+        r: pixel[0],
+        g: pixel[1],
+        b: pixel[2],
+      })
+
+      rafRef.current = requestAnimationFrame(draw)
+    }
+
+    rafRef.current = requestAnimationFrame(draw)
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  const hex =
+    '#' +
+    ((1 << 24) + (rgb.r << 16) + (rgb.g << 8) + rgb.b)
+      .toString(16)
+      .slice(1)
+
+  /* =========================
+     🎯 Render
+  ========================= */
+
   return (
-    <>
-      <style>
-        {`
-        @keyframes gradientShift {
-          0% { background-position: 0% 50%; }
-          100% { background-position: 100% 50%; }
-        }
+    <div
+      className={`relative rounded-xl overflow-hidden border shadow-lg ${getBorderColor()}`}
+    >
 
-        @keyframes scanMove {
-          0% { left: 0%; }
-          100% { left: 100%; }
-        }
-
-        @keyframes glowPulse {
-          0% { box-shadow: 0 0 10px rgba(0,255,200,0.4); }
-          50% { box-shadow: 0 0 25px rgba(0,255,200,0.8); }
-          100% { box-shadow: 0 0 10px rgba(0,255,200,0.4); }
-        }
-
-        @keyframes textBlink {
-          from { opacity: 0.7; }
-          to { opacity: 1; }
-        }
-      `}
-      </style>
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full"
+      />
 
       <div
-        aria-label="Action Gate Status"
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          borderRadius: '10px',
-          padding: '16px 20px',
-          color: '#fff',
-          fontSize: '15px', 
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          background:
-            'linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet)',
-          backgroundSize: '400% 400%',
-          animation:
-            'gradientShift 8s linear infinite, glowPulse 3s ease-in-out infinite',
-          border: '1px solid rgba(255,255,255,0.08)',
-        }}
+        className={`relative z-10 px-6 py-4 backdrop-blur-md flex flex-col gap-2 ${getOverlayColor()}`}
       >
-        {/* 스캔 라인 */}
         <div
+          className="text-base font-semibold tracking-wide"
           style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            width: '2px',
-            background: 'rgba(255,255,255,0.9)',
-            animation: 'scanMove 3s linear infinite',
-            pointerEvents: 'none',
-          }}
-        />
-
-        <span
-          style={{
-            zIndex: 1,
-            animation: 'textBlink 1.5s infinite alternate',
+            color: `rgb(${rgb.r},${rgb.g},${rgb.b})`,
           }}
         >
-          AI is observing the current market situation in real time.
-          (AI가 실시간으로 현재 시장 상황을 관찰중입니다.)
-        </span>
+          AI Gate Status: {state}
+        </div>
+
+        <div className="text-xs font-mono text-white/80">
+          RGB({rgb.r}, {rgb.g}, {rgb.b}) | {hex}
+        </div>
       </div>
-    </>
+    </div>
   )
 }

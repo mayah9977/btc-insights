@@ -1,240 +1,234 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
-import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
-import type { RiskLevel } from '@/lib/vip/riskTypes'
-
-const RISK_COLOR: Record<RiskLevel, string> = {
-  LOW: 'text-emerald-400',
-  MEDIUM: 'text-yellow-400',
-  HIGH: 'text-orange-400',
-  EXTREME: 'text-red-500',
-}
+import { useRealtimeMarketComposite } from '@/lib/realtime/useRealtimeMarketComposite'
 
 function VIPLiveStatusStripComponent() {
-  /* =========================
-     🔥 Zustand Selector 분리
-  ========================= */
-
-  const live = useLiveRiskState(s => s.state)
-  const triggerWhalePulse = useLiveRiskState(s => s.triggerWhalePulse)
-
-  /* =========================
-     🔥 통합 Market 훅 제거
-     → Volume 전용 훅 사용 (렌더 격리)
-  ========================= */
-
-  const { volume } = useRealtimeVolume('BTCUSDT')
-
-  const prevVolumeRef = useRef<number | null>(null)
-
-  /* =========================
-     체결량 변화 계산
-  ========================= */
-
-  const delta = useMemo(() => {
-    if (volume == null || prevVolumeRef.current == null) return 0
-    return volume - prevVolumeRef.current
-  }, [volume])
-
-  const glowColor =
-    delta > 0
-      ? 'rgba(250,204,21,0.9)'
-      : delta < 0
-      ? 'rgba(239,68,68,0.9)'
-      : 'rgba(16,185,129,0.7)'
-
-  useEffect(() => {
-    if (volume != null) {
-      prevVolumeRef.current = volume
-    }
-  }, [volume])
-
-  /* =========================
-     Whale Pulse Trigger
-  ========================= */
-
-  useEffect(() => {
-    if (!live || volume == null) return
-
-    const isWhalePulse =
-      live.whaleAccelerated && volume > 500_000
-
-    if (isWhalePulse) triggerWhalePulse()
-  }, [live?.whaleAccelerated, volume, triggerWhalePulse])
-
-  if (!live) return null
-
   const {
-    level,
-    direction,
-    whalePulse,
-    startedAt,
-  } = live
+    oi,
+    oiDelta,
+    volume,
+    whaleIntensity,
+    whaleSpike,
+    connected,
+    lastUpdatedAt,
+  } = useRealtimeMarketComposite('BTCUSDT')
 
-  const isExtreme = level === 'EXTREME'
+  const [pulse, setPulse] = useState(false)
+  const [flash, setFlash] = useState(false)
 
-  /* =========================
-     🔥 duration 직접 계산
-     (store tick 제거 상태 유지)
-  ========================= */
+  /* =========================================================
+     🔥 Composite Intensity
+  ========================================================= */
 
-  const durationSec =
-    level !== 'LOW'
-      ? Math.floor((Date.now() - startedAt) / 1000)
-      : 0
+  const normalized = useMemo(() => {
+    const volScore = volume ? Math.log10(volume + 1) / 6 : 0
+    const whaleScore = whaleIntensity ?? 0
+    const oiScore =
+      oiDelta && Math.abs(oiDelta) > 0
+        ? Math.min(Math.abs(oiDelta) / 1_000_000, 1)
+        : 0
 
-  const durationText =
-    level !== 'LOW' && durationSec > 0
-      ? `· ${Math.floor(durationSec / 60)}분 ${durationSec % 60}초 유지 중`
-      : ''
+    return Math.min(volScore * 0.5 + whaleScore * 0.3 + oiScore * 0.2, 1)
+  }, [volume, whaleIntensity, oiDelta])
+
+  const isExtreme = normalized > 0.9
+
+  /* =========================================================
+     🧠 AI 등급 계산
+  ========================================================= */
+
+  const aiLevel = useMemo(() => {
+    if (normalized > 0.85) return 'CRITICAL'
+    if (normalized > 0.65) return 'WARNING'
+    if (normalized > 0.4) return 'WATCH'
+    return 'STABLE'
+  }, [normalized])
+
+  const AI_COLOR: Record<string, string> = {
+    STABLE: 'text-emerald-400',
+    WATCH: 'text-yellow-400',
+    WARNING: 'text-orange-400',
+    CRITICAL: 'text-red-500',
+  }
+
+  /* =========================================================
+     🧨 고급 SHORT / LONG SQUEEZE 감지
+  ========================================================= */
+
+  const squeezeType = useMemo(() => {
+    if (!oi || !oiDelta || !volume || !whaleIntensity) return null
+
+    const oiRatio = oiDelta / oi // 변화율 기반
+    const volCondition = volume > 600_000
+    const whaleCondition = whaleIntensity > 0.7
+
+    if (oiRatio > 0.015 && volCondition && whaleCondition)
+      return 'SHORT SQUEEZE'
+
+    if (oiRatio < -0.015 && volCondition && whaleCondition)
+      return 'LONG SQUEEZE'
+
+    return null
+  }, [oi, oiDelta, volume, whaleIntensity])
+
+  /* =========================================================
+     🔥 Pulse
+  ========================================================= */
+
+  useEffect(() => {
+    if (whaleSpike || normalized > 0.85) {
+      setPulse(true)
+      const t = setTimeout(() => setPulse(false), 800)
+      return () => clearTimeout(t)
+    }
+  }, [whaleSpike, normalized])
+
+  /* =========================================================
+     🔥 Liquidation Flash
+  ========================================================= */
+
+  useEffect(() => {
+    if (isExtreme) {
+      setFlash(true)
+      const t = setTimeout(() => setFlash(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [isExtreme])
+
+  /* =========================================================
+     🎨 Shake
+  ========================================================= */
+
+  const shake = isExtreme
+    ? { x: [0, -3, 3, -3, 3, 0] }
+    : pulse
+    ? { x: [0, -1.5, 1.5, -1.5, 1.5, 0] }
+    : { x: 0 }
+
+  const glowColor = `rgba(255,0,0,${0.6 + normalized * 0.8})`
 
   const volumeKey =
-    volume != null ? `vol-${volume}` : 'vol-empty'
+    lastUpdatedAt != null ? `tick-${lastUpdatedAt}` : 'tick-empty'
 
   const numericPulse = {
     initial: { scale: 1 },
     animate: {
-      scale: [1, 1.06, 1],
+      scale: isExtreme
+        ? [1, 1.18, 1]
+        : pulse
+        ? [1, 1.1, 1]
+        : [1, 1.05, 1],
       textShadow: [
         '0 0 0 rgba(0,0,0,0)',
-        `0 0 18px ${glowColor}`,
+        `0 0 ${25 + normalized * 35}px ${glowColor}`,
         '0 0 0 rgba(0,0,0,0)',
       ],
     },
     transition: { duration: 0.6 },
   }
 
+  const whaleOverlayOpacity = Math.min(
+    (whaleIntensity ?? 0) * 0.85,
+    0.85,
+  )
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-        backgroundColor: isExtreme
-          ? 'rgba(69,10,10,0.65)'
-          : 'rgba(9,9,11,0.85)',
-      }}
-      transition={{ duration: 0.6 }}
+      animate={{ opacity: 1, y: 0, ...shake }}
+      transition={{ duration: 0.35 }}
       className="
         sticky top-[64px] z-50 mb-4
-        border-b border-neutral-800
-        backdrop-blur overflow-hidden
+        border-b border-red-900
+        backdrop-blur-lg
+        relative
+        overflow-hidden
       "
+      style={{
+        backgroundColor: isExtreme
+          ? 'rgba(40,0,0,0.95)'
+          : 'rgba(15,5,5,0.92)',
+      }}
     >
+      {/* Liquidation Flash */}
+      <AnimatePresence>
+        {flash && (
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            initial={{ opacity: 0.9 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              background:
+                'radial-gradient(circle, rgba(255,0,0,0.85), transparent 65%)',
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Squeeze Banner */}
+      {squeezeType && (
+        <div className="absolute top-0 left-0 w-full text-center text-xs py-1 bg-red-800 text-white">
+          🧨 {squeezeType} DETECTED
+        </div>
+      )}
+
+      {/* Whale Overlay */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
-        animate={{
-          backgroundPosition: whalePulse
-            ? ['0% 0%', '200% 0%']
-            : ['0% 0%', '100% 0%'],
-        }}
-        transition={{
-          duration: whalePulse ? 1.2 : 6,
-          repeat: Infinity,
-          ease: 'linear',
-        }}
+        animate={{ opacity: whaleOverlayOpacity }}
+        transition={{ duration: 0.4 }}
         style={{
-          backgroundImage:
-            'linear-gradient(90deg, transparent, rgba(34,197,94,0.08), transparent)',
-          backgroundSize: '200% 100%',
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(255,0,0,0.75), transparent 75%)',
         }}
       />
 
-      <div
-        className="
-        relative max-w-7xl mx-auto
-        px-4 py-2
-        flex flex-wrap items-center gap-x-8 gap-y-1
-        text-sm
-      "
-      >
-        {/* VIP 보호 */}
-        <div className="flex items-center gap-2 text-zinc-300">
-          <span className="text-emerald-400">🛡</span>
-          <span>VIP 보호</span>
-          <span className="font-semibold text-emerald-400">
-            ACTIVE
-          </span>
+      {/* Main Content */}
+      <div className="relative max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-8 gap-y-1 text-sm">
+        <div className={`font-semibold ${AI_COLOR[aiLevel]}`}>
+          AI is observing the market in real time : {aiLevel}
         </div>
 
-        {/* Risk */}
-        <div className="flex items-center gap-2 text-zinc-300">
-          <span className={RISK_COLOR[level]}>
-            ⚠ 정상모드 (Normal Mode)
-          </span>
-
-          <span
-            className={
-              direction === 'UP'
-                ? 'text-red-400'
-                : direction === 'DOWN'
-                ? 'text-emerald-400'
-                : 'text-zinc-400'
-            }
-          >
-            {direction === 'UP'
-              ? '▲ 상승'
-              : direction === 'DOWN'
-              ? '▼ 완화'
-              : ''}
-          </span>
-
-          {durationText && (
-            <span className="text-zinc-400">
-              {durationText}
-            </span>
-          )}
+        <div className="text-zinc-200">
+          Open Interet {oi != null ? oi.toLocaleString() : '--'}
         </div>
 
-        {/* 관측 */}
-        <div className="flex items-center gap-2 text-zinc-400">
-          <span>🐋</span>
-          <span>
-            Observing real-time market conditions.
-            ( 실시간 시장을 모니터링중입니다. )
-          </span>
-        </div>
-
-        {/* 실시간 체결량 */}
         <motion.div
           key={volumeKey}
           variants={numericPulse}
           initial="initial"
           animate="animate"
-          className="flex items-center gap-1 font-semibold text-emerald-400"
+          className="font-bold text-red-400"
         >
-          <span>🔥</span>
-          <span>
-            실시간 체결량{' '}
-            {volume != null
-              ? volume.toLocaleString()
-              : '--'}
-            $
-          </span>
+          실시간 체결량 {volume != null ? volume.toLocaleString() : '--'}
         </motion.div>
 
-        <AnimatePresence>
-          {whalePulse && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-              className="text-red-400"
-            >
-              🐋
-            </motion.span>
-          )}
-        </AnimatePresence>
+        <div className="text-yellow-300">
+          Whale-class fastener real time strength (고래 체결 강도) {whaleIntensity?.toFixed(2) ?? '--'}
+        </div>
       </div>
+
+      {/* Intensity Bar */}
+      <motion.div
+        className="absolute bottom-0 left-0 h-[4px]"
+        initial={{ width: 0 }}
+        animate={{ width: `${normalized * 100}%` }}
+        transition={{ duration: 0.2 }}
+        style={{
+          background: `linear-gradient(
+            90deg,
+            rgba(255,0,0,${normalized}),
+            rgba(120,0,0,0.9)
+          )`,
+          boxShadow: `0 0 ${15 + normalized * 30}px rgba(255,0,0,0.9)`,
+        }}
+      />
     </motion.div>
   )
 }
-
-/* =========================
-   🔥 React.memo 적용
-========================= */
 
 export default React.memo(VIPLiveStatusStripComponent)

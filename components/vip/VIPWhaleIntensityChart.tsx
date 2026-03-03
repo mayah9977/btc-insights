@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Area,
@@ -12,360 +12,261 @@ import {
   YAxis,
   Scatter,
 } from 'recharts'
+
 import {
   useWhaleIntensityHistory,
-  type WhaleIntensityPoint,
 } from '@/lib/realtime/useWhaleIntensityHistory'
+
 import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
-import { useLiveRiskState } from '@/lib/realtime/liveRiskState'
+import { useWhaleNetPressure } from '@/lib/realtime/useWhaleNetPressure'
 
-type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+import {
+  calculateInstitutionalProbability,
+} from '@/lib/market/institutionalProbability'
+
+import VIPInstitutionalGuideCard from '@/components/vip/VIPInstitutionalGuideCard'
+import { useConfirmedInstitutionalSignal } from '@/lib/engine/useConfirmedInstitutionalSignal'
+import { subscribeVIPChannel } from '@/lib/realtime/marketChannel'
+
 type Props = {
   symbol?: string
   showTimeAxis?: boolean
-  riskLevel?: RiskLevel
 }
 
-type FlagPoint = {
+type FMAIPoint = {
   ts: number
-  value: number
-  isSpike?: boolean
-}
-
-/* =========================
- * Tooltip
- * ========================= */
-function CustomTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean
-  payload?: any[]
-  label?: any
-}) {
-  if (!active || !payload?.length) return null
-
-  const p0 = payload[0]?.payload as WhaleIntensityPoint
-
-  const timeText =
-    typeof label === 'number'
-      ? new Date(label).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          timeZone: 'Asia/Seoul',
-        })
-      : ''
-
-  return (
-    <div className="rounded-md border border-zinc-700 bg-black/80 px-2 py-1 text-xs text-zinc-100 shadow-lg">
-      {timeText && (
-        <div className="text-zinc-300">{timeText}</div>
-      )}
-
-      {p0?.isSpike && (
-        <div className="mt-0.5 font-semibold text-red-400 animate-pulse">
-          🚨 고래 급변 감지
-        </div>
-      )}
-
-      <div className="mt-0.5">
-        강도:{' '}
-        <span className="font-medium text-white">
-          {Number.isFinite(p0?.value)
-            ? p0.value.toFixed(2)
-            : '--'}
-        </span>
-      </div>
-    </div>
-  )
+  score: number
 }
 
 export default function VIPWhaleIntensityChart({
   symbol = 'BTCUSDT',
   showTimeAxis = false,
-  riskLevel,
 }: Props) {
 
   useRealtimeVolume(symbol)
-  useRealtimeOI(symbol)
 
+  const { delta: oiDelta } = useRealtimeOI(symbol)
   const { history } = useWhaleIntensityHistory({
     symbol,
     limit: 30,
   })
 
-  const whalePulse =
-    useLiveRiskState(s => s.state?.whalePulse) ?? false
+  const { latest: netLatest } =
+    useWhaleNetPressure({ symbol, limit: 30 })
 
-  const latest = history.at(-1)
+  const [fmaiHistory, setFmaiHistory] = useState<FMAIPoint[]>([])
 
-  const dynamicPulse =
-    whalePulse ||
-    (latest && latest.value >= 0.55) ||
-    latest?.isSpike
+  /* ================= FMAI 구독 ================= */
+  useEffect(() => {
+    const unsub = subscribeVIPChannel(symbol, (event: any) => {
+      if (event.type !== 'FMAI') return
+      setFmaiHistory(prev =>
+        [...prev, { ts: event.ts, score: event.score }].slice(-50),
+      )
+    })
+    return () => unsub()
+  }, [symbol])
 
-  const [open, setOpen] = useState(false)
+  /* ================= FMAI 병합 ================= */
+  const mergedHistory = useMemo(() => {
+    if (!history.length) return []
+    const fmaiMap = new Map<number, number>()
+    fmaiHistory.forEach(f => fmaiMap.set(f.ts, f.score))
 
-  const flags: FlagPoint[] = useMemo(() => {
-    return history
+    return history.map(p => {
+      const score =
+        fmaiMap.get(p.ts) ??
+        fmaiHistory.find(f => Math.abs(f.ts - p.ts) <= 1000)?.score ??
+        0
+
+      return {
+        ...p,
+        fmaiScore: score,
+      }
+    })
+  }, [history, fmaiHistory])
+
+  /* ================= 약한 정렬만 표시 ================= */
+  const fmaiThreshold = 0.35
+
+  const filteredHistory = useMemo(() => {
+    return mergedHistory.map(p => {
+      const score = p.fmaiScore ?? 0
+      if (Math.abs(score) < fmaiThreshold) return p
+      return { ...p, value: 0 }
+    })
+  }, [mergedHistory])
+
+  const latest = filteredHistory.at(-1)
+
+  const whalePulse = latest?.isSpike ?? false
+  const netValue = netLatest?.normalized ?? 0
+  const currentValue = latest?.value ?? 0
+
+  const probability =
+    calculateInstitutionalProbability({
+      whaleRatio: currentValue,
+      netRatio: netValue,
+      oiDelta,
+      isSpike: whalePulse,
+    })
+
+  const {
+    longProbability,
+    shortProbability,
+    confidence: rawConfidence,
+    dominant: rawDominant,
+  } = probability
+
+  const {
+    confirmedDominant,
+    confirmedConfidence,
+    isPending,
+  } = useConfirmedInstitutionalSignal({
+    rawDominant,
+    rawConfidence,
+  })
+
+  const displayDominant = confirmedDominant
+  const displayConfidence = confirmedConfidence
+
+  const confidenceColor =
+    displayConfidence >= 45
+      ? displayDominant === 'LONG'
+        ? '#10b981'
+        : '#3b82f6'
+      : displayConfidence >= 25
+      ? '#facc15'
+      : '#6b7280'
+
+  const strongSignal = displayConfidence >= 45
+
+  const flags = useMemo(() => {
+    return filteredHistory
       .filter(p => p.isSpike)
       .map(p => ({
         ts: p.ts,
         value: p.value,
-        isSpike: true,
       }))
-  }, [history])
+  }, [filteredHistory])
 
-  const gradientId = 'whaleGradient'
-
-  const strokeColor =
-    latest?.trend === 'UP'
-      ? '#ef4444'
-      : '#f87171'
-
-  const dynamicStrokeWidth =
-    dynamicPulse ? 3.5 : 2.2
-
-  const currentValue = latest?.value ?? 0
-
-  /* =========================
-   * 구간 설명
-   * ========================= */
-
-  const summaryText =
-    currentValue < 0.30
-      ? '고래 개입이 제한적인 상태입니다.'
-      : currentValue < 0.55
-      ? '고래 참여가 점진적으로 증가하는 구간입니다.'
-      : currentValue < 0.70
-      ? '기관/대형 자금 개입이 가시화되는 구간입니다.'
-      : currentValue < 0.85
-      ? '강한 체결 압력이 형성되고 있습니다.'
-      : '극단적 집중 구간입니다. 구조 왜곡 가능성이 존재합니다.'
+  /* =====================================================
+     렌더
+  ===================================================== */
 
   return (
     <>
-      {/* =========================
-          기존 차트 (절대 수정 없음)
-      ========================= */}
       <motion.div
-        animate={{
-          scale: dynamicPulse
-            ? [1, 1.05, 1]
-            : 1,
-          filter: dynamicPulse
-            ? [
-                'brightness(1)',
-                'brightness(1.25)',
-                'brightness(1)',
-              ]
-            : 'brightness(1)',
-        }}
+        animate={
+          strongSignal
+            ? { scale: [1, 1.03, 1] }
+            : { scale: 1 }
+        }
         transition={{
           duration: 0.8,
-          repeat: dynamicPulse ? Infinity : 0,
+          repeat: strongSignal ? Infinity : 0,
         }}
-        className={`rounded-xl border p-4 ${
-          dynamicPulse
-            ? 'border-red-500 shadow-[0_0_28px_rgba(239,68,68,0.75)]'
-            : 'border-vipBorder'
-        } bg-vipCard`}
+        className="rounded-xl border p-5 relative bg-vipCard overflow-hidden"
+        style={{
+          borderColor: confidenceColor,
+          boxShadow: `0 0 30px ${confidenceColor}55`,
+        }}
       >
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-medium text-white">
-            고래 체결 강도
+
+        {/* 스캔 라인 효과 */}
+        <motion.div
+          initial={{ x: '-100%' }}
+          animate={{ x: '120%' }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+          className="absolute top-0 left-0 w-1/3 h-full pointer-events-none"
+          style={{
+            background:
+              'linear-gradient(120deg, transparent, rgba(255,255,255,0.05), transparent)',
+          }}
+        />
+
+        <div className="mb-3">
+          <div className="text-sm font-semibold text-white">
+            기관 자금 방향 분석
           </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-zinc-300">
-              강도 {latest?.value?.toFixed(2) ?? '--'}
-            </span>
-
-            {riskLevel && (
-              <span className="rounded-md px-2 py-1 bg-zinc-800 text-zinc-200">
-                {riskLevel}
-              </span>
-            )}
+          <div className="text-xs text-neutral-400">
+            기관급 고래체결강도 구간표시
           </div>
         </div>
 
-        {!history.length ? (
-          <div className="h-40 rounded-lg border border-zinc-800 bg-black/30" />
-        ) : (
-          <div className="h-40 min-h-[160px] min-w-0">
-  <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={history}>
-                <defs>
-                  <linearGradient
-                    id={gradientId}
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="5%"
-                      stopColor="#ef4444"
-                      stopOpacity={0.75}
-                    />
-                    <stop
-                      offset="95%"
-                      stopColor="#ef4444"
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
+        <div className="h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={filteredHistory}>
+              <defs>
+                <linearGradient id="intensityGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+              </defs>
 
-                <XAxis
-                  dataKey="ts"
-                  hide={!showTimeAxis}
-                />
+              <XAxis dataKey="ts" hide={!showTimeAxis} />
+              <YAxis hide />
+              <Tooltip />
 
-                <YAxis
-                  domain={[
-                    (min: number) =>
-                      Math.max(0, min - 0.05),
-                    (max: number) =>
-                      max + 0.05,
-                  ]}
-                  hide
-                />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#ff4444"
+                fill="url(#intensityGradient)"
+                strokeWidth={3}
+                isAnimationActive={false}
+              />
 
-                <Tooltip
-                  content={<CustomTooltip />}
-                />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#ff4444"
+                dot={false}
+                strokeWidth={2}
+                isAnimationActive={false}
+              />
 
-                <Area
-                  type="linear"
-                  dataKey="value"
-                  stroke={strokeColor}
-                  fill={`url(#${gradientId})`}
-                  strokeWidth={dynamicStrokeWidth}
-                  isAnimationActive={false}
-                />
+              <Scatter
+                data={flags}
+                dataKey="value"
+                fill="#ff0000"
+                shape="circle"
+              />
 
-                <Line
-                  type="linear"
-                  dataKey="value"
-                  stroke={strokeColor}
-                  dot={false}
-                  strokeWidth={dynamicStrokeWidth}
-                  isAnimationActive={false}
-                />
-
-                <Scatter
-                  data={flags}
-                  dataKey="value"
-                  fill="#ff0000"
-                  shape="diamond"
-                />
-
-                <ReferenceLine
-                  y={0.55}
-                  stroke="rgba(250,204,21,0.8)"
-                  strokeDasharray="4 4"
-                />
-
-                <ReferenceLine
-                  y={0.7}
-                  stroke="rgba(239,68,68,1)"
-                  strokeDasharray="4 4"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        <div
-          className={`mt-3 text-xs font-semibold text-center ${
-            dynamicPulse
-              ? 'text-red-400 animate-pulse'
-              : 'text-emerald-400'
-          }`}
-        >
-          {dynamicPulse
-            ? '🔥 고래 압력 활성화'
-            : '현재 실시간 고래체결강도를 측정중입니다.(We are currently measuring real-time whale transaction intensity.)'}
+              <ReferenceLine
+                y={0.55}
+                stroke="rgba(250,204,21,0.8)"
+                strokeDasharray="4 4"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
+
+        {/* 최근 포인트 강조 */}
+        <AnimatePresence>
+          {latest && (
+            <motion.div
+              key={latest.ts}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0.2, 0.6, 0.2] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+              className="absolute bottom-0 left-0 w-full h-2 pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(90deg, transparent, rgba(255,0,0,0.3), transparent)',
+              }}
+            />
+          )}
+        </AnimatePresence>
       </motion.div>
 
-      {/* =========================
-          🟡 프리미엄 설명 카드 추가
-      ========================= */}
-
-      <motion.div
-        onClick={() => setOpen(!open)}
-        whileHover={{ scale: 1.01 }}
-        className="mt-4 cursor-pointer rounded-xl p-[1px] bg-gradient-to-r from-yellow-500/30 via-neutral-700 to-yellow-500/30"
-      >
-        <div className="bg-black rounded-xl p-5">
-
-          <div className="text-xs text-neutral-400 mb-2 tracking-wide">
-            WHALE INTENSITY STRATEGIC INTELLIGENCE
-          </div>
-
-          <div className="text-sm text-white">
-            현재 강도 {currentValue.toFixed(2)} — {summaryText}
-          </div>
-
-          <div className="text-xs text-neutral-500 mt-2">
-            (클릭하여 상세 해석 보기)
-          </div>
-
-          <AnimatePresence>
-            {open && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{
-                  opacity: 1,
-                  height: 'auto',
-                }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.4 }}
-                className="overflow-hidden mt-4 space-y-4 text-sm text-neutral-300"
-              >
-                <div>
-                  <strong className="text-yellow-400">
-                    0.30 이하
-                  </strong>
-                  : 유동성 중심 구간. 추세 신뢰도보다 단기 변동성 영향이 큼.
-                </div>
-
-                <div>
-                  <strong className="text-yellow-400">
-                    0.55 이상
-                  </strong>
-                  : 기관성 자금 개입 증가. OI 및 체결량 동반 여부 확인 필요.
-                </div>
-
-                <div>
-                  <strong className="text-yellow-400">
-                    0.70 이상
-                  </strong>
-                  : 구조적 압력 형성. 가격 왜곡·급변 가능성 존재.
-                  Funding/OI 변화 동시 관찰 권장.
-                </div>
-
-                <div>
-                  <strong className="text-yellow-400">
-                    0.85 이상
-                  </strong>
-                  : 극단적 집중 구간. 심리 과열 여부 점검.
-                </div>
-
-                <div className="text-xs text-neutral-500">
-                  ※ 본 지표는 고래 체결 비중 기반 분석 지표입니다.
-                  단독 판단 기준으로 사용하지 마십시오.
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-        </div>
-      </motion.div>
+      <VIPInstitutionalGuideCard
+        long={longProbability}
+        short={shortProbability}
+        confidence={displayConfidence}
+        dominant={displayDominant}
+      />
     </>
   )
 }

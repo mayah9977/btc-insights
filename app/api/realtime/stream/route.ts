@@ -10,6 +10,7 @@ import {
   getPrevOI,
   getLastVolume,
   getLastFundingRate,
+  getLastFinalDecision,
 } from '@/lib/market/marketLastStateStore'
 
 // 🔥 Sentiment SSOT
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
       )
 
       /* =========================
-       * 2️⃣ SSE Hub 등록 (scope 적용)
+       * 2️⃣ SSE Hub 등록
        * ========================= */
       const cleanup = addSSEClient(controller, { scope })
 
@@ -72,23 +73,26 @@ export async function GET(req: NextRequest) {
         } catch {}
       }, 15000)
 
+      const symbol = 'BTCUSDT'
+
       /* =========================
        * 4️⃣ VIP Risk Replay
        * ========================= */
       if (scope === 'VIP') {
         const lastRisk = getLastVipRisk()
         if (lastRisk) {
-          send({
-            type: 'RISK_UPDATE',
-            ...lastRisk,
-          })
+          setTimeout(() => {
+            send({
+              type: 'RISK_UPDATE',
+              ...lastRisk,
+            })
+          }, 100)
         }
       }
 
       /* =========================
-       * 5️⃣ OI Replay (🔥 Drift 포함)
+       * 5️⃣ OI Replay
        * ========================= */
-      const symbol = 'BTCUSDT'
       const oi = getLastOI(symbol)
       const prevOi = getPrevOI(symbol)
 
@@ -105,14 +109,16 @@ export async function GET(req: NextRequest) {
             ? 'DOWN'
             : 'FLAT'
 
-        send({
-          type: 'OI_TICK',
-          symbol,
-          openInterest: oi,
-          delta,
-          direction,
-          ts: Date.now(),
-        })
+        setTimeout(() => {
+          send({
+            type: 'OI_TICK',
+            symbol,
+            openInterest: oi,
+            delta,
+            direction,
+            ts: Date.now(),
+          })
+        }, 120)
       }
 
       /* =========================
@@ -120,12 +126,14 @@ export async function GET(req: NextRequest) {
        * ========================= */
       const volume = getLastVolume(symbol)
       if (volume !== undefined) {
-        send({
-          type: 'VOLUME_TICK',
-          symbol,
-          volume,
-          ts: Date.now(),
-        })
+        setTimeout(() => {
+          send({
+            type: 'VOLUME_TICK',
+            symbol,
+            volume,
+            ts: Date.now(),
+          })
+        }, 140)
       }
 
       /* =========================
@@ -133,29 +141,53 @@ export async function GET(req: NextRequest) {
        * ========================= */
       const fundingRate = getLastFundingRate(symbol)
       if (fundingRate != null) {
-        send({
-          type: 'FUNDING_RATE_TICK',
-          symbol,
-          fundingRate,
-          ts: Date.now(),
-        })
+        setTimeout(() => {
+          send({
+            type: 'FUNDING_RATE_TICK',
+            symbol,
+            fundingRate,
+            ts: Date.now(),
+          })
+        }, 160)
       }
 
       /* =========================
-       * 8️⃣ Sentiment Replay
+       * 8️⃣ ⭐ FINAL_DECISION Replay (🔥 핵심 수정)
+       * ========================= */
+      if (scope === 'VIP') {
+        const lastDecision = getLastFinalDecision(symbol)
+
+        if (lastDecision) {
+          setTimeout(() => {
+            send({
+              type: 'FINAL_DECISION',
+              symbol,
+              decision: lastDecision.decision,
+              dominant: lastDecision.dominant,
+              confidence: lastDecision.confidence,
+              ts: Date.now(),
+            })
+          }, 200) // 🔥 subscribe 보장 지연
+        }
+      }
+
+      /* =========================
+       * 9️⃣ Sentiment Replay
        * ========================= */
       const lastSentiment = getLastSentiment()
       if (lastSentiment != null) {
-        send({
-          type: 'SENTIMENT_UPDATE',
-          symbol,
-          sentiment: lastSentiment,
-          ts: Date.now(),
-        })
+        setTimeout(() => {
+          send({
+            type: 'SENTIMENT_UPDATE',
+            symbol,
+            sentiment: lastSentiment,
+            ts: Date.now(),
+          })
+        }, 220)
       }
 
       /* =========================
-       * 9️⃣ 연결 종료 처리
+       * 🔟 연결 종료 처리
        * ========================= */
       const onAbort = () => {
         clearInterval(heartbeat)

@@ -30,6 +30,9 @@ export const SSE_EVENT = {
   WHALE_WARNING: 'WHALE_WARNING',
   WHALE_TRADE_FLOW: 'WHALE_TRADE_FLOW',
 
+  // 🆕🔥 기관 순매수 압력
+  WHALE_NET_PRESSURE: 'WHALE_NET_PRESSURE',
+
   // =========================
   // ALERTS
   // =========================
@@ -107,10 +110,23 @@ export type VipSSEEvent =
     }
 
   /* =========================================================
+   * 🆕🔥 Whale Net Pressure (기관 순매수 압력)
+   * ========================================================= */
+  | {
+      type: typeof SSE_EVENT.WHALE_NET_PRESSURE
+      symbol: string
+      whaleBuyVolume: number
+      whaleSellVolume: number
+      whaleNetPressure: number
+      whaleNetRatio: number
+      totalVolume: number
+      ts: number
+    }
+
+  /* =========================================================
    * MARKET
    * ========================================================= */
 
-  // 🔥 OI (Drift 포함 최종 구조)
   | {
       type: typeof SSE_EVENT.OI_TICK
       symbol: string

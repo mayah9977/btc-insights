@@ -3,14 +3,42 @@ import { SSE_EVENT } from './types'
 
 /* =========================================================
  * 🔧 내부 유틸: Symbol 안전 비교
- * ========================================================= */
+========================================================= */
 function isSameSymbol(a?: string, b?: string) {
   return a?.toUpperCase() === b?.toUpperCase()
 }
 
 /* =========================================================
- * Market: Open Interest (🔥 Drift 포함)
- * ========================================================= */
+ * 🔥 FMAI (VIP 채널)
+========================================================= */
+export function subscribeVIPChannel(
+  symbol: string,
+  cb: (
+    score: number,
+    direction: string,
+    ts?: number,
+  ) => void,
+) {
+  const safeSymbol = symbol?.toUpperCase()
+
+  return sseManager.subscribe(
+    'FMAI', // DERIVED_VIP 에서 publish한 type
+    (data: {
+      symbol: string
+      score: number
+      direction: string
+      ts?: number
+    }) => {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
+        cb(data.score, data.direction, data.ts)
+      }
+    },
+  )
+}
+
+/* =========================================================
+ * Market: Open Interest
+========================================================= */
 export function subscribeOpenInterest(
   symbol: string,
   cb: (
@@ -45,7 +73,7 @@ export function subscribeOpenInterest(
 
 /* =========================================================
  * Market: Price
- * ========================================================= */
+========================================================= */
 export function subscribeMarketPrice(
   symbol: string,
   cb: (price: number, ts?: number) => void,
@@ -68,7 +96,7 @@ export function subscribeMarketPrice(
 
 /* =========================================================
  * Market: Volume
- * ========================================================= */
+========================================================= */
 export function subscribeMarketVolume(
   symbol: string,
   cb: (volume: number, ts?: number) => void,
@@ -90,8 +118,8 @@ export function subscribeMarketVolume(
 }
 
 /* =========================================================
- * 🐋 Whale Pressure (Composite Index)
- * ========================================================= */
+ * 🐋 Whale Intensity
+========================================================= */
 export function subscribeWhaleIntensity(
   symbol: string,
   cb: (
@@ -128,8 +156,8 @@ export function subscribeWhaleIntensity(
 }
 
 /* =========================================================
- * 🆕 Whale Trade Flow
- * ========================================================= */
+ * Whale Trade Flow
+========================================================= */
 export function subscribeWhaleTradeFlow(
   symbol: string,
   cb: (
@@ -163,8 +191,49 @@ export function subscribeWhaleTradeFlow(
 }
 
 /* =========================================================
+ * Whale Net Pressure
+========================================================= */
+export function subscribeWhaleNetPressure(
+  symbol: string,
+  cb: (
+    whaleBuyVolume: number,
+    whaleSellVolume: number,
+    whaleNetPressure: number,
+    whaleNetRatio: number,
+    totalVolume: number,
+    ts?: number,
+  ) => void,
+) {
+  const safeSymbol = symbol?.toUpperCase()
+
+  return sseManager.subscribe(
+    'WHALE_NET_PRESSURE',
+    (data: {
+      symbol: string
+      whaleBuyVolume: number
+      whaleSellVolume: number
+      whaleNetPressure: number
+      whaleNetRatio: number
+      totalVolume: number
+      ts?: number
+    }) => {
+      if (isSameSymbol(data.symbol, safeSymbol)) {
+        cb(
+          data.whaleBuyVolume,
+          data.whaleSellVolume,
+          data.whaleNetPressure,
+          data.whaleNetRatio,
+          data.totalVolume,
+          data.ts,
+        )
+      }
+    },
+  )
+}
+
+/* =========================================================
  * Whale Warning
- * ========================================================= */
+========================================================= */
 export function subscribeWhaleWarning(
   symbol: string,
   cb: (value: number, avg: number, ts?: number) => void,
@@ -192,7 +261,7 @@ export function subscribeWhaleWarning(
 
 /* =========================================================
  * 🔥 Market: Sentiment
- * ========================================================= */
+========================================================= */
 export function subscribeSentiment(
   symbol: string,
   cb: (sentiment: number, ts?: number) => void,
