@@ -52,6 +52,10 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
   const activeSymbols = new Set<string>(DEFAULT_SYMBOLS)
   const lastPriceMap = new Map<string, number>()
 
+  /* 🔥 Rate Limit Maps */
+  const lastBBPublish = new Map<string, number>()
+  const lastWhalePublish = new Map<string, number>()
+
   /* ================= RAW → PUBLIC ================= */
   sub.on('message', async (_channel, raw) => {
     try {
@@ -61,13 +65,14 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
       const symbol = event.symbol.toUpperCase()
       activeSymbols.add(symbol)
 
+      /* OI */
       if (event.type === 'OI_TICK') {
         setLastOI(symbol, event.openInterest)
         pushRollingValue(`OI_${symbol}`, event.openInterest, 50)
 
         const derived = deriveOpenInterest(symbol, event.openInterest)
 
-        await redis.publish(
+        redis.publish(
           DERIVED_PUBLIC,
           JSON.stringify({
             type: 'OI_TICK',
@@ -78,32 +83,32 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         )
       }
 
+      /* Volume */
       if (event.type === 'VOLUME_TICK') {
         setLastVolume(symbol, event.volume)
-        await redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
+        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
+      /* Funding */
       if (event.type === 'FUNDING_RATE_TICK') {
         setLastFundingRate(symbol, event.fundingRate)
-        await redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
+        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
+      /* Price */
       if (event.type === 'PRICE_TICK') {
         const price = event.price
         const ts = event.ts
         if (!Number.isFinite(ts)) return
 
         pushRecentPrice(symbol, price)
-        await redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
+        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
 
         candle30mMap[symbol] ??= new CandleAggregator30m(symbol)
         const aggregator = candle30mMap[symbol]
-
         const result = aggregator.update({ price, ts }, 0)
 
-        /* =========================
-           🔥 Confirmed Signal
-        ========================= */
+        /* Confirmed */
         if (result.confirmedSignal) {
           setLastBollingerSignal(symbol, {
             enabled: true,
@@ -116,40 +121,45 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             at: result.confirmedSignal.at,
           })
 
-          await redis.publish(
+          redis.publish(
             DERIVED_PUBLIC,
             JSON.stringify(result.confirmedSignal),
           )
         }
 
-        /* =========================
-           🔥 Realtime Signal 추가 (핵심)
-        ========================= */
+        /* 🔥 Realtime Bollinger (800ms rate limit) */
         if (result.liveCommentary) {
-          setLastBollingerSignal(symbol, {
-            enabled: true,
-            timeframe: '30m',
-            symbol,
-            signalType: result.liveCommentary.signalType as BollingerSignalType,
-            candle: result.liveCommentary.candle,
-            bands: result.liveCommentary.bands,
-            confirmed: false,
-            at: result.liveCommentary.at,
-          })
+          const now = Date.now()
+          const last = lastBBPublish.get(symbol) ?? 0
 
-          await redis.publish(
-            DERIVED_PUBLIC,
-            JSON.stringify(result.liveCommentary),
-          )
+          if (now - last > 800) {
+            lastBBPublish.set(symbol, now)
+
+            setLastBollingerSignal(symbol, {
+              enabled: true,
+              timeframe: '30m',
+              symbol,
+              signalType: result.liveCommentary.signalType as BollingerSignalType,
+              candle: result.liveCommentary.candle,
+              bands: result.liveCommentary.bands,
+              confirmed: false,
+              at: result.liveCommentary.at,
+            })
+
+            redis.publish(
+              DERIVED_PUBLIC,
+              JSON.stringify(result.liveCommentary),
+            )
+          }
         }
       }
 
       if (event.type === 'WHALE_TRADE_FLOW') {
-        await redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
+        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
       if (event.type === 'WHALE_NET_PRESSURE') {
-        await redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
+        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
     } catch (e) {
@@ -164,17 +174,14 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         const snapshot = await buildRiskInputFromRealtime(symbol)
         if (!snapshot) continue
 
-        /* ================= MACD ================= */
+        /* MACD */
         const recentCloses = getRecentPrices(symbol, 100)
-
         if (recentCloses.length >= 35) {
           const macdResult = calculateMACD(recentCloses)
-          if (macdResult) {
-            setLastMACD(symbol, macdResult)
-          }
+          if (macdResult) setLastMACD(symbol, macdResult)
         }
 
-        /* ================= FMAI ================= */
+        /* FMAI */
         const prevPrice = lastPriceMap.get(symbol) ?? snapshot.price
         const priceChange =
           prevPrice !== 0
@@ -191,37 +198,50 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
 
         setLastFMAI(symbol, fmai, snapshot.ts)
 
-        await redis.publish(
-          DERIVED_VIP,
-          JSON.stringify({
-            type: 'FMAI',
-            symbol,
-            score: fmai.score,
-            direction: fmai.direction,
-            ts: snapshot.ts,
-          }),
+        const publishTasks: Promise<any>[] = []
+
+        publishTasks.push(
+          redis.publish(
+            DERIVED_VIP,
+            JSON.stringify({
+              type: 'FMAI',
+              symbol,
+              score: fmai.score,
+              direction: fmai.direction,
+              ts: snapshot.ts,
+            }),
+          )
         )
 
-        /* ================= 🔥 WHALE_INTENSITY publish ================= */
-        await redis.publish(
-          DERIVED_PUBLIC,
-          JSON.stringify({
-            type: 'WHALE_INTENSITY',
-            symbol,
-            intensity: snapshot.whaleIntensity,
-            avg: 0,
-            trend:
-              snapshot.whaleNetRatio > 0
-                ? 'UP'
-                : snapshot.whaleNetRatio < 0
-                ? 'DOWN'
-                : 'FLAT',
-            isSpike: snapshot.extremeSignal,
-            ts: snapshot.ts,
-          }),
-        )
+        /* 🔥 Whale Intensity (1초 rate limit) */
+        const now = Date.now()
+        const lastWhale = lastWhalePublish.get(symbol) ?? 0
 
-        /* ================= Action Gate ================= */
+        if (now - lastWhale > 1000) {
+          lastWhalePublish.set(symbol, now)
+
+          publishTasks.push(
+            redis.publish(
+              DERIVED_PUBLIC,
+              JSON.stringify({
+                type: 'WHALE_INTENSITY',
+                symbol,
+                intensity: snapshot.whaleIntensity,
+                avg: 0,
+                trend:
+                  snapshot.whaleNetRatio > 0
+                    ? 'UP'
+                    : snapshot.whaleNetRatio < 0
+                    ? 'DOWN'
+                    : 'FLAT',
+                isSpike: snapshot.extremeSignal,
+                ts: snapshot.ts,
+              }),
+            )
+          )
+        }
+
+        /* Action Gate */
         const nextActionGateInput: ActionGateInput = {
           bollingerSignal: snapshot.bollingerSignal,
           oiDelta: snapshot.oiDelta,
@@ -237,7 +257,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         setActionGateState(symbol, actionGateState)
         setLastActionGateInput(symbol, nextActionGateInput)
 
-        /* ================= Decision ================= */
+        /* Decision */
         const probability =
           calculateInstitutionalProbability({
             whaleRatio: snapshot.whaleRatio ?? 0,
@@ -268,30 +288,35 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           probability.confidence,
         )
 
-        const ts = snapshot.ts
-
-        await redis.publish(
-          DERIVED_VIP,
-          JSON.stringify({
-            type: 'FINAL_DECISION',
-            symbol,
-            decision,
-            dominant: probability.dominant,
-            confidence: probability.confidence,
-            ts,
-          }),
+        publishTasks.push(
+          redis.publish(
+            DERIVED_VIP,
+            JSON.stringify({
+              type: 'FINAL_DECISION',
+              symbol,
+              decision,
+              dominant: probability.dominant,
+              confidence: probability.confidence,
+              ts: snapshot.ts,
+            }),
+          )
         )
 
-        await redis.publish(
-          DERIVED_VIP,
-          JSON.stringify({
-            type: 'MARKET_STATE',
-            symbol,
-            actionGateState,
-            macd: nextActionGateInput.macd,
-            ts,
-          }),
+        publishTasks.push(
+          redis.publish(
+            DERIVED_VIP,
+            JSON.stringify({
+              type: 'MARKET_STATE',
+              symbol,
+              actionGateState,
+              macd: nextActionGateInput.macd,
+              ts: snapshot.ts,
+            }),
+          )
         )
+
+        /* 🔥 병렬 publish */
+        await Promise.all(publishTasks)
 
       } catch (err) {
         console.error('[CORE ENGINE ERROR]', err)
