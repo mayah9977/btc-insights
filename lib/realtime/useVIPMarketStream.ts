@@ -2,37 +2,20 @@
 
 import { useEffect } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-
-import {
-  subscribeVIPChannel,
-  subscribeWhaleAbsorption,
-  subscribeLiquiditySweep,
-  subscribeWhaleIntensity,
-  subscribeWhaleNetPressure,
-  subscribeMarketState,
-  subscribeFinalDecision,
-} from '@/lib/realtime/marketChannel'
-
-/* =========================================================
-   🔥 SSE Throttle Batch Layer
-   - Render Storm 방지
-   - Mobile safe
-========================================================= */
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
+import { SSE_EVENT } from '@/lib/realtime/types'
 
 let buffer: any = {}
 let scheduled = false
 
-const UPDATE_INTERVAL = 250 // ms (~4fps)
-
-/* ========================================================= */
-
 export function useVIPMarketStream(symbol: string) {
+
   const update = useVIPMarketStore((s) => s.update)
 
   useEffect(() => {
-    if (!symbol) return
 
     function scheduleUpdate(data: any) {
+
       buffer = { ...buffer, ...data }
 
       if (scheduled) return
@@ -40,115 +23,127 @@ export function useVIPMarketStream(symbol: string) {
       scheduled = true
 
       setTimeout(() => {
+
         update(buffer)
 
         buffer = {}
+
         scheduled = false
-      }, UPDATE_INTERVAL)
+
+      }, 250)
+
     }
 
-    /* ================= FMAI ================= */
+    /* =========================
+       OI
+    ========================= */
 
-    const unsubVIP = subscribeVIPChannel(
-      symbol,
-      (score, direction, ts) => {
+    const unsubOI = sseManager.subscribe(
+      SSE_EVENT.OI_TICK,
+      (msg: any) => {
+
+        if (msg.symbol !== symbol) return
+
         scheduleUpdate({
-          fmai: score,
-          ts: ts ?? Date.now(),
+          oi: msg.openInterest ?? msg.oi ?? 0,
         })
-      }
+
+      },
     )
 
-    /* ================= Whale Absorption ================= */
+    /* =========================
+       VOLUME
+    ========================= */
 
-    const unsubAbsorb = subscribeWhaleAbsorption(
-      symbol,
-      (direction, strength) => {
+    const unsubVolume = sseManager.subscribe(
+      SSE_EVENT.VOLUME_TICK,
+      (msg: any) => {
+
+        if (msg.symbol !== symbol) return
+
         scheduleUpdate({
-          absorption: strength,
+          volume: msg.volume ?? 0,
         })
-      }
+
+      },
     )
 
-    /* ================= Liquidity Sweep ================= */
+    /* =========================
+       FUNDING
+    ========================= */
 
-    const unsubSweep = subscribeLiquiditySweep(
-      symbol,
-      (direction, strength) => {
+    const unsubFunding = sseManager.subscribe(
+      SSE_EVENT.FUNDING_RATE_TICK,
+      (msg: any) => {
+
+        if (msg.symbol !== symbol) return
+
         scheduleUpdate({
-          sweep: strength,
+          fundingRate: msg.fundingRate ?? 0,
         })
-      }
+
+      },
     )
 
-    /* ================= Whale Intensity ================= */
+    /* =========================
+       WHALE INTENSITY
+    ========================= */
 
-    const unsubWhaleIntensity = subscribeWhaleIntensity(
-      symbol,
-      (intensity, avg, trend, isSpike, ts) => {
+    const unsubWhaleIntensity = sseManager.subscribe(
+      SSE_EVENT.WHALE_INTENSITY,
+      (msg: any) => {
+
+        if (msg.symbol !== symbol) return
+
         scheduleUpdate({
-          whaleIntensity: intensity,
-          ts: ts ?? Date.now(),
+          whaleIntensity: msg.intensity ?? 0,
         })
-      }
+
+      },
     )
 
-    /* ================= Whale Net Pressure ================= */
+    /* =========================
+       WHALE NET
+    ========================= */
 
-    const unsubWhaleNet = subscribeWhaleNetPressure(
-      symbol,
-      (
-        whaleBuyVolume,
-        whaleSellVolume,
-        whaleNetPressure,
-        whaleNetRatio,
-        totalVolume,
-        ts
-      ) => {
+    const unsubWhaleNet = sseManager.subscribe(
+      SSE_EVENT.WHALE_NET_PRESSURE,
+      (msg: any) => {
+
+        if (msg.symbol !== symbol) return
+
         scheduleUpdate({
-          whaleNet: whaleNetRatio,
-          ts: ts ?? Date.now(),
+          whaleNet: msg.whaleNetRatio ?? msg.whaleNetPressure ?? 0,
         })
-      }
+
+      },
     )
 
-    /* ================= MARKET STATE ================= */
+    /* =========================
+       MARKET STATE
+    ========================= */
 
-    const unsubMarketState = subscribeMarketState(
-      symbol,
-      (actionGateState, macd, ts) => {
+    const unsubMarketState = sseManager.subscribe(
+      'MARKET_STATE',
+      (msg: any) => {
+
         scheduleUpdate({
-          actionGateState,
-          macd,
-          ts: ts ?? Date.now(),
+          actionGateState: msg.actionGateState ?? 'OBSERVE',
         })
-      }
+
+      },
     )
-
-    /* ================= FINAL DECISION ================= */
-
-    const unsubFinalDecision = subscribeFinalDecision(
-      symbol,
-      (decision, dominant, confidence, ts) => {
-        scheduleUpdate({
-          decision,
-          dominant,
-          confidence,
-          ts: ts ?? Date.now(),
-        })
-      }
-    )
-
-    /* ================= CLEANUP ================= */
 
     return () => {
-      unsubVIP()
-      unsubAbsorb()
-      unsubSweep()
+
+      unsubOI()
+      unsubVolume()
+      unsubFunding()
       unsubWhaleIntensity()
       unsubWhaleNet()
       unsubMarketState()
-      unsubFinalDecision()
+
     }
+
   }, [symbol, update])
 }
