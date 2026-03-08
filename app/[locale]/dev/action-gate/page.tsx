@@ -15,12 +15,13 @@ export default function DevActionGatePage({
 }: {
   searchParams: { gate?: string }
 }) {
+
   const gate = normalizeGate(searchParams.gate)
 
   return (
     <div style={{ padding: 16, display: 'grid', gap: 8 }}>
-      <ActionGateStatus state={gate} />
-      <ActionGateRenderer gate={gate} />
-    </div>
+  <ActionGateStatus />
+  <ActionGateRenderer gate={gate} />
+</div>
   )
 }
