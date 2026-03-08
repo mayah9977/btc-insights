@@ -6,8 +6,9 @@ import { create } from 'zustand'
    Types
 ========================================================= */
 
-type VIPMarketState = {
+export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
+type VIPMarketState = {
   whaleIntensity: number
   whaleRatio: number
   whaleNet: number
@@ -16,11 +17,9 @@ type VIPMarketState = {
   absorption: number
   sweep: number
 
-  /* 🔥 MARKET STATE */
-  actionGateState?: string
+  actionGateState: ActionGateState
   macd?: any
 
-  /* 🔥 FINAL_DECISION */
   decision?: string
   dominant?: string
   confidence?: number
@@ -35,7 +34,6 @@ type VIPMarketState = {
 ========================================================= */
 
 export const useVIPMarketStore = create<VIPMarketState>((set) => ({
-
   whaleIntensity: 0,
   whaleRatio: 0,
   whaleNet: 0,
@@ -44,11 +42,9 @@ export const useVIPMarketStore = create<VIPMarketState>((set) => ({
   absorption: 0,
   sweep: 0,
 
-  /* 🔥 AI Gate 상태 */
   actionGateState: 'OBSERVE',
   macd: null,
 
-  /* 🔥 FINAL_DECISION 초기값 */
   decision: undefined,
   dominant: undefined,
   confidence: undefined,
@@ -57,65 +53,54 @@ export const useVIPMarketStore = create<VIPMarketState>((set) => ({
 
   update: (data) =>
     set((state) => {
-
       let changed = false
-
-      const next = { ...state }
+      const next: Partial<VIPMarketState> = {}
 
       for (const key in data) {
-
         const k = key as keyof VIPMarketState
 
         if (state[k] !== data[k]) {
           ;(next as any)[k] = data[k]
           changed = true
         }
-
       }
 
-      return changed ? next : state
-
+      return changed ? { ...state, ...next } : state
     }),
-
 }))
 
 /* =========================================================
-   🔥 Micro Batch Scheduler (60fps limit)
+   🔥 Ultra-Light Batch Scheduler
 ========================================================= */
 
 let pending: Partial<VIPMarketState> | null = null
 let scheduled = false
-let lastUpdate = 0
 
-const FRAME_LIMIT = 16 // ~60fps
+/* mobile-safe throttle */
+const UPDATE_INTERVAL = 250 // ms (~4fps)
+
+/* last dispatch time */
+let lastFlush = 0
 
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>
 ) {
-
   pending = { ...(pending || {}), ...data }
 
   if (scheduled) return
 
   scheduled = true
 
-  requestAnimationFrame(() => {
+  const now = performance.now()
+  const delay = Math.max(0, UPDATE_INTERVAL - (now - lastFlush))
 
-    const now = performance.now()
-
-    if (now - lastUpdate < FRAME_LIMIT) {
-      scheduled = false
-      return
-    }
-
-    lastUpdate = now
-
+  setTimeout(() => {
     if (pending) {
       useVIPMarketStore.getState().update(pending)
     }
 
     pending = null
     scheduled = false
-
-  })
+    lastFlush = performance.now()
+  }, delay)
 }

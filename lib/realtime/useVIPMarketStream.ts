@@ -10,53 +10,52 @@ import {
   subscribeWhaleIntensity,
   subscribeWhaleNetPressure,
   subscribeMarketState,
-  subscribeFinalDecision
+  subscribeFinalDecision,
 } from '@/lib/realtime/marketChannel'
 
 /* =========================================================
-   🔥 SSE Update Batching (Render Storm 방지)
+   🔥 SSE Throttle Batch Layer
+   - Render Storm 방지
+   - Mobile safe
 ========================================================= */
 
-let pending: any = null
+let buffer: any = {}
 let scheduled = false
 
-function scheduleUpdate(data: any) {
-
-  pending = { ...(pending || {}), ...data }
-
-  if (scheduled) return
-
-  scheduled = true
-
-  requestAnimationFrame(() => {
-
-    useVIPMarketStore.getState().update(pending)
-
-    pending = null
-    scheduled = false
-
-  })
-}
+const UPDATE_INTERVAL = 250 // ms (~4fps)
 
 /* ========================================================= */
 
 export function useVIPMarketStream(symbol: string) {
+  const update = useVIPMarketStore((s) => s.update)
 
   useEffect(() => {
-
     if (!symbol) return
+
+    function scheduleUpdate(data: any) {
+      buffer = { ...buffer, ...data }
+
+      if (scheduled) return
+
+      scheduled = true
+
+      setTimeout(() => {
+        update(buffer)
+
+        buffer = {}
+        scheduled = false
+      }, UPDATE_INTERVAL)
+    }
 
     /* ================= FMAI ================= */
 
     const unsubVIP = subscribeVIPChannel(
       symbol,
       (score, direction, ts) => {
-
         scheduleUpdate({
           fmai: score,
-          ts: ts ?? Date.now()
+          ts: ts ?? Date.now(),
         })
-
       }
     )
 
@@ -65,11 +64,9 @@ export function useVIPMarketStream(symbol: string) {
     const unsubAbsorb = subscribeWhaleAbsorption(
       symbol,
       (direction, strength) => {
-
         scheduleUpdate({
-          absorption: strength
+          absorption: strength,
         })
-
       }
     )
 
@@ -78,11 +75,9 @@ export function useVIPMarketStream(symbol: string) {
     const unsubSweep = subscribeLiquiditySweep(
       symbol,
       (direction, strength) => {
-
         scheduleUpdate({
-          sweep: strength
+          sweep: strength,
         })
-
       }
     )
 
@@ -91,12 +86,10 @@ export function useVIPMarketStream(symbol: string) {
     const unsubWhaleIntensity = subscribeWhaleIntensity(
       symbol,
       (intensity, avg, trend, isSpike, ts) => {
-
         scheduleUpdate({
           whaleIntensity: intensity,
-          ts: ts ?? Date.now()
+          ts: ts ?? Date.now(),
         })
-
       }
     )
 
@@ -112,12 +105,10 @@ export function useVIPMarketStream(symbol: string) {
         totalVolume,
         ts
       ) => {
-
         scheduleUpdate({
           whaleNet: whaleNetRatio,
-          ts: ts ?? Date.now()
+          ts: ts ?? Date.now(),
         })
-
       }
     )
 
@@ -126,13 +117,11 @@ export function useVIPMarketStream(symbol: string) {
     const unsubMarketState = subscribeMarketState(
       symbol,
       (actionGateState, macd, ts) => {
-
         scheduleUpdate({
           actionGateState,
           macd,
           ts: ts ?? Date.now(),
         })
-
       }
     )
 
@@ -141,21 +130,18 @@ export function useVIPMarketStream(symbol: string) {
     const unsubFinalDecision = subscribeFinalDecision(
       symbol,
       (decision, dominant, confidence, ts) => {
-
         scheduleUpdate({
           decision,
           dominant,
           confidence,
           ts: ts ?? Date.now(),
         })
-
       }
     )
 
     /* ================= CLEANUP ================= */
 
     return () => {
-
       unsubVIP()
       unsubAbsorb()
       unsubSweep()
@@ -163,9 +149,6 @@ export function useVIPMarketStream(symbol: string) {
       unsubWhaleNet()
       unsubMarketState()
       unsubFinalDecision()
-
     }
-
-  }, [symbol])
-
+  }, [symbol, update])
 }

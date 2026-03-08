@@ -1,57 +1,28 @@
 'use client'
 
-import React from 'react'
+import ActionGateStatusMobile from './ActionGateStatus.mobile'
+import RawObservationBarMobile from './RawObservationBar.mobile'
+import VIPWhaleIntensityChartMobile from './VIPWhaleIntensityChart.mobile'
+import VIPWhaleTradeFlowChartMobile from './VIPWhaleTradeFlowChart.mobile'
 
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
-
-import ActionGateStatus from './ActionGateStatus.mobile'
-import RawObservationBar from './RawObservationBar.mobile'
-
-import dynamic from 'next/dynamic'
-
-/* =========================================
-   Lazy Charts (Mobile)
-========================================= */
-
-const VIPWhaleIntensityChart = dynamic(
-  () => import('./VIPWhaleIntensityChart.mobile'),
-  { ssr: false }
-)
-
-const VIPWhaleTradeFlowChart = dynamic(
-  () => import('./VIPWhaleTradeFlowChart.mobile'),
-  { ssr: false }
-)
-
-/* =========================================
-   Mobile Dashboard
-========================================= */
 
 export default function MobileDashboard() {
 
   const symbol = 'BTCUSDT'
 
-  /* =========================================
-     🔥 Start realtime stream (VERY IMPORTANT)
-     SSE → store → charts pipeline
-  ========================================= */
-
   useVIPMarketStream(symbol)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 p-3">
 
-      {/* AI Gate */}
-      <ActionGateStatus />
+      <ActionGateStatusMobile />
 
-      {/* Market Observation */}
-      <RawObservationBar symbol={symbol} />
+      <RawObservationBarMobile />
 
-      {/* Whale Intensity Chart */}
-      <VIPWhaleIntensityChart />
+      <VIPWhaleIntensityChartMobile />
 
-      {/* Whale Trade Flow Chart */}
-      <VIPWhaleTradeFlowChart />
+      <VIPWhaleTradeFlowChartMobile />
 
     </div>
   )

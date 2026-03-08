@@ -1,62 +1,40 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import {
-  LineChart,
-  Line,
-  ResponsiveContainer,
-} from 'recharts'
-
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import { useEffect, useState } from 'react'
 
-type Point = {
-  t: number
-  v: number
-}
+export default function VIPWhaleIntensityChartMobile() {
 
-const VIPWhaleIntensityChartMobile = () => {
-  const intensity = useVIPMarketStore(
-    s => s.whaleIntensity
-  )
+  const intensity = useVIPMarketStore((s) => s.whaleIntensity)
 
-  const [data, setData] = useState<Point[]>([])
+  const [history, setHistory] = useState<number[]>([])
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setData(prev => {
-        const next = [
-          ...prev,
-          { t: Date.now(), v: intensity },
-        ]
 
+    const id = setInterval(() => {
+
+      setHistory((h) => {
+        const next = [...h, intensity]
         return next.slice(-30)
       })
+
     }, 1000)
 
     return () => clearInterval(id)
+
   }, [intensity])
 
   return (
-    <div className="rounded-lg border border-zinc-800 p-3">
+    <div className="border border-zinc-800 rounded-lg p-3">
+
       <div className="text-xs text-zinc-400 mb-2">
         Whale Intensity
       </div>
 
-      <div className="h-[120px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <Line
-              dataKey="v"
-              stroke="#ef4444"
-              dot={false}
-              strokeWidth={2}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="text-sm text-white">
+        {history.at(-1) ?? 0}
       </div>
+
     </div>
   )
 }
-
-export default React.memo(VIPWhaleIntensityChartMobile)

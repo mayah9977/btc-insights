@@ -1,72 +1,40 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import {
-  LineChart,
-  Line,
-  ResponsiveContainer,
-} from 'recharts'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import { useEffect, useState } from 'react'
 
-import { useWhaleTradeFlow } from '@/lib/realtime/useWhaleTradeFlow'
+export default function VIPWhaleTradeFlowChartMobile() {
 
-type Point = {
-  t: number
-  v: number
-}
+  const net = useVIPMarketStore((s) => s.whaleNet)
 
-const VIPWhaleTradeFlowChartMobile = ({
-  symbol = 'BTCUSDT',
-}: {
-  symbol?: string
-}) => {
-  const { history } = useWhaleTradeFlow({
-    symbol,
-    limit: 30,
-  })
-
-  const [data, setData] = useState<Point[]>([])
+  const [history, setHistory] = useState<number[]>([])
 
   useEffect(() => {
+
     const id = setInterval(() => {
-      const last = history.at(-1)
 
-      setData(prev => {
-        const next = [
-          ...prev,
-          {
-            t: Date.now(),
-            v: last?.ratio ?? 0,
-          },
-        ]
-
+      setHistory((h) => {
+        const next = [...h, net]
         return next.slice(-30)
       })
+
     }, 1000)
 
     return () => clearInterval(id)
-  }, [history])
+
+  }, [net])
 
   return (
-    <div className="rounded-lg border border-zinc-800 p-3">
+    <div className="border border-zinc-800 rounded-lg p-3">
+
       <div className="text-xs text-zinc-400 mb-2">
         Whale Trade Flow
       </div>
 
-      <div className="h-[120px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <Line
-              dataKey="v"
-              stroke="#facc15"
-              dot={false}
-              strokeWidth={2}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="text-sm text-white">
+        {history.at(-1) ?? 0}
       </div>
+
     </div>
   )
 }
-
-export default React.memo(VIPWhaleTradeFlowChartMobile)
