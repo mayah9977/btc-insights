@@ -1,44 +1,41 @@
 'use client'
 
+import React from 'react'
 import { motion } from 'framer-motion'
 import { useSystemGuideStore } from '@/lib/vip/systemGuideStore'
-import { useRealtimePrice } from '@/lib/realtime/useRealtimePrice'
 import VIPSystemGuideModal from './VIPSystemGuideModal'
+import PriceTicker from './PriceTicker'
 
 type Props = {
   avoidedExtremeCount: number
   avoidedLossUSD?: number // 호환성 유지 (사용 안함)
 }
 
-export default function VIPTopKPIBar({
+function VIPTopKPIBar({
   avoidedExtremeCount,
 }: Props) {
-  const openGuide = useSystemGuideStore(s => s.open)
 
-  // 🔥 실시간 가격은 내부에서 직접 구독
-  const { price } = useRealtimePrice('BTCUSDT')
-  const btcPrice = price ?? 0
+  const openGuide = useSystemGuideStore(s => s.open)
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
+      <div
         className="
           sticky top-0 z-40
           bg-black/80 backdrop-blur
           border-b border-neutral-800
         "
       >
+
         {/* =========================
             📱 Mobile Compact KPI
         ========================= */}
         <div className="md:hidden px-4 py-2 text-sm flex items-center justify-between text-neutral-300">
+
           <span>
             BTC{' '}
             <strong className="text-white">
-              {btcPrice > 0 ? `$${btcPrice.toLocaleString()}` : '-'}
+              <PriceTicker />
             </strong>
           </span>
 
@@ -55,21 +52,22 @@ export default function VIPTopKPIBar({
           >
             시스템 설명
           </button>
+
         </div>
 
         {/* =========================
             🖥 Desktop KPI Cards
         ========================= */}
         <div className="hidden md:grid max-w-7xl mx-auto grid-cols-3 gap-4 px-4 py-3">
+
           {/* 현재 BTC 가격 */}
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
             <p className="text-xs text-neutral-400">
               현재 BTC 가격
             </p>
+
             <p className="text-2xl font-bold text-white">
-              {btcPrice > 0
-                ? `$${btcPrice.toLocaleString()}`
-                : '-'}
+              <PriceTicker />
             </p>
           </div>
 
@@ -90,6 +88,7 @@ export default function VIPTopKPIBar({
             <p className="text-xs text-green-400">
               AI Risk Observation System (AI 기반 리스크 관측 시스템)
             </p>
+
             <p className="text-2xl font-bold text-green-300">
               시스템 활용방법
             </p>
@@ -112,14 +111,19 @@ export default function VIPTopKPIBar({
             <p className="text-xs text-yellow-400">
               Probabilistic Risk Detection Model (확률적 위험 감지 모델)
             </p>
+
             <p className="text-2xl font-bold text-yellow-300">
               시스템 설명 및 유의사항
             </p>
           </motion.div>
+
         </div>
-      </motion.div>
+
+      </div>
 
       <VIPSystemGuideModal />
     </>
   )
 }
+
+export default React.memo(VIPTopKPIBar)

@@ -19,6 +19,7 @@ import { getLastSentiment } from '@/lib/sentiment/sentimentLastStateStore'
 /* =========================
  * 🔥 Server Boot (Singleton)
  * ========================= */
+
 const g = globalThis as typeof globalThis & {
   __MARKET_BOOTSTRAPPED__?: boolean
 }
@@ -36,35 +37,69 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+
   const scopeParam = req.nextUrl.searchParams.get('scope')
+
   const scope: SSEScope =
     scopeParam === 'vip' ? 'VIP' : 'REALTIME'
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+
       const encoder = new TextEncoder()
 
+      /* =========================
+      * 🔥 VIP EVENT FILTER
+      * ========================= */
+
       function send(event: any) {
+
+        if (scope === 'VIP') {
+
+          const VIP_EVENTS = new Set([
+
+            'FMAI',
+            'WHALE_INTENSITY',
+            'WHALE_NET_PRESSURE',
+            'WHALE_ABSORPTION',
+            'LIQUIDITY_SWEEP',
+            'MARKET_REGIME',
+            'FINAL_DECISION',
+
+            /* 🔥 추가 (Bollinger) */
+            'BB_SIGNAL',
+            'BB_LIVE_COMMENTARY'
+
+          ])
+
+          if (!VIP_EVENTS.has(event.type)) {
+            return
+          }
+        }
+
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
         )
       }
 
       /* =========================
-       * 1️⃣ 연결 ACK
-       * ========================= */
+      * 1️⃣ 연결 ACK
+      * ========================= */
+
       controller.enqueue(
         encoder.encode(`: connected\n\n`)
       )
 
       /* =========================
-       * 2️⃣ SSE Hub 등록
-       * ========================= */
+      * 2️⃣ SSE Hub 등록
+      * ========================= */
+
       const cleanup = addSSEClient(controller, { scope })
 
       /* =========================
-       * 3️⃣ Heartbeat
-       * ========================= */
+      * 3️⃣ Heartbeat
+      * ========================= */
+
       const heartbeat = setInterval(() => {
         try {
           controller.enqueue(
@@ -76,10 +111,13 @@ export async function GET(req: NextRequest) {
       const symbol = 'BTCUSDT'
 
       /* =========================
-       * 4️⃣ VIP Risk Replay
-       * ========================= */
+      * 4️⃣ VIP Risk Replay
+      * ========================= */
+
       if (scope === 'VIP') {
+
         const lastRisk = getLastVipRisk()
+
         if (lastRisk) {
           setTimeout(() => {
             send({
@@ -91,12 +129,14 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 5️⃣ OI Replay
-       * ========================= */
+      * 5️⃣ OI Replay
+      * ========================= */
+
       const oi = getLastOI(symbol)
       const prevOi = getPrevOI(symbol)
 
       if (oi !== undefined) {
+
         const delta =
           typeof prevOi === 'number'
             ? oi - prevOi
@@ -122,9 +162,11 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 6️⃣ Volume Replay
-       * ========================= */
+      * 6️⃣ Volume Replay
+      * ========================= */
+
       const volume = getLastVolume(symbol)
+
       if (volume !== undefined) {
         setTimeout(() => {
           send({
@@ -137,9 +179,11 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 7️⃣ Funding Replay
-       * ========================= */
+      * 7️⃣ Funding Replay
+      * ========================= */
+
       const fundingRate = getLastFundingRate(symbol)
+
       if (fundingRate != null) {
         setTimeout(() => {
           send({
@@ -152,9 +196,11 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 8️⃣ ⭐ FINAL_DECISION Replay (🔥 핵심 수정)
-       * ========================= */
+      * 8️⃣ FINAL_DECISION Replay
+      * ========================= */
+
       if (scope === 'VIP') {
+
         const lastDecision = getLastFinalDecision(symbol)
 
         if (lastDecision) {
@@ -167,14 +213,16 @@ export async function GET(req: NextRequest) {
               confidence: lastDecision.confidence,
               ts: Date.now(),
             })
-          }, 200) // 🔥 subscribe 보장 지연
+          }, 200)
         }
       }
 
       /* =========================
-       * 9️⃣ Sentiment Replay
-       * ========================= */
+      * 9️⃣ Sentiment Replay
+      * ========================= */
+
       const lastSentiment = getLastSentiment()
+
       if (lastSentiment != null) {
         setTimeout(() => {
           send({
@@ -187,11 +235,15 @@ export async function GET(req: NextRequest) {
       }
 
       /* =========================
-       * 🔟 연결 종료 처리
-       * ========================= */
+      * 🔟 연결 종료 처리
+      * ========================= */
+
       const onAbort = () => {
+
         clearInterval(heartbeat)
+
         cleanup()
+
         try {
           controller.close()
         } catch {}

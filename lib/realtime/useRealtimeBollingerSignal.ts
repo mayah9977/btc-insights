@@ -39,7 +39,6 @@ export function useRealtimeBollingerSignal() {
  */
 export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
   if (!signal) return
-
   // 🔒 30m 확정 봉만 UI에 반영
   if (signal.timeframe !== '30m') return
   if (signal.confirmed !== true) return

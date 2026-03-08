@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { subscribeWhaleTradeFlow } from '@/lib/realtime/marketChannel'
 
 export type WhaleTradeFlowPoint = {
@@ -17,54 +17,78 @@ type Options = {
 }
 
 export function useWhaleTradeFlow(options: Options = {}) {
-  const { symbol = 'BTCUSDT', limit = 30 } = options
+
+  const { symbol = 'BTCUSDT', limit = 30 }
+    = options
+
   const upper = symbol.toUpperCase()
 
   const [history, setHistory] = useState<WhaleTradeFlowPoint[]>([])
 
+  /* ===============================
+     realtime throttling
+  =============================== */
+
+  const lastUpdateRef = useRef(0)
+
   useEffect(() => {
+
     const unsubscribe = subscribeWhaleTradeFlow(
       upper,
       (ratio, whaleVolume, totalVolume, ts) => {
-        const rawTs = ts ?? Date.now()
 
-        // 🔥 초 단위 정규화 (정렬 안정성)
-        const normalizedTs = Math.floor(rawTs / 1000) * 1000
+        const now = Date.now()
+
+        /* 🔥 200ms throttling */
+        if (now - lastUpdateRef.current < 200) return
+
+        lastUpdateRef.current = now
+
+        const rawTs = ts ?? now
+
+        /* 🔥 초 단위 정규화 */
+        const normalizedTs =
+          Math.floor(rawTs / 1000) * 1000
 
         setHistory(prev => {
-          const existingIndex = prev.findIndex(
-            p => p.ts === normalizedTs,
-          )
+
+          const existingIndex =
+            prev.findIndex(p => p.ts === normalizedTs)
 
           let next = [...prev]
 
           if (existingIndex >= 0) {
-            // 🔥 같은 초면 update (push 금지)
+
+            /* 같은 초 → update */
             next[existingIndex] = {
               ts: normalizedTs,
               ratio,
               whaleVolume,
               totalVolume,
             }
+
           } else {
+
+            /* 새 데이터 push */
             next.push({
               ts: normalizedTs,
               ratio,
               whaleVolume,
               totalVolume,
             })
+
           }
 
-          // 🔥 ts 기준 정렬 유지
-          next.sort((a, b) => a.ts - b.ts)
-
-          // 🔥 길이 제한
+          /* 🔥 sort 제거 (시간은 항상 증가) */
           return next.slice(-limit)
+
         })
+
       },
     )
 
     return () => unsubscribe()
+
   }, [upper, limit])
 
   /* =====================================================
@@ -72,17 +96,23 @@ export function useWhaleTradeFlow(options: Options = {}) {
   ===================================================== */
 
   const enhancedHistory = useMemo(() => {
-    if (history.length < 10) return history
+
+    if (history.length < 10)
+      return history
 
     const avg =
-      history.reduce((a, b) => a + b.ratio, 0) /
-      history.length
+      history.reduce((a, b) => a + b.ratio, 0)
+      / history.length
 
     return history.map(point => ({
       ...point,
       isSpike: point.ratio > avg * 1.8,
     }))
+
   }, [history])
 
-  return { history: enhancedHistory }
+  return {
+    history: enhancedHistory,
+  }
+
 }

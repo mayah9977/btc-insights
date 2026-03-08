@@ -1,9 +1,12 @@
 'use client'
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useMemo } from 'react'
+
 import { ActionGateStatus } from '@/components/system/ActionGateStatus'
 import { ActionGateRenderer } from '@/components/market/interpretation'
+
 import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
@@ -19,59 +22,67 @@ export const VIPActionGateContextBar: React.FC<
   VIPActionGateContextBarProps
 > = ({ symbol }) => {
 
-  // ✅ 0️⃣ Master Stream 구독 (SSE → Zustand)
+  /* =========================
+     Stream Subscribe
+  ========================= */
+
   useMasterMarketStream(symbol)
 
-  // ✅ Zustand store 구독 (Reactive)
-  const masterState = useMasterMarketStore((s) => s.state)
+  /* =========================
+     Zustand Selectors
+  ========================= */
 
-  const gate = masterState?.actionGate ?? 'OBSERVE'
+  const actionGate = useMasterMarketStore(
+    (s) => s.actionGate
+  )
 
-  // 🔥 MARKET_STATE 수신 확인 로그
-  useEffect(() => {
-    console.log('[VIP MARKET_STATE RECEIVED]', {
-      symbol,
-      gate,
-    })
-  }, [gate, symbol])
+  const vipGate = useVIPMarketStore(
+    (s) => s.actionGateState
+  )
 
-  // 2️⃣ Confirmed (30m close)
+  /* =========================
+     Bollinger Signals
+  ========================= */
+
   const confirmed = useRealtimeBollingerSignal()
-
-  // 3️⃣ Live (진행 중 30m)
   const live = useLiveBollingerCommentary()
 
-  // 4️⃣ UI 병합 로직
   const effectiveSignal = useMemo(() => {
+
     if (
       confirmed?.signalType ===
       BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
     ) {
       return confirmed
     }
+
     return confirmed ?? live
+
   }, [confirmed, live])
 
-  // 디버그 로그
-  useEffect(() => {
-    console.log(
-      '[DEBUG][VIPActionGate] CONFIRMED:',
-      confirmed?.signalType ?? null,
-      '| LIVE:',
-      live?.signalType ?? null,
-      '| EFFECTIVE:',
-      effectiveSignal?.signalType ?? null,
-    )
-  }, [confirmed, live, effectiveSignal])
+  /* =========================
+     Gate Resolve
+  ========================= */
+
+  const gate =
+    (vipGate ??
+      actionGate ??
+      'OBSERVE') as any
+
+  /* =========================
+     Render
+  ========================= */
 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-      <ActionGateStatus state={gate} symbol={symbol} />
+
+      <ActionGateStatus symbol={symbol} />
 
       <ActionGateRenderer
         gate={gate}
         signalType={effectiveSignal?.signalType}
       />
+
     </div>
   )
 }

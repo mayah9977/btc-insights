@@ -31,7 +31,7 @@ export type ConfirmedBBSignal = {
   type: 'BB_SIGNAL'
   symbol: string
   timeframe: '30m'
-  signalType: string
+  signalType: BollingerSignalType
   candle: Candle30m
   bands: {
     upperBand: number
@@ -45,7 +45,7 @@ export type LiveBollingerCommentary = {
   type: 'BB_LIVE_COMMENTARY'
   symbol: string
   timeframe: '30m'
-  signalType: string
+  signalType: BollingerSignalType
   candle: Candle30m
   bands: {
     upperBand: number
@@ -80,7 +80,9 @@ export class CandleAggregator30m {
   private async initialize() {
     try {
       const closes = await preload30mCloses(this.symbol, 50)
+
       this.closes = closes
+
       console.log('[BB_PRELOAD_DONE]', {
         symbol: this.symbol,
         loaded: closes.length,
@@ -100,6 +102,7 @@ export class CandleAggregator30m {
 
   private pushClose(close: number) {
     this.closes.push(close)
+
     if (this.closes.length > 300) {
       this.closes.shift()
     }
@@ -119,19 +122,14 @@ export class CandleAggregator30m {
   } {
     const openTime = this.getOpenTime(tick.ts)
 
-    /* =====================================================
-     * 1️⃣ 30분 봉 변경 감지 → 이전 봉 확정 처리
-     * ===================================================== */
-
     if (!this.current || this.current.openTime !== openTime) {
       const finished = this.current
+
       let confirmedSignal: ConfirmedBBSignal | undefined
 
       if (finished) {
-        /* 🔥 확정 종가 push */
         this.pushClose(finished.close)
 
-        /* 🔥 ① Bollinger 계산 */
         const bbConfirmed = calculateBollingerBands({
           closes: this.closes,
         })
@@ -166,7 +164,6 @@ export class CandleAggregator30m {
           }
         }
 
-        /* 🔥 ② MACD 계산 (확정봉 기준) */
         const macdResult = calculateMACD(this.closes)
 
         if (macdResult) {
@@ -174,7 +171,6 @@ export class CandleAggregator30m {
         }
       }
 
-      /* 🔁 새 봉 시작 */
       this.current = {
         openTime,
         closeTime: openTime + this.intervalMs,
@@ -188,23 +184,12 @@ export class CandleAggregator30m {
       return { finished, confirmedSignal }
     }
 
-    /* =====================================================
-     * 2️⃣ 형성 중 봉 업데이트
-     * ===================================================== */
-
     this.current.high = Math.max(this.current.high, tick.price)
     this.current.low = Math.min(this.current.low, tick.price)
     this.current.close = tick.price
     this.current.volume += volume
 
-    /* =====================================================
-     * 3️⃣ Realtime Bollinger
-     * ===================================================== */
-
-    const realtimeCloses = [
-      ...this.closes,
-      this.current.close,
-    ]
+    const realtimeCloses = [...this.closes, this.current.close]
 
     const bbRealtime = calculateBollingerBands({
       closes: realtimeCloses,

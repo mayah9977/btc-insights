@@ -2,6 +2,7 @@ import type { VIPLevel } from '@/lib/vip/vipTypes'
 import type { RiskLevel } from '@/lib/vip/riskTypes'
 
 export const SSE_EVENT = {
+
   // =========================
   // VIP
   // =========================
@@ -33,6 +34,11 @@ export const SSE_EVENT = {
   // 🆕🔥 기관 순매수 압력
   WHALE_NET_PRESSURE: 'WHALE_NET_PRESSURE',
 
+  // 🆕🔥 NEW ENGINE EVENTS
+  WHALE_ABSORPTION: 'WHALE_ABSORPTION',
+  MARKET_REGIME: 'MARKET_REGIME',
+  LIQUIDITY_SWEEP: 'LIQUIDITY_SWEEP',
+
   // =========================
   // ALERTS
   // =========================
@@ -42,19 +48,25 @@ export const SSE_EVENT = {
   // VIP3
   // =========================
   VIP3_EVENT: 'VIP3_EVENT',
+
 } as const
 
+
 /* =========================================================
- * 🔥 VIP + REALTIME SSE Event Union (최종 완성)
+ * 🔥 VIP + REALTIME SSE Event Union
  * ========================================================= */
+
 export type VipSSEEvent =
+
   /* =========================
    * VIP
    * ========================= */
+
   | {
       type: typeof SSE_EVENT.VIP_LEVEL
       vipLevel: VIPLevel
     }
+
   | {
       type: typeof SSE_EVENT.RISK_UPDATE
       riskLevel: RiskLevel
@@ -67,18 +79,22 @@ export type VipSSEEvent =
       preExtreme?: boolean
       whaleAccelerated?: boolean
     }
+
   | {
       type: typeof SSE_EVENT.VIP_KPI_UPDATE
       kpi: any
     }
+
   | {
       type: typeof SSE_EVENT.HEARTBEAT
       ts: number
     }
 
+
   /* =========================================================
    * 🐋 Whale Pressure Index
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.WHALE_INTENSITY
       symbol: string
@@ -88,6 +104,7 @@ export type VipSSEEvent =
       isSpike: boolean
       ts: number
     }
+
   | {
       type: typeof SSE_EVENT.WHALE_WARNING
       symbol: string
@@ -97,9 +114,11 @@ export type VipSSEEvent =
       ts: number
     }
 
+
   /* =========================================================
    * 🆕 Whale Trade Flow
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.WHALE_TRADE_FLOW
       symbol: string
@@ -109,9 +128,11 @@ export type VipSSEEvent =
       ts: number
     }
 
+
   /* =========================================================
-   * 🆕🔥 Whale Net Pressure (기관 순매수 압력)
+   * 🆕🔥 Whale Net Pressure
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.WHALE_NET_PRESSURE
       symbol: string
@@ -122,6 +143,49 @@ export type VipSSEEvent =
       totalVolume: number
       ts: number
     }
+
+
+  /* =========================================================
+   * 🆕🔥 Whale Absorption
+   * ========================================================= */
+
+  | {
+      type: typeof SSE_EVENT.WHALE_ABSORPTION
+      symbol: string
+      direction: 'LONG' | 'SHORT'
+      strength: number
+      confidence: number
+      ts: number
+    }
+
+
+  /* =========================================================
+   * 🆕🔥 Market Regime
+   * ========================================================= */
+
+  | {
+      type: typeof SSE_EVENT.MARKET_REGIME
+      symbol: string
+      regime: 'TREND' | 'RANGE' | 'VOLATILE'
+      strength: number
+      confidence: number
+      ts: number
+    }
+
+
+  /* =========================================================
+   * 🆕🔥 Liquidity Sweep
+   * ========================================================= */
+
+  | {
+      type: typeof SSE_EVENT.LIQUIDITY_SWEEP
+      symbol: string
+      direction: 'SWEEP_UP' | 'SWEEP_DOWN'
+      strength: number
+      confidence: number
+      ts: number
+    }
+
 
   /* =========================================================
    * MARKET
@@ -157,9 +221,11 @@ export type VipSSEEvent =
       ts: number
     }
 
+
   /* =========================================================
-   * 🔥 Bollinger (30m 구조 반영)
+   * 🔥 Bollinger (30m)
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.BB_SIGNAL
       symbol: string
@@ -188,9 +254,11 @@ export type VipSSEEvent =
       ts: number
     }
 
+
   /* =========================================================
    * 🔥 SENTIMENT
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.SENTIMENT_UPDATE
       symbol: string
@@ -198,9 +266,11 @@ export type VipSSEEvent =
       ts: number
     }
 
+
   /* =========================================================
    * ALERT
    * ========================================================= */
+
   | {
       type: typeof SSE_EVENT.ALERT_TRIGGERED
       id: string

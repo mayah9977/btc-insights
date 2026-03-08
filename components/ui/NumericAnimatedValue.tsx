@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useRef, useMemo, useState } from 'react'
 
 type GlowMode = 'none' | 'direction'
 type SizeMode = 'sm' | 'md' | 'lg'
@@ -14,12 +13,12 @@ interface NumericAnimatedValueProps {
   glowMode?: GlowMode
   size?: SizeMode
   flash?: boolean
+  flashOnChange?: boolean
+  disableAnimation?: boolean
   className?: string
 }
 
-/* =========================================================
-   🔥 BTC Insight Unified Numeric Engine (Final Stable)
-========================================================= */
+const FLASH_DURATION = 200
 
 export function NumericAnimatedValue({
   value,
@@ -29,62 +28,75 @@ export function NumericAnimatedValue({
   glowMode = 'direction',
   size = 'md',
   flash = true,
+  flashOnChange = true,
+  disableAnimation = false,
   className = '',
 }: NumericAnimatedValueProps) {
+
   const prevRef = useRef<number | null>(null)
-  const isFirstRender = useRef(true)
+  const [flashState, setFlashState] = useState<'UP' | 'DOWN' | null>(null)
 
   const prevValue = prevRef.current
 
-  const delta =
-    value != null && prevValue != null
-      ? value - prevValue
-      : 0
-
-  const absDelta = Math.abs(delta)
-
   /* =========================
-     1️⃣ 방향 계산
+     Flash Trigger
   ========================= */
 
-  const directionY =
-    prevValue == null
-      ? 0
-      : delta > 0
-      ? -8
-      : delta < 0
-      ? 8
-      : 0
+  useEffect(() => {
+
+    if (!flashOnChange) {
+      prevRef.current = value ?? null
+      return
+    }
+
+    if (value == null) return
+
+    if (prevValue != null && flash) {
+
+      const diff = value - prevValue
+
+      if (diff !== 0) {
+
+        setFlashState(diff > 0 ? 'UP' : 'DOWN')
+
+        const timer = setTimeout(() => {
+          setFlashState(null)
+        }, FLASH_DURATION)
+
+        return () => clearTimeout(timer)
+
+      }
+
+    }
+
+    prevRef.current = value
+
+  }, [value, flash, flashOnChange, prevValue])
 
   /* =========================
-     2️⃣ 강도 계산
-  ========================= */
-
-  const intensity = useMemo(() => {
-    if (prevValue == null) return 1
-    if (absDelta > 200000) return 1.28
-    if (absDelta > 100000) return 1.2
-    if (absDelta > 50000) return 1.14
-    if (absDelta > 10000) return 1.1
-    return 1.06
-  }, [absDelta, prevValue])
-
-  /* =========================
-     3️⃣ 글로우 컬러
+     Glow Color
   ========================= */
 
   const glowColor = useMemo(() => {
-    if (glowMode === 'none') return 'rgba(0,0,0,0)'
-    if (delta > 0) return 'rgba(250,204,21,0.95)'
-    if (delta < 0) return 'rgba(239,68,68,0.9)'
-    return 'rgba(16,185,129,0.7)'
-  }, [delta, glowMode])
+
+    if (glowMode === 'none') return 'transparent'
+
+    if (flashState === 'UP')
+      return 'rgba(34,197,94,0.9)'
+
+    if (flashState === 'DOWN')
+      return 'rgba(239,68,68,0.9)'
+
+    return 'transparent'
+
+  }, [flashState, glowMode])
 
   /* =========================
-     4️⃣ Size System
+     Size System
   ========================= */
 
   const sizeClass = useMemo(() => {
+
     switch (size) {
       case 'sm':
         return 'text-sm'
@@ -94,62 +106,33 @@ export function NumericAnimatedValue({
       default:
         return 'text-base md:text-lg'
     }
+
   }, [size])
 
   /* =========================
-     5️⃣ prev 업데이트
+     Flash Class
   ========================= */
 
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-    }
-
-    if (value != null) {
-      prevRef.current = value
-    }
-  }, [value])
-
-  const shouldAnimate =
-    prevValue != null && value != null && delta !== 0
+  const flashClass =
+    flashState === 'UP'
+      ? 'numeric-flash-up'
+      : flashState === 'DOWN'
+      ? 'numeric-flash-down'
+      : ''
 
   /* =========================
-     6️⃣ Render
+     Render
   ========================= */
 
   return (
-    <div className="relative inline-flex items-center">
+    <div className={`relative inline-flex items-center ${flashClass}`}>
 
-      {/* Radial Flash */}
-      {flash && shouldAnimate && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: [0, 0.35, 0], scale: [0.9, 1.2, 1] }}
-          transition={{ duration: 0.6 }}
-          className="absolute inset-0 pointer-events-none rounded-lg"
-          style={{
-            background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`,
-          }}
-        />
-      )}
-
-      {/* Main Number */}
-      <motion.span
-        animate={
-          shouldAnimate
-            ? { y: [directionY, 0], scale: [intensity, 1] }
-            : { y: 0, scale: 1 }
-        }
-        transition={{
-          type: 'spring',
-          stiffness: 260,
-          damping: 18,
-        }}
+      <span
         className={`font-semibold ${sizeClass} ${className}`}
         style={{
           textShadow:
-            glowMode !== 'none' && shouldAnimate
-              ? `0 0 24px ${glowColor}`
+            flashState && glowMode !== 'none'
+              ? `0 0 12px ${glowColor}`
               : 'none',
         }}
       >
@@ -160,7 +143,28 @@ export function NumericAnimatedValue({
             : value.toLocaleString()
           : '--'}
         {suffix}
-      </motion.span>
+      </span>
+
+      <style jsx>{`
+        .numeric-flash-up {
+          animation: flashUp ${FLASH_DURATION}ms ease-out;
+        }
+
+        .numeric-flash-down {
+          animation: flashDown ${FLASH_DURATION}ms ease-out;
+        }
+
+        @keyframes flashUp {
+          0% { background-color: rgba(34,197,94,0.25); }
+          100% { background-color: transparent; }
+        }
+
+        @keyframes flashDown {
+          0% { background-color: rgba(239,68,68,0.25); }
+          100% { background-color: transparent; }
+        }
+      `}</style>
+
     </div>
   )
 }

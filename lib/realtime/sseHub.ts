@@ -20,6 +20,7 @@ type Client = {
 /* =========================
  * Internal State
  * ========================= */
+
 const encoder = new TextEncoder()
 
 const clientsByScope: Record<SSEScope, Set<Client>> = {
@@ -28,9 +29,47 @@ const clientsByScope: Record<SSEScope, Set<Client>> = {
   VIP: new Set(),
 }
 
-/* =========================
- * 🔥 내부 브로드캐스트 유틸
- * ========================= */
+/* =========================================================
+ * 🔥 VIP가 PUBLIC에서 받을 타입만 허용
+ * ========================================================= */
+
+const VIP_PUBLIC_ALLOW = new Set([
+  'PRICE_TICK',
+  'OI_TICK',
+  'VOLUME_TICK',
+  'FUNDING_RATE_TICK',
+  'SENTIMENT_UPDATE',
+  'WHALE_TRADE_FLOW',
+  'WHALE_NET_PRESSURE',
+  'WHALE_INTENSITY',
+
+  /* 🔥 Bollinger 추가 */
+  'BB_SIGNAL',
+  'BB_LIVE_COMMENTARY',
+])
+
+/* =========================================================
+ * 🔥 안전한 브로드캐스트 유틸
+ * ========================================================= */
+
+function broadcastPayload(
+  scopes: SSEScope[],
+  payload: Uint8Array,
+) {
+  for (const scope of scopes) {
+    const clients = clientsByScope[scope]
+    if (!clients.size) continue
+
+    for (const client of clients) {
+      try {
+        client.controller.enqueue(payload)
+      } catch {
+        clients.delete(client)
+      }
+    }
+  }
+}
+
 function broadcastToScope(scope: SSEScope, event: any) {
   const clients = clientsByScope[scope]
   if (!clients.size) return
@@ -44,7 +83,6 @@ function broadcastToScope(scope: SSEScope, event: any) {
       client.controller.enqueue(payload)
     } catch {
       clients.delete(client)
-      console.warn(`[SSE][${scope}] drop closed client`)
     }
   }
 }
@@ -52,6 +90,7 @@ function broadcastToScope(scope: SSEScope, event: any) {
 /* =========================
  * SSE Client 등록
  * ========================= */
+
 export function addSSEClient(
   controller: ReadableStreamDefaultController<Uint8Array>,
   options?: { scope?: SSEScope },
@@ -59,11 +98,8 @@ export function addSSEClient(
   const scope: SSEScope = options?.scope ?? 'REALTIME'
 
   const client: Client = { controller, scope }
-  clientsByScope[scope].add(client)
 
-  console.log(
-    `[SSE][${scope}] client connected. total=${clientsByScope[scope].size}`,
-  )
+  clientsByScope[scope].add(client)
 
   controller.enqueue(
     encoder.encode(`event: connected\ndata: {}\n\n`),
@@ -71,9 +107,6 @@ export function addSSEClient(
 
   return () => {
     clientsByScope[scope].delete(client)
-    console.log(
-      `[SSE][${scope}] client disconnected. total=${clientsByScope[scope].size}`,
-    )
   }
 }
 
@@ -96,27 +129,24 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
   sub.subscribe(DERIVED_PUBLIC)
   sub.subscribe(DERIVED_VIP)
 
-  sub.on('subscribe', (channel: string, count: number) => {
-    console.log('[SSE] Redis subscribed:', channel, 'count=', count)
-  })
-
   sub.on('error', (err: Error) => {
     console.error('[SSE] Redis error', err)
   })
 
   sub.on('message', (channel: string, message: string) => {
+
     let event: any
 
     try {
       event = JSON.parse(message)
-    } catch (e) {
-      console.error('[SSE] JSON parse error', e)
+    } catch {
       return
     }
 
     /* =========================
-     * ✅ Market SSOT 저장 (Replay용)
+     * SSOT 저장
      * ========================= */
+
     if (event?.type === 'OI_TICK') {
       try {
         setLastOI(event.symbol, event.openInterest)
@@ -136,25 +166,38 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
     }
 
     /* =========================
-     * 🔥 Scope 분기
+     * 🔥 fanout 처리
      * ========================= */
 
-    // 1️⃣ VIP 전용 이벤트
+    const payload = encoder.encode(
+      `data: ${JSON.stringify(event)}\n\n`,
+    )
+
+    /* 1️⃣ VIP 채널 */
+
     if (channel === DERIVED_VIP) {
-      broadcastToScope('VIP', event)
+      broadcastPayload(['VIP'], payload)
       return
     }
 
-    // 2️⃣ PUBLIC 이벤트
+    /* 2️⃣ PUBLIC 채널 */
+
     if (channel === DERIVED_PUBLIC) {
+
       if (event?.type === 'ALERT_TRIGGERED') {
-        broadcastToScope('ALERTS', event)
+        broadcastPayload(['ALERTS'], payload)
         return
       }
 
-      broadcastToScope('REALTIME', event)
-      broadcastToScope('VIP', event)
-      return
+      /* REALTIME 항상 전달 */
+
+      broadcastPayload(['REALTIME'], payload)
+
+      /* VIP는 허용 타입만 */
+
+      if (VIP_PUBLIC_ALLOW.has(event?.type)) {
+        broadcastPayload(['VIP'], payload)
+      }
     }
   })
 }
@@ -162,26 +205,34 @@ if (!g.__SSE_REDIS_SUBSCRIBED__) {
 /* =========================
  * 💓 Heartbeat
  * ========================= */
+
 export function pushHeartbeat() {
+
   const ping = encoder.encode(`event: ping\ndata: {}\n\n`)
 
-  ;(Object.keys(clientsByScope) as SSEScope[]).forEach(
-    (scope) => {
-      for (const client of clientsByScope[scope]) {
-        try {
-          client.controller.enqueue(ping)
-        } catch {
-          clientsByScope[scope].delete(client)
-        }
+  for (const scope of Object.keys(clientsByScope) as SSEScope[]) {
+
+    const clients = clientsByScope[scope]
+
+    for (const client of clients) {
+      try {
+        client.controller.enqueue(ping)
+      } catch {
+        clients.delete(client)
       }
-    },
-  )
+    }
+  }
 }
 
 /* =========================
  * 🔥 Market Signal Broadcaster
  * ========================= */
+
 export function broadcastMarketSignal(event: any) {
-  broadcastToScope('REALTIME', event)
-  broadcastToScope('VIP', event)
+
+  const payload = encoder.encode(
+    `data: ${JSON.stringify(event)}\n\n`,
+  )
+
+  broadcastPayload(['REALTIME', 'VIP'], payload)
 }

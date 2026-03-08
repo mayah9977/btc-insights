@@ -27,7 +27,8 @@ if (!g.__BINANCE_STREAM_STARTED__) {
   const PRICE_KEY = `market:last:price:${SYMBOL}`
   const FUNDING_KEY = `market:last:funding:${SYMBOL}`
 
-  const WHALE_THRESHOLD_USD = 200_000
+  // 🔥 현실적인 고래 기준 (기존 200k → 80k)
+  const WHALE_THRESHOLD_USD = 80_000
 
   const combinedWs = new WebSocket(
     `wss://fstream.binance.com/stream?streams=${SYMBOL.toLowerCase()}@aggTrade/${SYMBOL.toLowerCase()}@markPrice@1s`,

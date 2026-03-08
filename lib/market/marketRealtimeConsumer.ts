@@ -17,28 +17,39 @@ import {
 } from '@/lib/market/marketLastStateStore'
 
 import { calculateMACD } from '@/lib/market/macd'
-
 import { pushRollingValue } from '@/lib/market/statsRolling'
 import { CandleAggregator30m } from '@/lib/market/candleAggregator30m'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
-
 import { buildRiskInputFromRealtime } from '@/lib/market/buildRiskInputFromRealtime'
 import { getActionGateState } from '@/lib/market/action/getActionGateState'
+
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 
 import { calculateInstitutionalProbability } from '@/lib/market/institutionalProbability'
 import { evaluateDecisionEngine } from '@/lib/market/actionGate/decisionEngine'
-import { setLastDecision } from '@/lib/market/store/decisionStateStore'
 
+import { setLastDecision } from '@/lib/market/store/decisionStateStore'
 import { calculateFMAI } from '@/lib/market/momentum/futuresMomentumAlignment'
 import { setLastFMAI } from '@/lib/market/store/fmaiStateStore'
 
-/* ========================= */
+import { detectInstitutionalAccumulation } from '@/lib/market/detector/institutionalAccumulationDetector'
+import { setInstitutionalState } from '@/lib/market/store/institutionalStateStore'
+import { detectWhaleAbsorption } from '@/lib/market/detector/whaleAbsorptionDetector'
+import { detectMarketRegime } from '@/lib/market/regime/marketRegimeDetector'
+import { detectLiquiditySweep } from '@/lib/market/liquidity/liquiditySweepDetector'
+
 const RAW_CHANNEL = 'realtime:raw'
 const DERIVED_PUBLIC = 'realtime:derived:public'
 const DERIVED_VIP = 'realtime:derived:vip'
 
 const DEFAULT_SYMBOLS = ['BTCUSDT']
+
+/**
+ * ✅ PRICE_TICK 다운샘플 (100ms 권장)
+ * - 100ms: 차트/UI 부드럽고 이벤트 폭주 크게 감소
+ * - 더 줄이고 싶으면 250ms / 1000ms로 변경
+ */
+const PRICE_PUBLISH_INTERVAL_MS = 100
 
 const g = globalThis as any
 
@@ -46,28 +57,33 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
   g.__MARKET_CONSUMER_STARTED__ = true
 
   const candle30mMap: Record<string, CandleAggregator30m> = {}
+
   const sub = createRedisSubscriber()
   sub.subscribe(RAW_CHANNEL)
 
   const activeSymbols = new Set<string>(DEFAULT_SYMBOLS)
+
   const lastPriceMap = new Map<string, number>()
 
-  /* 🔥 Rate Limit Maps */
   const lastBBPublish = new Map<string, number>()
   const lastWhalePublish = new Map<string, number>()
 
-  /* ================= RAW → PUBLIC ================= */
+  /* ✅ PRICE_TICK publish 다운샘플 상태 */
+  const lastPricePublishAt = new Map<string, number>()
+  const pendingPriceEvent = new Map<string, any>()
+
   sub.on('message', async (_channel, raw) => {
     try {
       const event = JSON.parse(raw)
-      if (!event?.symbol) return
 
+      if (!event?.symbol) return
       const symbol = event.symbol.toUpperCase()
+
       activeSymbols.add(symbol)
 
-      /* OI */
       if (event.type === 'OI_TICK') {
         setLastOI(symbol, event.openInterest)
+
         pushRollingValue(`OI_${symbol}`, event.openInterest, 50)
 
         const derived = deriveOpenInterest(symbol, event.openInterest)
@@ -83,32 +99,45 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         )
       }
 
-      /* Volume */
       if (event.type === 'VOLUME_TICK') {
         setLastVolume(symbol, event.volume)
         redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
-      /* Funding */
       if (event.type === 'FUNDING_RATE_TICK') {
         setLastFundingRate(symbol, event.fundingRate)
         redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
 
-      /* Price */
       if (event.type === 'PRICE_TICK') {
         const price = event.price
         const ts = event.ts
+
         if (!Number.isFinite(ts)) return
 
+        // ✅ SSOT/파생 계산은 원본 그대로 유지 (정확도 유지)
         pushRecentPrice(symbol, price)
-        redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
 
         candle30mMap[symbol] ??= new CandleAggregator30m(symbol)
         const aggregator = candle30mMap[symbol]
         const result = aggregator.update({ price, ts }, 0)
 
-        /* Confirmed */
+        // ✅ PRICE_TICK publish는 다운샘플 (UI/차트 부하 감소)
+        pendingPriceEvent.set(symbol, event)
+
+        const now = Date.now()
+        const last = lastPricePublishAt.get(symbol) ?? 0
+
+        if (now - last >= PRICE_PUBLISH_INTERVAL_MS) {
+          lastPricePublishAt.set(symbol, now)
+
+          const latest = pendingPriceEvent.get(symbol) ?? event
+          pendingPriceEvent.delete(symbol)
+
+          redis.publish(DERIVED_PUBLIC, JSON.stringify(latest))
+        }
+
+        // ✅ Bollinger publish는 기존 로직 유지
         if (result.confirmedSignal) {
           setLastBollingerSignal(symbol, {
             enabled: true,
@@ -120,20 +149,15 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             confirmed: true,
             at: result.confirmedSignal.at,
           })
-
-          redis.publish(
-            DERIVED_PUBLIC,
-            JSON.stringify(result.confirmedSignal),
-          )
+          redis.publish(DERIVED_PUBLIC, JSON.stringify(result.confirmedSignal))
         }
 
-        /* 🔥 Realtime Bollinger (800ms rate limit) */
         if (result.liveCommentary) {
-          const now = Date.now()
-          const last = lastBBPublish.get(symbol) ?? 0
+          const now2 = Date.now()
+          const last2 = lastBBPublish.get(symbol) ?? 0
 
-          if (now - last > 800) {
-            lastBBPublish.set(symbol, now)
+          if (now2 - last2 > 800) {
+            lastBBPublish.set(symbol, now2)
 
             setLastBollingerSignal(symbol, {
               enabled: true,
@@ -145,11 +169,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               confirmed: false,
               at: result.liveCommentary.at,
             })
-
-            redis.publish(
-              DERIVED_PUBLIC,
-              JSON.stringify(result.liveCommentary),
-            )
+            redis.publish(DERIVED_PUBLIC, JSON.stringify(result.liveCommentary))
           }
         }
       }
@@ -161,32 +181,45 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
       if (event.type === 'WHALE_NET_PRESSURE') {
         redis.publish(DERIVED_PUBLIC, JSON.stringify(event))
       }
-
-    } catch (e) {
-      console.error('[MARKET CONSUMER] parse error', e)
-    }
+    } catch (e) {}
   })
 
-  /* ================= CORE LOOP ================= */
+  /**
+   * ✅ 다운샘플 interval 내에 publish가 한 번도 안 일어난 경우
+   * 마지막 이벤트를 '플러시'해서 UI가 굶지 않게 함
+   */
+  setInterval(() => {
+    const now = Date.now()
+
+    for (const [symbol, latest] of pendingPriceEvent) {
+      const last = lastPricePublishAt.get(symbol) ?? 0
+      if (now - last >= PRICE_PUBLISH_INTERVAL_MS) {
+        lastPricePublishAt.set(symbol, now)
+        pendingPriceEvent.delete(symbol)
+        try {
+          redis.publish(DERIVED_PUBLIC, JSON.stringify(latest))
+        } catch {}
+      }
+    }
+  }, PRICE_PUBLISH_INTERVAL_MS)
+
   setInterval(async () => {
     for (const symbol of activeSymbols) {
       try {
         const snapshot = await buildRiskInputFromRealtime(symbol)
         if (!snapshot) continue
 
-        /* MACD */
         const recentCloses = getRecentPrices(symbol, 100)
+
         if (recentCloses.length >= 35) {
           const macdResult = calculateMACD(recentCloses)
           if (macdResult) setLastMACD(symbol, macdResult)
         }
 
-        /* FMAI */
         const prevPrice = lastPriceMap.get(symbol) ?? snapshot.price
+
         const priceChange =
-          prevPrice !== 0
-            ? (snapshot.price - prevPrice) / prevPrice
-            : 0
+          prevPrice !== 0 ? (snapshot.price - prevPrice) / prevPrice : 0
 
         lastPriceMap.set(symbol, snapshot.price)
 
@@ -210,10 +243,114 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               direction: fmai.direction,
               ts: snapshot.ts,
             }),
-          )
+          ),
         )
 
-        /* 🔥 Whale Intensity (1초 rate limit) */
+        const absorption = detectWhaleAbsorption({
+          priceChange,
+          whaleBuyVolume: snapshot.whaleBuyVolume ?? 0,
+          whaleSellVolume: snapshot.whaleSellVolume ?? 0,
+          whaleRatio: snapshot.whaleRatio ?? 0,
+          volumeRatio: snapshot.volumeRatio ?? 1,
+        })
+
+        if (absorption.detected) {
+          publishTasks.push(
+            redis.publish(
+              DERIVED_VIP,
+              JSON.stringify({
+                type: 'WHALE_ABSORPTION',
+                symbol,
+                direction: absorption.direction,
+                strength: absorption.strength,
+                confidence: absorption.confidence,
+                ts: snapshot.ts,
+              }),
+            ),
+          )
+        }
+
+        const regime = detectMarketRegime({
+          volatility: snapshot.volatility ?? 0,
+          oiDeltaRatio: snapshot.oiDeltaRatio ?? 0,
+          volumeRatio: snapshot.volumeRatio ?? 1,
+        })
+
+        publishTasks.push(
+          redis.publish(
+            DERIVED_VIP,
+            JSON.stringify({
+              type: 'MARKET_REGIME',
+              symbol,
+              regime: regime.regime,
+              strength: regime.strength,
+              confidence: regime.confidence,
+              ts: snapshot.ts,
+            }),
+          ),
+        )
+
+        const recentPrices = getRecentPrices(symbol, 20)
+
+        const sweep = detectLiquiditySweep({
+          recentPrices,
+          volumeRatio: snapshot.volumeRatio ?? 1,
+          volatility: snapshot.volatility ?? 0,
+        })
+
+        if (sweep.detected) {
+          publishTasks.push(
+            redis.publish(
+              DERIVED_VIP,
+              JSON.stringify({
+                type: 'LIQUIDITY_SWEEP',
+                symbol,
+                direction: sweep.direction,
+                strength: sweep.strength,
+                confidence: sweep.confidence,
+                ts: snapshot.ts,
+              }),
+            ),
+          )
+        }
+
+        const fundingBiasValue =
+          snapshot.fundingBias === 'LONG_HEAVY'
+            ? 1
+            : snapshot.fundingBias === 'SHORT_HEAVY'
+            ? -1
+            : 0
+
+        const institutional = detectInstitutionalAccumulation({
+          whaleRatio: snapshot.whaleRatio ?? 0,
+          whaleNetRatio: snapshot.whaleNetRatio ?? 0,
+          oiDelta: snapshot.oiDelta ?? 0,
+          fmaiScore: fmai.score,
+          fundingBias: fundingBiasValue,
+        })
+
+        setInstitutionalState(symbol, {
+          detected: institutional.detected,
+          direction: institutional.direction,
+          confidence: institutional.confidence,
+          ts: snapshot.ts,
+        })
+
+        if (institutional.detected) {
+          publishTasks.push(
+            redis.publish(
+              DERIVED_VIP,
+              JSON.stringify({
+                type: 'INSTITUTIONAL_ACCUMULATION',
+                symbol,
+                direction: institutional.direction,
+                confidence: institutional.confidence,
+                ts: snapshot.ts,
+              }),
+            ),
+          )
+        }
+
         const now = Date.now()
         const lastWhale = lastWhalePublish.get(symbol) ?? 0
 
@@ -237,11 +374,10 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
                 isSpike: snapshot.extremeSignal,
                 ts: snapshot.ts,
               }),
-            )
+            ),
           )
         }
 
-        /* Action Gate */
         const nextActionGateInput: ActionGateInput = {
           bollingerSignal: snapshot.bollingerSignal,
           oiDelta: snapshot.oiDelta,
@@ -257,15 +393,13 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
         setActionGateState(symbol, actionGateState)
         setLastActionGateInput(symbol, nextActionGateInput)
 
-        /* Decision */
-        const probability =
-          calculateInstitutionalProbability({
-            whaleRatio: snapshot.whaleRatio ?? 0,
-            netRatio: snapshot.whaleNetRatio ?? 0,
-            oiDelta: snapshot.oiDelta ?? 0,
-            isSpike: snapshot.extremeSignal ?? false,
-            fundingBias: snapshot.fundingBias,
-          })
+        const probability = calculateInstitutionalProbability({
+          whaleRatio: snapshot.whaleRatio ?? 0,
+          netRatio: snapshot.whaleNetRatio ?? 0,
+          oiDelta: snapshot.oiDelta ?? 0,
+          isSpike: snapshot.extremeSignal ?? false,
+          fundingBias: snapshot.fundingBias,
+        })
 
         const decision = evaluateDecisionEngine({
           symbol,
@@ -299,7 +433,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               confidence: probability.confidence,
               ts: snapshot.ts,
             }),
-          )
+          ),
         )
 
         publishTasks.push(
@@ -312,15 +446,11 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               macd: nextActionGateInput.macd,
               ts: snapshot.ts,
             }),
-          )
+          ),
         )
 
-        /* 🔥 병렬 publish */
         await Promise.all(publishTasks)
-
-      } catch (err) {
-        console.error('[CORE ENGINE ERROR]', err)
-      }
+      } catch {}
     }
   }, 1000)
 }

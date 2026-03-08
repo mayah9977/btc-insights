@@ -12,7 +12,7 @@ import type { FMAIResult } from '@/lib/market/momentum/futuresMomentumAlignment'
 import { evaluatePriorityDecisionTree } from './priorityDecisionTree'
 
 /* =========================================================
-   12 Enum 정의 (SSOT)
+   🧠 Final Decision ENUM (SSOT)
 ========================================================= */
 
 export type FinalDecision =
@@ -30,28 +30,35 @@ export type FinalDecision =
   | 'BLOCKED_BY_GATE'
 
 /* =========================================================
-   🎯 Public Decision Engine
-   - Wrapper Only
+   🎯 Decision Engine (Public API)
 ========================================================= */
 
-export function evaluateDecisionEngine({
-  symbol, // 🔥 추가
-  actionGateState,
-  bollingerSignal,
-  macd,
-  probability,
-  fmai,
-}: {
-  symbol: string                    // 🔥 추가
+export interface DecisionEngineInput {
+  symbol: string
   actionGateState: ActionGateState
   bollingerSignal: BollingerSignalType | null
   macd: MACDResult | null
   probability: DirectionalProbabilityResult
   fmai: FMAIResult | null
-}): FinalDecision {
+}
+
+/* ========================================================= */
+
+export function evaluateDecisionEngine(
+  input: DecisionEngineInput
+): FinalDecision {
+
+  const {
+    symbol,
+    actionGateState,
+    bollingerSignal,
+    macd,
+    probability,
+    fmai,
+  } = input
 
   return evaluatePriorityDecisionTree({
-    symbol,                         // 🔥 전달
+    symbol,
     actionGateState,
     bollingerSignal,
     macd,

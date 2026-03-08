@@ -1,10 +1,5 @@
 /* =========================================================
-   🧠 Priority Decision Tree (Re-Designed)
-   - 1️⃣ Bollinger → 항상 1순위 방향 축
-   - 2️⃣ MACD → 진입 확정
-   - 3️⃣ FMAI → 가속도/강한 정렬 감지
-   - 4️⃣ Institutional Probability → 독립 진입 + Boost
-   - 5️⃣ ActionGate → 약화 전용 (차단 제거)
+   🧠 Adaptive Weight Decision Engine (Final)
 ========================================================= */
 
 import type { ActionGateState } from '@/components/system/ActionGateStatus'
@@ -13,19 +8,24 @@ import type { MACDResult } from '@/lib/market/macd'
 import type { DirectionalProbabilityResult } from '@/lib/market/institutionalProbability'
 import type { FinalDecision } from './decisionEngine'
 import type { FMAIResult } from '@/lib/market/momentum/futuresMomentumAlignment'
-
-/* 🔥 FMAI Store 추가 */
 import { getLastFMAI } from '@/lib/market/store/fmaiStateStore'
+
+import type { AbsorptionDirection } from '@/lib/market/detector/whaleAbsorptionDetector'
+import type { MarketRegime } from '@/lib/market/regime/marketRegimeDetector'
 
 /* ========================================================= */
 
 interface PriorityDecisionInput {
-  symbol: string                    // 🔥 추가
+  symbol: string
   actionGateState: ActionGateState
   bollingerSignal: BollingerSignalType | null
   macd: MACDResult | null
   probability: DirectionalProbabilityResult
   fmai: FMAIResult | null
+
+  /* 🔥 NEW */
+  absorption?: AbsorptionDirection
+  regime?: MarketRegime
 }
 
 /* ========================================================= */
@@ -37,139 +37,207 @@ export function evaluatePriorityDecisionTree({
   macd,
   probability,
   fmai,
+  absorption,
+  regime,
 }: PriorityDecisionInput): FinalDecision {
 
-  /* 🔥 Store에서 FMAI 읽기 (fallback) */
-  const storedFMAI = getLastFMAI(symbol)
-  const effectiveFMAI = fmai ?? storedFMAI
-
   /* =========================================================
-     1️⃣ Bollinger → 방향 기본 축 (항상 반영)
+     FMAI stale protection
   ========================================================= */
 
-  const isLowerReversal =
+  const storedFMAI = getLastFMAI(symbol)
+
+  const effectiveFMAI =
+    fmai ??
+    (storedFMAI && Date.now() - (storedFMAI as any).ts < 60000
+      ? storedFMAI
+      : null)
+
+  /* =========================================================
+     1️⃣ Bollinger Direction
+  ========================================================= */
+
+  let bollingerLong = false
+  let bollingerShort = false
+
+  if (
     bollingerSignal ===
       BollingerSignalType.OUTSIDE_LOWER_CROSS_UP_OVER_LOWER ||
     bollingerSignal ===
       BollingerSignalType.OUTSIDE_LOWER_RETURN_INSIDE
+  ) {
+    bollingerLong = true
+  }
 
-  const isUpperReversal =
+  if (
     bollingerSignal ===
       BollingerSignalType.OUTSIDE_UPPER_RETRACE_OVER_UPPER ||
     bollingerSignal ===
       BollingerSignalType.OUTSIDE_UPPER_RETURN_INSIDE
+  ) {
+    bollingerShort = true
+  }
 
-  const isTakeProfitLong =
-    bollingerSignal ===
-      BollingerSignalType.INSIDE_UPPER_CLOSE_ABOVE
+  /* =========================================================
+     TAKE PROFIT
+  ========================================================= */
 
-  const isTakeProfitShort =
+  if (
     bollingerSignal ===
-      BollingerSignalType.INSIDE_LOWER_CLOSE_BELOW
+    BollingerSignalType.INSIDE_UPPER_CLOSE_ABOVE
+  ) {
+    return 'TAKE_PROFIT_LONG'
+  }
+
+  if (
+    bollingerSignal ===
+    BollingerSignalType.INSIDE_LOWER_CLOSE_BELOW
+  ) {
+    return 'TAKE_PROFIT_SHORT'
+  }
 
   /* =========================================================
      2️⃣ MACD
   ========================================================= */
 
-  const macdGolden = macd?.cross === 'GOLDEN'
-  const macdDead = macd?.cross === 'DEAD'
+  const macdLong = macd?.cross === 'GOLDEN'
+  const macdShort = macd?.cross === 'DEAD'
 
   /* =========================================================
-     3️⃣ Institutional Probability
+     3️⃣ FMAI
   ========================================================= */
 
-  const { confidence, dominant } = probability
-  const strongConfidence = confidence >= 55
-  const extremeBoost = confidence >= 45
-
-  /* =========================================================
-     4️⃣ FMAI (Store 기반 통합)
-  ========================================================= */
-
-  const fmaiStrongLong =
+  const fmaiLong =
     effectiveFMAI?.direction === 'STRONG_LONG'
 
-  const fmaiStrongShort =
+  const fmaiShort =
     effectiveFMAI?.direction === 'STRONG_SHORT'
 
   /* =========================================================
-     🔥 Long 트리
+     4️⃣ Institutional Probability
   ========================================================= */
 
-  if (isLowerReversal) {
+  const probLong =
+    probability.dominant === 'LONG' &&
+    probability.confidence >= 65
 
-    if (fmaiStrongLong && extremeBoost) {
-      return 'EXTREME_LONG'
-    }
+  const probShort =
+    probability.dominant === 'SHORT' &&
+    probability.confidence >= 65
 
-    if (macdGolden) {
-      return 'LONG_ENTRY'
-    }
+  /* =========================================================
+     5️⃣ Absorption
+  ========================================================= */
 
-    if (!macdGolden && strongConfidence && dominant === 'LONG') {
-      return 'LONG_ENTRY'
-    }
+  const absorptionLong = absorption === 'LONG'
+  const absorptionShort = absorption === 'SHORT'
 
-    return 'HOLD_LONG'
+  /* =========================================================
+     6️⃣ Regime Weight Modifier
+  ========================================================= */
+
+  const regimeTrend = regime === 'TREND'
+  const regimeRange = regime === 'RANGE'
+
+  /* =========================================================
+     7️⃣ Active Indicator Detection
+  ========================================================= */
+
+  const activeIndicators = []
+
+  if (bollingerLong || bollingerShort) activeIndicators.push('bollinger')
+  if (macdLong || macdShort) activeIndicators.push('macd')
+  if (fmaiLong || fmaiShort) activeIndicators.push('fmai')
+  if (probLong || probShort) activeIndicators.push('prob')
+  if (absorptionLong || absorptionShort) activeIndicators.push('absorption')
+
+  const indicatorCount = activeIndicators.length
+
+  if (indicatorCount === 0) {
+    return 'WAIT'
+  }
+
+  const weight = 1 / indicatorCount
+
+  /* =========================================================
+     8️⃣ Weighted Score Calculation
+  ========================================================= */
+
+  let longScore = 0
+  let shortScore = 0
+
+  if (bollingerLong) longScore += weight
+  if (bollingerShort) shortScore += weight
+
+  if (macdLong) longScore += weight
+  if (macdShort) shortScore += weight
+
+  if (fmaiLong) longScore += weight
+  if (fmaiShort) shortScore += weight
+
+  if (probLong) longScore += weight
+  if (probShort) shortScore += weight
+
+  if (absorptionLong) longScore += weight
+  if (absorptionShort) shortScore += weight
+
+  /* =========================================================
+     9️⃣ Regime Adjustment
+  ========================================================= */
+
+  if (regimeTrend) {
+    longScore *= 1.15
+    shortScore *= 1.15
+  }
+
+  if (regimeRange) {
+    longScore *= 0.9
+    shortScore *= 0.9
   }
 
   /* =========================================================
-     🔥 Short 트리
+     🔟 Action Gate Risk Filter
   ========================================================= */
 
-  if (isUpperReversal) {
-
-    if (fmaiStrongShort && extremeBoost) {
-      return 'EXTREME_SHORT'
-    }
-
-    if (macdDead) {
-      return 'SHORT_ENTRY'
-    }
-
-    if (!macdDead && strongConfidence && dominant === 'SHORT') {
-      return 'SHORT_ENTRY'
-    }
-
-    return 'HOLD_SHORT'
+  if (actionGateState === 'IGNORE') {
+    return 'BLOCKED_BY_GATE'
   }
-
-  /* =========================================================
-     5️⃣ 이익 실현
-  ========================================================= */
-
-  if (isTakeProfitLong) {
-    return 'TAKE_PROFIT_LONG'
-  }
-
-  if (isTakeProfitShort) {
-    return 'TAKE_PROFIT_SHORT'
-  }
-
-  /* =========================================================
-     6️⃣ Bollinger 없을 때 Probability 독립 판단 허용
-  ========================================================= */
-
-  if (!bollingerSignal && strongConfidence) {
-    if (dominant === 'LONG') return 'LONG_ENTRY'
-    if (dominant === 'SHORT') return 'SHORT_ENTRY'
-  }
-
-  /* =========================================================
-     7️⃣ Gate는 약화 전용 (차단 제거)
-  ========================================================= */
 
   if (actionGateState === 'CAUTION') {
-    if (dominant === 'LONG') return 'REDUCE_LONG'
-    if (dominant === 'SHORT') return 'REDUCE_SHORT'
+    if (longScore > shortScore) return 'REDUCE_LONG'
+    if (shortScore > longScore) return 'REDUCE_SHORT'
   }
 
   /* =========================================================
-     8️⃣ 기본 유지
+     11️⃣ Indicator 충돌 처리
   ========================================================= */
 
-  if (dominant === 'LONG') return 'HOLD_LONG'
-  if (dominant === 'SHORT') return 'HOLD_SHORT'
+  if (longScore === shortScore) {
+
+    if (longScore > 0) return 'HOLD_LONG'
+    if (shortScore > 0) return 'HOLD_SHORT'
+
+    return 'WAIT'
+  }
+
+  const dominantLong = longScore > shortScore
+  const score = dominantLong ? longScore : shortScore
+
+  /* =========================================================
+     12️⃣ Final Decision Mapping
+  ========================================================= */
+
+  if (score >= 0.80) {
+    return dominantLong ? 'EXTREME_LONG' : 'EXTREME_SHORT'
+  }
+
+  if (score >= 0.60) {
+    return dominantLong ? 'LONG_ENTRY' : 'SHORT_ENTRY'
+  }
+
+  if (score >= 0.30) {
+    return dominantLong ? 'HOLD_LONG' : 'HOLD_SHORT'
+  }
 
   return 'WAIT'
 }

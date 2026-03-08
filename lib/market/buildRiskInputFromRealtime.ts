@@ -22,11 +22,15 @@ import {
 } from '@/lib/market/statsRolling'
 
 import { calculateVolatilityFromCandles } from '@/lib/market/calcRealtimeVolatility'
+
 import type { ActionGateInput } from '@/lib/market/actionGate/actionGateInput'
 import type { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
+/* 🔥 WhaleIntensity v2 import */
+import { calculateWhaleIntensityV2 } from '@/lib/market/whaleIntensityV2'
+
 /* ======================================================= */
-/* 🔥 OI Snapshot Map (즉시 반응 구조 핵심) */
+/* 🔥 OI Snapshot Map */
 /* ======================================================= */
 
 const lastSnapshotOIMap = new Map<string, number>()
@@ -87,7 +91,7 @@ export async function buildRiskInputFromRealtime(
       ? volatilityRaw
       : 0
 
-  /* ================= OI (🔥 즉시 반응 구조) ================= */
+  /* ================= OI ================= */
 
   const openInterest = getLastOI(symbol) ?? 0
 
@@ -101,7 +105,6 @@ export async function buildRiskInputFromRealtime(
       ? oiDelta / prevSnapshotOI
       : 0
 
-  // 🔥 스냅샷 업데이트
   lastSnapshotOIMap.set(symbol, openInterest)
 
   /* ================= Volume ================= */
@@ -121,35 +124,32 @@ export async function buildRiskInputFromRealtime(
       ? lastVolume / safePrevVolume
       : 1
 
-  /* ================= Whale Intensity ================= */
-
-  const oiEnergy = Math.min(1, Math.abs(oiDeltaRatio) * 15)
-  const volumeEnergy = Math.min(1, Math.log(volumeRatio + 1) * 1.4)
-  const volatilityEnergy = Math.min(1, volatility * 1.2)
+  /* =======================================================
+     🔥 Drift 계산 (WhaleIntensity v2 입력값)
+  ======================================================= */
 
   const rollingMean = getRollingMean(`OI_${symbol}`)
   const rollingStd = getRollingStd(`OI_${symbol}`)
 
-  let driftEnergy = 0
+  let drift = 0
 
   if (rollingMean && rollingStd && rollingStd > 0) {
-    const drift =
+    drift =
       Math.abs(openInterest - rollingMean) /
       (rollingStd + 1e-6)
-
-    driftEnergy = Math.min(1, drift * 0.6)
   }
 
-  const whaleIntensity = Math.max(
-    0,
-    Math.min(
-      1,
-      0.35 * oiEnergy +
-      0.30 * volumeEnergy +
-      0.20 * volatilityEnergy +
-      0.15 * driftEnergy
-    ),
-  )
+  /* =======================================================
+     🔥 WhaleIntensity v2 계산
+  ======================================================= */
+
+  const { intensity: whaleIntensity } =
+    calculateWhaleIntensityV2({
+      oiDeltaRatio,
+      volumeRatio,
+      volatility,
+      drift,
+    })
 
   /* ================= Trade Flow ================= */
 
@@ -186,13 +186,15 @@ export async function buildRiskInputFromRealtime(
   if (fundingRate > 0.0015) fundingBias = 'LONG_HEAVY'
   else if (fundingRate < -0.0015) fundingBias = 'SHORT_HEAVY'
 
-  /* ================= Risk Flags ================= */
+  /* =======================================================
+     🔥 Spike 기준
+  ======================================================= */
 
   const extremeSignal =
-    whaleRatio > 0.6 && whaleIntensity > 0.8
+    whaleRatio > 0.45 && whaleIntensity > 65
 
   const preExtreme =
-    whaleRatio > 0.4
+    whaleRatio > 0.30
 
   const marketPulse =
     preExtreme ? 'ACCELERATING' : 'STABLE'
@@ -207,9 +209,9 @@ export async function buildRiskInputFromRealtime(
       : null
 
   const whalePressure: ActionGateInput['whalePressure'] =
-    whaleIntensity > 0.82
+    whaleIntensity > 85
       ? 'EXTREME'
-      : whaleIntensity > 0.60
+      : whaleIntensity > 60
         ? 'ELEVATED'
         : 'NORMAL'
 
@@ -242,8 +244,9 @@ export async function buildRiskInputFromRealtime(
 
     whaleAvg: 0,
     whaleTrend:
-      whaleNetRatio > 0 ? 'UP' :
-      whaleNetRatio < 0 ? 'DOWN' : 'FLAT',
+      whaleNetRatio > 0 ? 'UP'
+      : whaleNetRatio < 0 ? 'DOWN'
+      : 'FLAT',
 
     whaleVolume: whaleTradeUSD,
     totalVolume: totalTradeUSD,

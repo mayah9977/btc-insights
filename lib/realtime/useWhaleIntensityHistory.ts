@@ -24,7 +24,13 @@ type Options = {
   limit?: number
 }
 
+/* 🔧 clamp util (0~100) */
+function clamp(v: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, v))
+}
+
 export function useWhaleIntensityHistory(options: Options = {}) {
+
   const { symbol = 'BTCUSDT', limit = 30 } = options
   const upperSymbol = symbol.toUpperCase()
 
@@ -35,33 +41,42 @@ export function useWhaleIntensityHistory(options: Options = {}) {
   const trendRef = useRef<'UP' | 'DOWN' | 'FLAT'>('FLAT')
   const spikeRef = useRef(false)
 
+  /* 🔥 realtime throttling */
+  const lastUpdateRef = useRef(0)
+
   /* =========================
-   1️⃣ 초기 히스토리 fetch
+     1️⃣ 초기 히스토리 fetch
   ========================= */
+
   useEffect(() => {
+
     let cancelled = false
     setInitialized(false)
 
     fetch(`/api/market/whale-intensity?symbol=${upperSymbol}`)
       .then(r => r.json())
       .then(d => {
+
         if (cancelled) return
 
         if (Array.isArray(d?.history)) {
-          const mapped = d.history.slice(-limit).map(
-            (v: number, i: number) => ({
+
+          const mapped = d.history
+            .slice(-limit)
+            .map((v: number, i: number) => ({
               ts: Date.now() - (limit - i) * 1000,
-              value: Math.max(0, Math.min(1, v)),
+              value: clamp(v * 100),
               trend: 'FLAT',
               isSpike: false,
-            }),
-          )
+            }))
 
           setHistory(mapped)
+
         }
 
         setFlagEvents([])
         setInitialized(true)
+
       })
       .catch(() => {
         setInitialized(true)
@@ -70,20 +85,31 @@ export function useWhaleIntensityHistory(options: Options = {}) {
     return () => {
       cancelled = true
     }
+
   }, [upperSymbol, limit])
 
   /* =========================
-   2️⃣ SSE 구독 (엔진 값 직접 반영)
+     2️⃣ SSE 구독 (엔진 값 직접 반영)
   ========================= */
+
   useEffect(() => {
+
     if (!initialized) return
 
     const unsubIntensity = subscribeWhaleIntensity(
       upperSymbol,
       (intensity, avg, trend, isSpike, ts) => {
-        const timestamp = ts ?? Date.now()
 
-        const clamped = Math.max(0, Math.min(1, intensity))
+        const now = Date.now()
+
+        /* 🔥 200ms throttling */
+        if (now - lastUpdateRef.current < 200) return
+
+        lastUpdateRef.current = now
+
+        const timestamp = ts ?? now
+
+        const scaled = clamp(intensity)
 
         trendRef.current = trend
         spikeRef.current = isSpike
@@ -93,28 +119,38 @@ export function useWhaleIntensityHistory(options: Options = {}) {
             ...prev,
             {
               ts: timestamp,
-              value: clamped, // 🔥 엔진값 그대로
+              value: scaled,
               trend,
               isSpike,
             },
           ].slice(-limit),
         )
+
       },
     )
 
     const unsubWarning = subscribeWhaleWarning(
       upperSymbol,
       (value, avg, ts) => {
+
+        const now = Date.now()
+
+        /* 🔥 throttling */
+        if (now - lastUpdateRef.current < 200) return
+
+        lastUpdateRef.current = now
+
         setFlagEvents(prev =>
           [
             ...prev,
             {
-              ts: ts ?? Date.now(),
+              ts: ts ?? now,
               value,
               avg,
             },
           ].slice(-10),
         )
+
       },
     )
 
@@ -122,10 +158,12 @@ export function useWhaleIntensityHistory(options: Options = {}) {
       unsubIntensity()
       unsubWarning()
     }
+
   }, [upperSymbol, initialized, limit])
 
   return {
     history,
     flagEvents,
   }
+
 }

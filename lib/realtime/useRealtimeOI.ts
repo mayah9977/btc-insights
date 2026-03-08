@@ -20,9 +20,11 @@ const INITIAL_STATE: RealtimeOIState = {
 }
 
 export function useRealtimeOI(symbol: string) {
+
   const [state, setState] = useState<RealtimeOIState>(INITIAL_STATE)
 
   useEffect(() => {
+
     if (!symbol) return
 
     const upperSymbol = symbol.toUpperCase()
@@ -30,24 +32,51 @@ export function useRealtimeOI(symbol: string) {
     const unsubscribe = subscribeOpenInterest(
       upperSymbol,
       (openInterest, delta, direction, ts) => {
-        setState({
-          openInterest,
-          delta: Number.isFinite(delta) ? delta : 0,
-          direction: direction ?? 'FLAT',
-          connected: true,
-          lastUpdatedAt: ts ?? Date.now(),
+
+        setState(prev => {
+
+          const normalizedDelta =
+            Number.isFinite(delta) ? delta : 0
+
+          const normalizedDirection =
+            direction ?? 'FLAT'
+
+          /* 값 동일하면 업데이트 차단 */
+
+          if (
+            prev.openInterest === openInterest &&
+            prev.delta === normalizedDelta &&
+            prev.direction === normalizedDirection
+          ) {
+            return prev
+          }
+
+          return {
+            openInterest,
+            delta: normalizedDelta,
+            direction: normalizedDirection,
+            connected: true,
+            lastUpdatedAt: ts ?? Date.now(),
+          }
+
         })
+
       },
     )
 
     return () => {
+
       unsubscribe()
-      setState(s => ({
-        ...s,
+
+      setState(prev => ({
+        ...prev,
         connected: false,
       }))
+
     }
+
   }, [symbol])
 
   return state
+
 }

@@ -10,11 +10,41 @@ import { applyLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCom
 
 type Handler = (data: any) => void
 
-const MARKET_EVENTS = new Set([
-  'PRICE_TICK',
-  'OI_TICK',
-  'VOLUME_TICK',
-  'FUNDING_RATE_TICK',
+/* =========================================================
+🔥 VIP EVENT LIST
+========================================================= */
+
+const VIP_EVENTS = new Set([
+  SSE_EVENT.PRICE_TICK,
+  SSE_EVENT.OI_TICK,
+  SSE_EVENT.VOLUME_TICK,
+  SSE_EVENT.FUNDING_RATE_TICK,
+  SSE_EVENT.SENTIMENT_UPDATE,
+
+  'RISK_UPDATE',
+
+  'MARKET_STATE',
+  'FINAL_DECISION',
+
+  'FMAI',
+
+  SSE_EVENT.WHALE_INTENSITY,
+  SSE_EVENT.WHALE_TRADE_FLOW,
+  SSE_EVENT.WHALE_NET_PRESSURE,
+  SSE_EVENT.WHALE_ABSORPTION,
+  SSE_EVENT.LIQUIDITY_SWEEP,
+  SSE_EVENT.MARKET_REGIME,
+
+  SSE_EVENT.BB_SIGNAL,
+  SSE_EVENT.BB_LIVE_COMMENTARY,
+])
+
+const THROTTLE_EVENTS = new Set([
+  SSE_EVENT.PRICE_TICK,
+  SSE_EVENT.OI_TICK,
+  SSE_EVENT.VOLUME_TICK,
+  SSE_EVENT.FUNDING_RATE_TICK,
+  SSE_EVENT.SENTIMENT_UPDATE,
 ])
 
 class SSEConnectionManager {
@@ -23,9 +53,12 @@ class SSEConnectionManager {
   private handlers = new Map<string, Set<Handler>>()
   private refCount = 0
 
-  /* 🔁 reconnect 관리 */
   private reconnectAttempts = 0
   private reconnectTimer: any = null
+
+  private lastDispatchByType = new Map<string, number>()
+
+  private debugRate = { count: 0, start: 0 }
 
   static getInstance() {
     if (!this.instance) {
@@ -35,22 +68,32 @@ class SSEConnectionManager {
   }
 
   /* =========================
-   * 🔌 Connect (🔥 VIP SCOPE)
-   * ========================= */
+  🔌 Connect
+  ========================= */
+
   private connect() {
     if (this.es) return
 
-    // ✅ VIP scope로 연결 (핵심 수정)
     this.es = new EventSource('/api/realtime/stream?scope=vip')
 
     this.es.onopen = () => {
       this.reconnectAttempts = 0
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[SSE] connected: VIP')
-      }
     }
 
     this.es.onmessage = (e) => {
+      const now = Date.now()
+
+      if (!this.debugRate.start) {
+        this.debugRate.start = now
+      }
+
+      this.debugRate.count++
+
+      if (now - this.debugRate.start > 1000) {
+        this.debugRate.count = 0
+        this.debugRate.start = now
+      }
+
       let msg: any
 
       try {
@@ -62,102 +105,124 @@ class SSEConnectionManager {
       const type = msg?.type
       if (!type) return
 
-      if (
-        process.env.NODE_ENV !== 'production' &&
-        !MARKET_EVENTS.has(type)
-      ) {
-        console.log('[SSE EVENT]', msg)
+      if (type === 'MARKET_STATE') {
+      }
+
+      if (type === 'FINAL_DECISION') {
+      }
+
+      ;(globalThis as any).__TYPE_COUNT__ =
+        (globalThis as any).__TYPE_COUNT__ ?? {}
+
+      ;(globalThis as any).__TYPE_COUNT__[type] =
+        ((globalThis as any).__TYPE_COUNT__[type] ?? 0) + 1
+
+      /* =========================
+      VIP EVENT FILTER
+      ========================= */
+
+      if (!VIP_EVENTS.has(type)) {
+        return
       }
 
       /* =========================
-       * VIP Risk
-       * ========================= */
+      Throttle
+      ========================= */
+
+      if (THROTTLE_EVENTS.has(type)) {
+        const last = this.lastDispatchByType.get(type) ?? 0
+
+        if (now - last < 100) {
+          return
+        }
+
+        this.lastDispatchByType.set(type, now)
+      }
+
+      /* =========================
+      VIP Risk
+      ========================= */
+
       if (type === 'RISK_UPDATE') {
         try {
           handleRiskUpdate(msg)
-        } catch (err) {
-          console.error('[RISK_UPDATE error]', err)
-        }
+        } catch {}
       }
 
       /* =========================
-       * Whale Effects
-       * ========================= */
+      Whale Effects
+      ========================= */
+
       if (type === SSE_EVENT.WHALE_INTENSITY) {
-        handleWhaleIntensityEffect({
-          symbol: msg.symbol,
-          intensity: msg.intensity,
-          avg: msg.avg,
-          trend: msg.trend,
-          isSpike: msg.isSpike,
-          ts: msg.ts ?? Date.now(),
-        })
+        try {
+          handleWhaleIntensityEffect({
+            symbol: msg.symbol,
+            intensity: msg.intensity,
+            avg: msg.avg,
+            trend: msg.trend,
+            isSpike: msg.isSpike,
+            ts: msg.ts ?? Date.now(),
+          })
+        } catch {}
       }
 
       if (type === SSE_EVENT.WHALE_WARNING) {
-        handleWhaleWarningEffect({
-          symbol: msg.symbol,
-          whaleIntensity: msg.whaleIntensity,
-          avgWhale: msg.avgWhale,
-          tradeUSD: msg.tradeUSD,
-          ts: msg.ts ?? Date.now(),
-        })
+        try {
+          handleWhaleWarningEffect({
+            symbol: msg.symbol,
+            whaleIntensity: msg.whaleIntensity,
+            avgWhale: msg.avgWhale,
+            tradeUSD: msg.tradeUSD,
+            ts: msg.ts ?? Date.now(),
+          })
+        } catch {}
       }
 
       /* =========================
-       * Bollinger
-       * ========================= */
+      Bollinger
+      ========================= */
+
       if (type === SSE_EVENT.BB_SIGNAL) {
         try {
           applyRealtimeBollingerSignal(msg)
-        } catch (err) {
-          console.error('[BB_SIGNAL error]', err)
-        }
+        } catch {}
       }
 
       if (type === SSE_EVENT.BB_LIVE_COMMENTARY) {
         try {
           applyLiveBollingerCommentary(msg)
-        } catch (err) {
-          console.error('[BB_LIVE_COMMENTARY error]', err)
-        }
+        } catch {}
       }
 
       /* =========================
-       * Fan-out
-       * ========================= */
+      Fan-out
+      ========================= */
+
       this.handlers.get(type)?.forEach((handler) => {
         try {
           handler(msg)
-        } catch (err) {
-          console.error('[SSE handler error]', type, err)
-        }
+        } catch {}
       })
 
       this.handlers.get('*')?.forEach((handler) => {
         try {
           handler(msg)
-        } catch (err) {
-          console.error('[SSE wildcard handler error]', type, err)
-        }
+        } catch {}
       })
     }
 
     /* =========================
-     * 🔁 Auto Reconnect
-     * ========================= */
+    Auto Reconnect
+    ========================= */
+
     this.es.onerror = () => {
       this.es?.close()
       this.es = null
 
       const delay = Math.min(
         1000 * 2 ** this.reconnectAttempts,
-        10000
+        10000,
       )
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[SSE] reconnecting in', delay, 'ms')
-      }
 
       this.reconnectTimer = setTimeout(() => {
         this.reconnectAttempts++
@@ -167,10 +232,12 @@ class SSEConnectionManager {
   }
 
   /* =========================
-   * 🔔 Subscribe
-   * ========================= */
+  🔔 Subscribe
+  ========================= */
+
   subscribe(type: string, handler: Handler) {
     this.connect()
+
     this.refCount++
 
     if (!this.handlers.has(type)) {
@@ -181,12 +248,14 @@ class SSEConnectionManager {
 
     return () => {
       this.handlers.get(type)?.delete(handler)
-      this.refCount--
 
-      if (this.refCount <= 0) {
+      this.refCount = Math.max(0, this.refCount - 1)
+
+      if (this.refCount === 0) {
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer)
         }
+
         this.es?.close()
         this.es = null
       }

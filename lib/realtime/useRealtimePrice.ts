@@ -18,10 +18,12 @@ const INITIAL_STATE: RealtimePriceState = {
 }
 
 export function useRealtimePrice(symbol: string) {
-  const [state, setState] =
-    useState<RealtimePriceState>(INITIAL_STATE)
+  const [state, setState] = useState<RealtimePriceState>(INITIAL_STATE)
 
   const prevPriceRef = useRef<number | null>(null)
+
+  /* 🔥 throttle 추가 */
+  const lastUpdateRef = useRef(0)
 
   useEffect(() => {
     if (!symbol) return
@@ -31,12 +33,18 @@ export function useRealtimePrice(symbol: string) {
     const unsubscribe = subscribeMarketPrice(
       upperSymbol,
       (price) => {
-        setState(prev => {
+        const now = Date.now()
+
+        /* 🔥 250ms throttle */
+        if (now - lastUpdateRef.current < 250) return
+        lastUpdateRef.current = now
+
+        setState(() => {
           const next = {
             price,
             prevPrice: prevPriceRef.current,
             connected: true,
-            lastUpdatedAt: Date.now(),
+            lastUpdatedAt: now,
           }
 
           prevPriceRef.current = price
@@ -48,7 +56,11 @@ export function useRealtimePrice(symbol: string) {
     return () => {
       unsubscribe()
       prevPriceRef.current = null
-      setState(s => ({ ...s, connected: false }))
+
+      setState((s) => ({
+        ...s,
+        connected: false,
+      }))
     }
   }, [symbol])
 

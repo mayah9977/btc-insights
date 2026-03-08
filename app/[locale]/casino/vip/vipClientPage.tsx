@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 
+import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
+
 import { useVipKpi } from '@/lib/vip/useVipKpi'
 import { useVipRiskHistoryStore } from '@/lib/vip/riskHistoryStore'
 import { useVipHistoryStore } from '@/lib/vip/historyStore'
@@ -57,8 +59,15 @@ export default function VIPClientPage({
 }: Props) {
 
   /* =========================
+     🔥 VIP Market Stream (SSE 시작)
+  ========================= */
+
+  useVIPMarketStream('BTCUSDT')
+
+  /* =========================
      🔥 모바일 판별
   ========================= */
+
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -71,6 +80,7 @@ export default function VIPClientPage({
   /* =========================
      KPI 관련 (정적 데이터)
   ========================= */
+
   const { avoidedExtremeCount = 0, avoidedLossUSD = 0 } = useVipKpi()
   const { todayAvoidedLossPercent = 0 } = useVipHistoryStore()
   const { history } = useVipRiskHistoryStore()
@@ -90,7 +100,6 @@ export default function VIPClientPage({
 
   return (
     <>
-      {/* 🔥 KPI는 내부에서 실시간 처리하도록 이동 권장 */}
       <VIPTopKPIBar
         avoidedExtremeCount={avoidedExtremeCount}
         avoidedLossUSD={avoidedLossUSD}
@@ -105,8 +114,10 @@ export default function VIPClientPage({
       <VIPNoEntryReasonBanner />
 
       {/* ================= MOBILE ================= */}
+
       {isMobile && (
         <VIPMobileLayout>
+
           {shouldRenderAvoidanceSummary && (
             <VIPSummaryCards
               weekly={weeklySummary}
@@ -117,27 +128,39 @@ export default function VIPClientPage({
           <VIPWhaleIntensityChart symbol="BTCUSDT" />
           <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
           <VIPSentimentPanel symbol="BTCUSDT" />
+
           <BtcLiveChart riskLevel="LOW" />
+
           <VIPFortunePanel />
           <VIPTodayJudgementCard />
           <VIPJudgementTimeline />
+
           <VIP3AdvancedMetrics {...vip3Metrics} />
-          <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+
+          <VIP30DayEvasionBadge
+            avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+          />
+
           <VIPCompareTable />
+
           <VIPRiskAvoidanceCard />
           <VIPDailySnapshot />
+
           <VIPOverviewDashboard />
           <VIPJudgement />
           <VIPRiskPanel />
           <VIPRiskScenarioHeatmap />
           <VIPNoEntryReason />
           <VIPLossAvoidanceLog />
+
         </VIPMobileLayout>
       )}
 
       {/* ================= DESKTOP ================= */}
+
       {!isMobile && (
         <main className="space-y-10">
+
           {shouldRenderAvoidanceSummary && (
             <VIPSummaryCards
               weekly={weeklySummary}
@@ -148,21 +171,32 @@ export default function VIPClientPage({
           <VIPWhaleIntensityChart symbol="BTCUSDT" />
           <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
           <VIPSentimentPanel symbol="BTCUSDT" />
+
           <BtcLiveChart riskLevel="LOW" />
+
           <VIPFortunePanel />
           <VIPJudgementTimeline />
+
           <VIP3AdvancedMetrics {...vip3Metrics} />
-          <VIP30DayEvasionBadge avgAvoidedLossUSD={monthlySummary.avoidedLossUSD} />
+
+          <VIP30DayEvasionBadge
+            avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+          />
+
           <VIPCompareTable />
+
           <VIPRiskAvoidanceCard />
           <VIPDailySnapshot />
+
           <VIPOverviewDashboard />
           <VIPJudgement />
           <VIPRiskPanel />
           <VIPRiskScenarioHeatmap />
           <VIPNoEntryReason />
           <VIPLossAvoidanceLog />
+
           <NotificationHistoryView />
+
         </main>
       )}
     </>

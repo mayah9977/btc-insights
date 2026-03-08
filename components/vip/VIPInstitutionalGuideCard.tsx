@@ -8,6 +8,7 @@ type Props = {
   short: number
   confidence: number
   dominant: 'LONG' | 'SHORT' | 'NONE'
+  intensity: number   // 🔥 추가 (WhaleIntensity 0~100)
   isPending?: boolean
 }
 
@@ -16,13 +17,14 @@ export default function VIPInstitutionalGuideCard({
   short,
   confidence,
   dominant,
+  intensity, // 🔥 추가
   isPending = false,
 }: Props) {
 
   const [open, setOpen] = useState(false)
 
   /* =====================================================
-     1️⃣ 색상 & 강한 정렬 여부 (기존 로직 유지)
+     1️⃣ 색상 & 강한 정렬 여부
   ===================================================== */
 
   const levelColor =
@@ -37,12 +39,12 @@ export default function VIPInstitutionalGuideCard({
   const strongSignal = confidence >= 45
 
   /* =====================================================
-     2️⃣ 상태 해석 (로직 그대로 유지)
+     2️⃣ 상태 해석
   ===================================================== */
 
   let phase = '에너지 축적 구간'
   let message =
-    '현재 시장은 방향 확정 이전 단계로, 기관 자금이 압축·축적되는 구간입니다.'
+    'AI is currently monitoring the market situation.'
   let action = '기관급 고래의 자금 흐름을 모니터링 중입니다.'
 
   if (isPending) {
@@ -83,7 +85,7 @@ export default function VIPInstitutionalGuideCard({
   const gaugePercent = Math.min(100, Math.max(0, confidence))
 
   /* =====================================================
-     4️⃣ 배지 (기존 구조 유지)
+     4️⃣ 배지
   ===================================================== */
 
   const renderBadge = () => {
@@ -123,7 +125,7 @@ export default function VIPInstitutionalGuideCard({
   }
 
   /* =====================================================
-     5️⃣ 렌더 (UI 업그레이드)
+     5️⃣ 렌더
   ===================================================== */
 
   return (
@@ -150,7 +152,7 @@ export default function VIPInstitutionalGuideCard({
       }}
     >
 
-      {/* 🔥 상단 상태 인디케이터 바 */}
+      {/* 상단 상태바 */}
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${gaugePercent}%` }}
@@ -161,7 +163,7 @@ export default function VIPInstitutionalGuideCard({
         }}
       />
 
-      {/* 🔥 강한 구간 라이트 플래시 */}
+      {/* 라이트 효과 */}
       <AnimatePresence>
         {strongSignal && (
           <motion.div
@@ -202,10 +204,15 @@ export default function VIPInstitutionalGuideCard({
         기관 순매도 압력 {short.toFixed(0)}%
       </div>
 
-      {/* 🔥 게이지 (펄스 효과 추가) */}
+      {/* 🔥 Whale Intensity 표시 */}
+      <div className="mb-4 text-xs text-neutral-400 relative z-10">
+        기관급 고래 체결강도 {intensity.toFixed(1)}%
+      </div>
+
+      {/* 게이지 */}
       <div className="mb-6 relative z-10">
         <div className="text-xs text-neutral-500 mb-1">
-          기관급 고래체결강도
+          기관 방향성 신뢰도
         </div>
 
         <div className="w-full h-2 bg-zinc-800 rounded overflow-hidden relative">

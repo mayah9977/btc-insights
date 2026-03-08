@@ -1,8 +1,5 @@
 /* =========================================================
    📊 Institutional Directional Probability Engine
-   - Priority Tree 보조 강화용
-   - 방향 결정 ❌
-   - 강도(confidence) 보정 전용
 ========================================================= */
 
 export type InstitutionalDirection =
@@ -18,7 +15,7 @@ export interface DirectionalProbabilityResult {
 }
 
 /* =========================================================
-   🔥 Directional Probability 계산 (Boost 전용)
+   🔥 Directional Probability 계산
 ========================================================= */
 
 export function calculateInstitutionalProbability({
@@ -39,7 +36,7 @@ export function calculateInstitutionalProbability({
   let shortScore = 0
 
   /* =======================================================
-     1️⃣ Whale Energy (완화 조정)
+     1️⃣ Whale Energy
   ======================================================= */
 
   const whaleEnergy = Math.min(30, whaleRatio * 40)
@@ -54,7 +51,7 @@ export function calculateInstitutionalProbability({
   }
 
   /* =======================================================
-     2️⃣ Net Pressure (완화)
+     2️⃣ Net Pressure
   ======================================================= */
 
   if (netRatio > 0) {
@@ -64,7 +61,7 @@ export function calculateInstitutionalProbability({
   }
 
   /* =======================================================
-     3️⃣ OI 방향성 (완화)
+     3️⃣ OI 방향성
   ======================================================= */
 
   if (oiDelta > 0) {
@@ -74,7 +71,7 @@ export function calculateInstitutionalProbability({
   }
 
   /* =======================================================
-     4️⃣ Funding Bias (청산 유도 반영)
+     4️⃣ Funding Bias
   ======================================================= */
 
   if (fundingBias === 'LONG_HEAVY') {
@@ -98,7 +95,7 @@ export function calculateInstitutionalProbability({
   }
 
   /* =======================================================
-     6️⃣ 정규화
+     6️⃣ Normalize
   ======================================================= */
 
   const total = longScore + shortScore || 1
@@ -113,7 +110,7 @@ export function calculateInstitutionalProbability({
     Math.abs(longProbability - shortProbability)
 
   /* =======================================================
-     7️⃣ Dominant (참고용)
+     7️⃣ Dominant
   ======================================================= */
 
   let dominant: InstitutionalDirection = 'NONE'
@@ -134,7 +131,7 @@ export function calculateInstitutionalProbability({
 }
 
 /* =========================================================
-   🔧 Utility
+   Utility
 ========================================================= */
 
 function clamp(value: number, min = 0, max = 100) {

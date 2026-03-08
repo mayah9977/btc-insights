@@ -1,22 +1,113 @@
 'use client'
 
+import React from 'react'
 import { motion } from 'framer-motion'
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
 import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
-import { useRealtimeFundingRate } from '@/lib/realtime/useRealtimeFundingRate' // ✅ 수정
+import { useRealtimeFundingRate } from '@/lib/realtime/useRealtimeFundingRate'
 import { NumericAnimatedValue } from '@/components/ui/NumericAnimatedValue'
 
 interface RawObservationBarProps {
   symbol: string
 }
 
-export function RawObservationBar({ symbol }: RawObservationBarProps) {
+/* =========================================================
+   Open Interest
+========================================================= */
+
+const OpenInterestValue = React.memo(function OpenInterestValue({
+  symbol,
+}: {
+  symbol: string
+}) {
+
   const oiState = useRealtimeOI(symbol)
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
+      <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
+        Open Interest(미결제약정)
+      </span>
+
+      <NumericAnimatedValue
+        value={oiState.openInterest}
+        size="lg"
+        glowMode="direction"
+        flashOnChange
+        disableAnimation
+        className="font-bold text-emerald-400 tracking-wide"
+      />
+    </div>
+  )
+})
+
+/* =========================================================
+   Volume
+========================================================= */
+
+const VolumeValue = React.memo(function VolumeValue({
+  symbol,
+}: {
+  symbol: string
+}) {
+
   const volumeState = useRealtimeVolume(symbol)
 
-  // ✅ Funding 훅 교체
+  return (
+    <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
+      <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
+        Volume(거래량)
+      </span>
+
+      <NumericAnimatedValue
+        value={volumeState.volume}
+        size="lg"
+        glowMode="direction"
+        flashOnChange
+        disableAnimation
+        suffix={volumeState.volume != null ? ' K' : ''}
+        className="font-bold text-emerald-400 tracking-wide"
+      />
+    </div>
+  )
+})
+
+/* =========================================================
+   Funding Rate
+========================================================= */
+
+const FundingRateValue = React.memo(function FundingRateValue({
+  symbol,
+}: {
+  symbol: string
+}) {
+
   const fundingState = useRealtimeFundingRate(symbol)
-  const fundingRate = fundingState.fundingRate
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
+      <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
+        Funding Rate(펀딩비)
+      </span>
+
+      <NumericAnimatedValue
+        value={fundingState.fundingRate}
+        size="lg"
+        glowMode="direction"
+        flashOnChange
+        disableAnimation
+        format={(v) => `${(v * 100).toFixed(4)}%`}
+        className="font-bold text-emerald-400 tracking-wide"
+      />
+    </div>
+  )
+})
+
+/* =========================================================
+   RawObservationBar
+========================================================= */
+
+export function RawObservationBar({ symbol }: RawObservationBarProps) {
 
   return (
     <motion.div
@@ -24,6 +115,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
       animate={{ opacity: 1 }}
       className="relative overflow-hidden"
     >
+
       {/* Luxury moving light sweep */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
@@ -36,7 +128,7 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
         }}
       />
 
-      {/* 상단 라인 */}
+      {/* Top line */}
       <div
         aria-hidden
         className="
@@ -51,52 +143,13 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
       <div className="relative px-4 py-6">
         <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:items-center md:gap-16">
 
-          {/* ================= OI ================= */}
-          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
-            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Open Interest(미결제약정)
-            </span>
-
-            <NumericAnimatedValue
-              value={oiState.openInterest}
-              size="lg"
-              glowMode="direction"
-              className="font-bold text-emerald-400 tracking-wide"
-            />
-          </div>
-
-          {/* ================= Volume ================= */}
-          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
-            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Volume(거래량)
-            </span>
-
-            <NumericAnimatedValue
-              value={volumeState.volume}
-              size="lg"
-              glowMode="direction"
-              suffix={volumeState.volume != null ? ' K' : ''}
-              className="font-bold text-emerald-400 tracking-wide"
-            />
-          </div>
-
-          {/* ================= Funding ================= */}
-          <div className="flex flex-wrap items-baseline gap-3 md:gap-5">
-            <span className="text-sm font-semibold text-zinc-300 tracking-widest uppercase opacity-80">
-              Funding Rate(펀딩비)
-            </span>
-
-            <NumericAnimatedValue
-              value={fundingRate}
-              size="lg"
-              glowMode="direction"
-              format={(v) => `${(v * 100).toFixed(4)}%`}
-              className="font-bold text-emerald-400 tracking-wide"
-            />
-          </div>
+          <OpenInterestValue symbol={symbol} />
+          <VolumeValue symbol={symbol} />
+          <FundingRateValue symbol={symbol} />
 
         </div>
       </div>
+
     </motion.div>
   )
 }

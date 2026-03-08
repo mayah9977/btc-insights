@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { subscribeWhaleNetPressure } from '@/lib/realtime/marketChannel'
 
 export type WhaleNetPressurePoint = {
   ts: number
   whaleBuyVolume: number
   whaleSellVolume: number
-  whaleNetPressure: number      // 엔진 계산값 (-1 ~ 1)
-  whaleNetRatio: number         // 엔진 계산값 (-1 ~ 1)
-  normalized: number            // 차트 표시용 (-1 ~ 1)
+  whaleNetPressure: number
+  whaleNetRatio: number
+  normalized: number
   direction: 'BUY' | 'SELL' | 'NEUTRAL'
 }
 
@@ -19,12 +19,17 @@ type Options = {
 }
 
 export function useWhaleNetPressure(options: Options = {}) {
+
   const { symbol = 'BTCUSDT', limit = 60 } = options
   const upper = symbol.toUpperCase()
 
   const [history, setHistory] = useState<WhaleNetPressurePoint[]>([])
 
+  /* 🔥 realtime throttling */
+  const lastUpdateRef = useRef(0)
+
   useEffect(() => {
+
     const unsubscribe = subscribeWhaleNetPressure(
       upper,
       (
@@ -35,9 +40,16 @@ export function useWhaleNetPressure(options: Options = {}) {
         _totalVolume,
         ts,
       ) => {
-        const rawTs = ts ?? Date.now()
 
-        // 🔥 초 단위 정규화 (TradeFlow와 동일 기준)
+        const now = Date.now()
+
+        /* 🔥 200ms throttling */
+        if (now - lastUpdateRef.current < 200) return
+        lastUpdateRef.current = now
+
+        const rawTs = ts ?? now
+
+        /* 🔥 초 단위 정규화 */
         const normalizedTs = Math.floor(rawTs / 1000) * 1000
 
         const normalized = Math.max(
@@ -46,18 +58,20 @@ export function useWhaleNetPressure(options: Options = {}) {
         )
 
         let direction: 'BUY' | 'SELL' | 'NEUTRAL' = 'NEUTRAL'
+
         if (normalized > 0.05) direction = 'BUY'
         else if (normalized < -0.05) direction = 'SELL'
 
         setHistory(prev => {
-          const existingIndex = prev.findIndex(
-            p => p.ts === normalizedTs,
-          )
+
+          const existingIndex =
+            prev.findIndex(p => p.ts === normalizedTs)
 
           let next = [...prev]
 
           if (existingIndex >= 0) {
-            // 🔥 같은 초면 update (push 금지)
+
+            /* 같은 초면 update */
             next[existingIndex] = {
               ts: normalizedTs,
               whaleBuyVolume,
@@ -67,7 +81,10 @@ export function useWhaleNetPressure(options: Options = {}) {
               normalized,
               direction,
             }
+
           } else {
+
+            /* 새 데이터 push */
             next.push({
               ts: normalizedTs,
               whaleBuyVolume,
@@ -77,17 +94,19 @@ export function useWhaleNetPressure(options: Options = {}) {
               normalized,
               direction,
             })
+
           }
 
-          // 🔥 항상 시간순 정렬
-          next.sort((a, b) => a.ts - b.ts)
-
+          /* 🔥 sort 제거 (시간 증가 보장) */
           return next.slice(-limit)
+
         })
+
       },
     )
 
     return () => unsubscribe()
+
   }, [upper, limit])
 
   /* =========================
@@ -95,6 +114,7 @@ export function useWhaleNetPressure(options: Options = {}) {
   ========================= */
 
   const stats = useMemo(() => {
+
     if (!history.length) {
       return {
         latest: null,
@@ -117,6 +137,7 @@ export function useWhaleNetPressure(options: Options = {}) {
       buyDominance: avg > 0.1,
       sellDominance: avg < -0.1,
     }
+
   }, [history])
 
   return {
@@ -126,4 +147,5 @@ export function useWhaleNetPressure(options: Options = {}) {
     buyDominance: stats.buyDominance,
     sellDominance: stats.sellDominance,
   }
+
 }

@@ -1,21 +1,25 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
 interface ActionGateStatusProps {
-  state?: ActionGateState
   symbol?: string
 }
 
 export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
-  state = 'OBSERVE',
   symbol,
 }) => {
 
+  const state = useVIPMarketStore(
+    (s) => s.actionGateState
+  ) as ActionGateState
+
   /* =========================
-     🔥 디버그 로그 (실제 수신 상태 확인)
+     DEBUG
   ========================= */
 
   useEffect(() => {
@@ -26,7 +30,7 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   }, [state, symbol])
 
   /* =========================
-     🎨 상태별 색상 결정
+     상태 색상
   ========================= */
 
   const getOverlayColor = () => {
@@ -35,7 +39,6 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
         return 'bg-yellow-900/40'
       case 'IGNORE':
         return 'bg-red-900/40'
-      case 'OBSERVE':
       default:
         return 'bg-black/30'
     }
@@ -44,16 +47,27 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   const getBorderColor = () => {
     switch (state) {
       case 'CAUTION':
-        return 'border-yellow-500/40'
+        return 'border-yellow-500/60'
       case 'IGNORE':
-        return 'border-red-500/40'
+        return 'border-red-500/70'
       default:
-        return 'border-white/10'
+        return 'border-emerald-400/40'
+    }
+  }
+
+  const getGlow = () => {
+    switch (state) {
+      case 'CAUTION':
+        return '0 0 40px rgba(250,204,21,0.45)'
+      case 'IGNORE':
+        return '0 0 50px rgba(239,68,68,0.45)'
+      default:
+        return '0 0 35px rgba(16,185,129,0.35)'
     }
   }
 
   /* =========================
-     🎨 RGB Canvas Logic
+     RGB Canvas Logic
   ========================= */
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -66,6 +80,7 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return
 
@@ -83,20 +98,23 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
       const h = canvas.height
 
       scanTRef.current += 0.002 * dirRef.current
+
       if (scanTRef.current >= 1) dirRef.current = -1
       if (scanTRef.current <= 0) dirRef.current = 1
 
       const scanX = scanTRef.current * w
 
       const grad = ctx.createLinearGradient(0, 0, w, 0)
-      grad.addColorStop(0, 'hsl(0, 90%, 55%)')
-      grad.addColorStop(0.2, 'hsl(40, 90%, 55%)')
-      grad.addColorStop(0.4, 'hsl(120, 90%, 55%)')
-      grad.addColorStop(0.6, 'hsl(200, 90%, 55%)')
-      grad.addColorStop(0.8, 'hsl(260, 90%, 55%)')
-      grad.addColorStop(1, 'hsl(330, 90%, 55%)')
+
+      grad.addColorStop(0, 'hsl(0,90%,55%)')
+      grad.addColorStop(0.2, 'hsl(40,90%,55%)')
+      grad.addColorStop(0.4, 'hsl(120,90%,55%)')
+      grad.addColorStop(0.6, 'hsl(200,90%,55%)')
+      grad.addColorStop(0.8, 'hsl(260,90%,55%)')
+      grad.addColorStop(1, 'hsl(330,90%,55%)')
 
       ctx.clearRect(0, 0, w, h)
+
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, w, h)
 
@@ -133,18 +151,28 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
       .toString(16)
       .slice(1)
 
-  /* =========================
-     🎯 Render
-  ========================= */
-
   return (
-    <div
-      className={`relative rounded-xl overflow-hidden border shadow-lg ${getBorderColor()}`}
+    <motion.div
+      className={`relative rounded-xl overflow-hidden border shadow-xl ${getBorderColor()}`}
+      style={{ boxShadow: getGlow() }}
+      animate={{ scale: state === 'IGNORE' ? [1, 1.02, 1] : 1 }}
+      transition={{ duration: 2, repeat: state === 'IGNORE' ? Infinity : 0 }}
     >
 
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 w-full h-full opacity-80"
+      />
+
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        animate={{ backgroundPosition: ['0% 0%', '200% 0%'] }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+        style={{
+          backgroundImage:
+            'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)',
+          backgroundSize: '200% 100%',
+        }}
       />
 
       <div
@@ -154,6 +182,7 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
           className="text-base font-semibold tracking-wide"
           style={{
             color: `rgb(${rgb.r},${rgb.g},${rgb.b})`,
+            textShadow: `0 0 14px rgba(${rgb.r},${rgb.g},${rgb.b},0.6)`,
           }}
         >
           AI Gate Status: {state}
@@ -163,6 +192,7 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
           RGB({rgb.r}, {rgb.g}, {rgb.b}) | {hex}
         </div>
       </div>
-    </div>
+
+    </motion.div>
   )
 }

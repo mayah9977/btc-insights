@@ -23,56 +23,8 @@ const TF_MAP: Record<TF, string> = {
   '15m': '15m',
 }
 
-/* =========================
-   🔥 안전한 time 변환 유틸
-========================= */
-function toChartTime(t: any): UTCTimestamp {
-  // Date -> seconds
-  if (t instanceof Date) {
-    return Math.floor(t.getTime() / 1000) as UTCTimestamp
-  }
-
-  // number -> seconds (Binance는 ms/1000로 이미 들어오지만 혹시 대비)
-  if (typeof t === 'number') {
-    // ms로 들어온 경우 대비 (10자리 초 vs 13자리 ms)
-    const seconds =
-      t > 10_000_000_000 ? Math.floor(t / 1000) : Math.floor(t)
-
-    return seconds as UTCTimestamp
-  }
-
-  // string -> date parse -> seconds
-  if (typeof t === 'string') {
-    const parsed = Date.parse(t)
-    if (Number.isFinite(parsed)) {
-      return Math.floor(parsed / 1000) as UTCTimestamp
-    }
-  }
-
-  // object (BusinessDay 등) -> 강제 파싱 시도
-  if (t && typeof t === 'object') {
-    // { year, month, day } 형태 처리
-    if (
-      typeof (t as any).year === 'number' &&
-      typeof (t as any).month === 'number' &&
-      typeof (t as any).day === 'number'
-    ) {
-      const { year, month, day } = t as any
-      const parsed = Date.UTC(year, month - 1, day)
-      return Math.floor(parsed / 1000) as UTCTimestamp
-    }
-
-    // { time: ... } 같은 래핑 형태 처리
-    if (typeof (t as any).time === 'number') {
-      return toChartTime((t as any).time)
-    }
-  }
-
-  // 마지막 방어: 절대 object 그대로 return하지 않음
-  return 0 as UTCTimestamp
-}
-
 export default function BtcLiveChart({ riskLevel }: Props) {
+
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const chartRef = useRef<any>(null)
@@ -80,9 +32,13 @@ export default function BtcLiveChart({ riskLevel }: Props) {
   const ma20Ref = useRef<ISeriesApi<'Line'> | null>(null)
   const ma60Ref = useRef<ISeriesApi<'Line'> | null>(null)
 
-  const lastTimeRef = useRef<number | null>(null)
-  const pricesRef = useRef<number[]>([])
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectRef = useRef<number | null>(null)
+
+  const pricesRef = useRef<number[]>([])
+  const lastTimeRef = useRef<number | null>(null)
+
+  const disposedRef = useRef(false)
 
   const [tf, setTf] = useState<TF>('1m')
 
@@ -96,12 +52,23 @@ export default function BtcLiveChart({ riskLevel }: Props) {
       : `$${Math.round(v).toLocaleString()}`
 
   useEffect(() => {
+
     if (!containerRef.current) return
+
+    disposedRef.current = false
+
+    /* =========================
+       기존 WS 종료
+    ========================= */
 
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
     }
+
+    /* =========================
+       Chart 생성
+    ========================= */
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -141,13 +108,15 @@ export default function BtcLiveChart({ riskLevel }: Props) {
     ma20Ref.current = ma20
     ma60Ref.current = ma60
 
-    lastTimeRef.current = null
     pricesRef.current = []
+    lastTimeRef.current = null
 
     /* =========================
-       🔥 초기 Futures 데이터
+       초기 KLINE 로드
     ========================= */
+
     ;(async () => {
+
       const res = await fetch(
         `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=${TF_MAP[tf]}&limit=200`
       )
@@ -155,9 +124,11 @@ export default function BtcLiveChart({ riskLevel }: Props) {
       const klines: any[] = await res.json()
 
       const candles = klines.map(k => {
-        const time = toChartTime(k[0] / 1000)
 
-        lastTimeRef.current = Number(time)
+        const time = Math.floor(k[0] / 1000) as UTCTimestamp
+        const t = Number(time)
+
+        lastTimeRef.current = t
 
         const close = Number(k[4])
         pricesRef.current.push(close)
@@ -169,120 +140,186 @@ export default function BtcLiveChart({ riskLevel }: Props) {
           low: Number(k[3]),
           close,
         }
+
       })
 
       candle.setData(candles)
 
-      /* 🔥 MA 계산 (정확 인덱스 기반) */
       for (let i = 0; i < candles.length; i++) {
+
         const time = candles[i].time
 
         if (i >= 19) {
+
           const slice20 = pricesRef.current.slice(i - 19, i + 1)
-          const ma20v =
-            slice20.reduce((a, b) => a + b, 0) / 20
+          const ma20v = slice20.reduce((a, b) => a + b, 0) / 20
 
           ma20.update({ time, value: ma20v })
+
         }
 
         if (i >= 59) {
+
           const slice60 = pricesRef.current.slice(i - 59, i + 1)
-          const ma60v =
-            slice60.reduce((a, b) => a + b, 0) / 60
+          const ma60v = slice60.reduce((a, b) => a + b, 0) / 60
 
           ma60.update({ time, value: ma60v })
+
         }
+
       }
+
     })()
 
     /* =========================
-       🔥 Futures WebSocket
+       WebSocket 연결
     ========================= */
-    const ws = new WebSocket(
-      `wss://fstream.binance.com/ws/btcusdt@kline_${TF_MAP[tf]}`
-    )
 
-    ws.onmessage = e => {
-      const msg = JSON.parse(e.data)
-      const k = msg.k
-      if (!k || !candleRef.current) return
+    const connectWS = () => {
 
-      const rawTime = k.t / 1000
-      const time = toChartTime(rawTime)
+      if (disposedRef.current) return
+      if (wsRef.current) return
 
-      if (
-        lastTimeRef.current !== null &&
-        Number(time) < lastTimeRef.current
+      const ws = new WebSocket(
+        `wss://fstream.binance.com/ws/btcusdt@kline_${TF_MAP[tf]}`
       )
-        return
 
-      lastTimeRef.current = Number(time)
+      wsRef.current = ws
 
-      const close = Number(k.c)
+      ws.onmessage = e => {
 
-      pricesRef.current.push(close)
-      if (pricesRef.current.length > 300)
-        pricesRef.current.shift()
+        if (disposedRef.current) return
 
-      candleRef.current.update({
-        time,
-        open: Number(k.o),
-        high: Number(k.h),
-        low: Number(k.l),
-        close,
-      })
+        const msg = JSON.parse(e.data)
+        const k = msg.k
 
-      const len = pricesRef.current.length
+        if (!k || !candleRef.current) return
 
-      if (len >= 20) {
-        const slice20 = pricesRef.current.slice(len - 20)
-        const ma20v =
-          slice20.reduce((a, b) => a + b, 0) / 20
+        const time = Math.floor(k.t / 1000) as UTCTimestamp
+        const t = Number(time)
 
-        ma20Ref.current?.update({ time, value: ma20v })
+        /* oldest data 방지 */
+
+        if (lastTimeRef.current !== null && t < lastTimeRef.current) {
+          return
+        }
+
+        lastTimeRef.current = t
+
+        const close = Number(k.c)
+
+        pricesRef.current.push(close)
+
+        if (pricesRef.current.length > 300)
+          pricesRef.current.shift()
+
+        candleRef.current.update({
+          time,
+          open: Number(k.o),
+          high: Number(k.h),
+          low: Number(k.l),
+          close,
+        })
+
+        const len = pricesRef.current.length
+
+        if (len >= 20) {
+
+          const slice20 = pricesRef.current.slice(len - 20)
+          const ma20v = slice20.reduce((a, b) => a + b, 0) / 20
+
+          ma20Ref.current?.update({ time, value: ma20v })
+
+        }
+
+        if (len >= 60) {
+
+          const slice60 = pricesRef.current.slice(len - 60)
+          const ma60v = slice60.reduce((a, b) => a + b, 0) / 60
+
+          ma60Ref.current?.update({ time, value: ma60v })
+
+        }
+
       }
 
-      if (len >= 60) {
-        const slice60 = pricesRef.current.slice(len - 60)
-        const ma60v =
-          slice60.reduce((a, b) => a + b, 0) / 60
+      ws.onclose = () => {
 
-        ma60Ref.current?.update({ time, value: ma60v })
+        wsRef.current = null
+
+        if (disposedRef.current) return
+
+        reconnectRef.current = window.setTimeout(() => {
+          connectWS()
+        }, 2000)
+
       }
+
+      ws.onerror = () => {
+        ws.close()
+      }
+
     }
 
-    wsRef.current = ws
+    connectWS()
+
+    /* =========================
+       resize
+    ========================= */
 
     const resize = () => {
-      if (!containerRef.current) return
+
+      if (!containerRef.current || !chartRef.current) return
+
       chart.applyOptions({
         width: containerRef.current.clientWidth,
       })
+
     }
 
     window.addEventListener('resize', resize)
 
+    /* =========================
+       cleanup
+    ========================= */
+
     return () => {
+
+      disposedRef.current = true
+
       window.removeEventListener('resize', resize)
+
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current)
+      }
 
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
       }
 
-      chart.remove()
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+      }
+
     }
+
   }, [tf])
 
   return (
     <div className="relative w-full rounded-lg border border-zinc-800 bg-black p-3 overflow-hidden">
+
       {riskLevel === 'EXTREME' && (
         <div className="pointer-events-none absolute inset-0 z-10 bg-red-900/15 animate-pulse" />
       )}
 
       <div className="relative z-20 flex items-center justify-between mb-2">
+
         <div className="flex gap-2">
+
           {(['1m', '5m', '15m'] as TF[]).map(t => (
+
             <button
               key={t}
               onClick={() => setTf(t)}
@@ -294,18 +331,25 @@ export default function BtcLiveChart({ riskLevel }: Props) {
             >
               {t}
             </button>
+
           ))}
+
         </div>
 
         <div className="text-xs text-zinc-300">
+
           Futures Volume:{' '}
+
           {connected && volume != null
             ? formatVolume(volume)
             : '--'}
+
         </div>
+
       </div>
 
       <div ref={containerRef} style={{ height: 380 }} />
+
     </div>
   )
 }
