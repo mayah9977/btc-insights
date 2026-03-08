@@ -2,13 +2,13 @@
 
 import { create } from 'zustand'
 
-/* =========================================================
-   Types
-========================================================= */
-
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
 type VIPMarketState = {
+  oi: number
+  volume: number
+  fundingRate: number
+
   whaleIntensity: number
   whaleRatio: number
   whaleNet: number
@@ -29,11 +29,11 @@ type VIPMarketState = {
   update: (data: Partial<VIPMarketState>) => void
 }
 
-/* =========================================================
-   Store
-========================================================= */
-
 export const useVIPMarketStore = create<VIPMarketState>((set) => ({
+  oi: 0,
+  volume: 0,
+  fundingRate: 0,
+
   whaleIntensity: 0,
   whaleRatio: 0,
   whaleNet: 0,
@@ -70,20 +70,17 @@ export const useVIPMarketStore = create<VIPMarketState>((set) => ({
 }))
 
 /* =========================================================
-   🔥 Ultra-Light Batch Scheduler
+   Scheduler
 ========================================================= */
 
 let pending: Partial<VIPMarketState> | null = null
 let scheduled = false
 
-/* mobile-safe throttle */
-const UPDATE_INTERVAL = 250 // ms (~4fps)
-
-/* last dispatch time */
+const UPDATE_INTERVAL = 250
 let lastFlush = 0
 
 export function scheduleVIPMarketUpdate(
-  data: Partial<VIPMarketState>
+  data: Partial<VIPMarketState>,
 ) {
   pending = { ...(pending || {}), ...data }
 

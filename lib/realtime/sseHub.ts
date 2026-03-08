@@ -43,9 +43,13 @@ const VIP_PUBLIC_ALLOW = new Set([
   'WHALE_NET_PRESSURE',
   'WHALE_INTENSITY',
 
-  /* 🔥 Bollinger 추가 */
-  'BB_SIGNAL',
-  'BB_LIVE_COMMENTARY',
+   /* 🔥 추가 */
+   'WHALE_ABSORPTION',
+   'LIQUIDITY_SWEEP',
+   'FMAI',
+
+   'BB_SIGNAL',
+   'BB_LIVE_COMMENTARY',
 ])
 
 /* =========================================================

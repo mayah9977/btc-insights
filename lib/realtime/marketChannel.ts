@@ -4,6 +4,7 @@ import { SSE_EVENT } from './types'
 /* =========================================================
  * 🔧 내부 유틸: Symbol 안전 비교
 ========================================================= */
+
 function isSameSymbol(a?: string, b?: string) {
   return a?.toUpperCase() === b?.toUpperCase()
 }
@@ -11,6 +12,7 @@ function isSameSymbol(a?: string, b?: string) {
 /* =========================================================
  * 🔥 FMAI (VIP 채널)
 ========================================================= */
+
 export function subscribeVIPChannel(
   symbol: string,
   cb: (
@@ -19,7 +21,6 @@ export function subscribeVIPChannel(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -30,11 +31,9 @@ export function subscribeVIPChannel(
       direction: string
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.score, data.direction, data.ts)
       }
-
     },
   )
 }
@@ -42,6 +41,7 @@ export function subscribeVIPChannel(
 /* =========================================================
  * 🏦 Institutional Accumulation
 ========================================================= */
+
 export function subscribeInstitutionalAccumulation(
   symbol: string,
   cb: (
@@ -50,7 +50,6 @@ export function subscribeInstitutionalAccumulation(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -61,17 +60,13 @@ export function subscribeInstitutionalAccumulation(
       confidence: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.direction,
           data.confidence,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -79,6 +74,7 @@ export function subscribeInstitutionalAccumulation(
 /* =========================================================
  * Market: Open Interest
 ========================================================= */
+
 export function subscribeOpenInterest(
   symbol: string,
   cb: (
@@ -88,7 +84,6 @@ export function subscribeOpenInterest(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -100,18 +95,14 @@ export function subscribeOpenInterest(
       direction: 'UP' | 'DOWN' | 'FLAT'
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.openInterest,
           data.delta,
           data.direction,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -119,11 +110,11 @@ export function subscribeOpenInterest(
 /* =========================================================
  * Market: Price
 ========================================================= */
+
 export function subscribeMarketPrice(
   symbol: string,
   cb: (price: number, ts?: number) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -133,11 +124,9 @@ export function subscribeMarketPrice(
       price: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.price, data.ts)
       }
-
     },
   )
 }
@@ -145,11 +134,11 @@ export function subscribeMarketPrice(
 /* =========================================================
  * Market: Volume
 ========================================================= */
+
 export function subscribeMarketVolume(
   symbol: string,
   cb: (volume: number, ts?: number) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -159,11 +148,9 @@ export function subscribeMarketVolume(
       volume: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.volume, data.ts)
       }
-
     },
   )
 }
@@ -171,6 +158,7 @@ export function subscribeMarketVolume(
 /* =========================================================
  * 🐋 Whale Intensity
 ========================================================= */
+
 export function subscribeWhaleIntensity(
   symbol: string,
   cb: (
@@ -181,7 +169,6 @@ export function subscribeWhaleIntensity(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -194,9 +181,7 @@ export function subscribeWhaleIntensity(
       isSpike: boolean
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.intensity,
           data.avg,
@@ -204,9 +189,7 @@ export function subscribeWhaleIntensity(
           data.isSpike,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -214,6 +197,7 @@ export function subscribeWhaleIntensity(
 /* =========================================================
  * Whale Trade Flow
 ========================================================= */
+
 export function subscribeWhaleTradeFlow(
   symbol: string,
   cb: (
@@ -223,7 +207,6 @@ export function subscribeWhaleTradeFlow(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -235,18 +218,14 @@ export function subscribeWhaleTradeFlow(
       totalVolume: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.ratio,
           data.whaleVolume,
           data.totalVolume,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -254,6 +233,7 @@ export function subscribeWhaleTradeFlow(
 /* =========================================================
  * Whale Net Pressure
 ========================================================= */
+
 export function subscribeWhaleNetPressure(
   symbol: string,
   cb: (
@@ -265,7 +245,6 @@ export function subscribeWhaleNetPressure(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -279,9 +258,7 @@ export function subscribeWhaleNetPressure(
       totalVolume: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.whaleBuyVolume,
           data.whaleSellVolume,
@@ -290,9 +267,7 @@ export function subscribeWhaleNetPressure(
           data.totalVolume,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -300,6 +275,7 @@ export function subscribeWhaleNetPressure(
 /* =========================================================
  * 🆕 Whale Absorption
 ========================================================= */
+
 export function subscribeWhaleAbsorption(
   symbol: string,
   cb: (
@@ -309,7 +285,6 @@ export function subscribeWhaleAbsorption(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -321,18 +296,14 @@ export function subscribeWhaleAbsorption(
       confidence: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.direction,
           data.strength,
           data.confidence,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -340,6 +311,7 @@ export function subscribeWhaleAbsorption(
 /* =========================================================
  * 🆕 Market Regime
 ========================================================= */
+
 export function subscribeMarketRegime(
   symbol: string,
   cb: (
@@ -349,7 +321,6 @@ export function subscribeMarketRegime(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -361,18 +332,14 @@ export function subscribeMarketRegime(
       confidence: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.regime,
           data.strength,
           data.confidence,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -380,6 +347,7 @@ export function subscribeMarketRegime(
 /* =========================================================
  * 🆕 Liquidity Sweep
 ========================================================= */
+
 export function subscribeLiquiditySweep(
   symbol: string,
   cb: (
@@ -389,7 +357,6 @@ export function subscribeLiquiditySweep(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -401,18 +368,14 @@ export function subscribeLiquiditySweep(
       confidence: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.direction,
           data.strength,
           data.confidence,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -420,11 +383,11 @@ export function subscribeLiquiditySweep(
 /* =========================================================
  * Whale Warning
 ========================================================= */
+
 export function subscribeWhaleWarning(
   symbol: string,
   cb: (value: number, avg: number, ts?: number) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -435,17 +398,13 @@ export function subscribeWhaleWarning(
       avgWhale: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.whaleIntensity,
           data.avgWhale,
           data.ts,
         )
-
       }
-
     },
   )
 }
@@ -453,11 +412,11 @@ export function subscribeWhaleWarning(
 /* =========================================================
  * 🔥 Market Sentiment
 ========================================================= */
+
 export function subscribeSentiment(
   symbol: string,
   cb: (sentiment: number, ts?: number) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -467,11 +426,9 @@ export function subscribeSentiment(
       sentiment: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.sentiment, data.ts)
       }
-
     },
   )
 }
@@ -479,6 +436,7 @@ export function subscribeSentiment(
 /* =========================================================
  * 🆕 MARKET_STATE
 ========================================================= */
+
 export function subscribeMarketState(
   symbol: string,
   cb: (
@@ -487,7 +445,6 @@ export function subscribeMarketState(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -498,11 +455,9 @@ export function subscribeMarketState(
       macd: any
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
         cb(data.actionGateState, data.macd, data.ts)
       }
-
     },
   )
 }
@@ -510,6 +465,7 @@ export function subscribeMarketState(
 /* =========================================================
  * 🔥 FINAL_DECISION
 ========================================================= */
+
 export function subscribeFinalDecision(
   symbol: string,
   cb: (
@@ -519,7 +475,6 @@ export function subscribeFinalDecision(
     ts?: number,
   ) => void,
 ) {
-
   const safeSymbol = symbol?.toUpperCase()
 
   return sseManager.subscribe(
@@ -531,18 +486,14 @@ export function subscribeFinalDecision(
       confidence: number
       ts?: number
     }) => {
-
       if (isSameSymbol(data.symbol, safeSymbol)) {
-
         cb(
           data.decision,
           data.dominant,
           data.confidence,
           data.ts,
         )
-
       }
-
     },
   )
 }
