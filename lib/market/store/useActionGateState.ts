@@ -10,11 +10,11 @@ export function useActionGateState(
 ): ActionGateState {
 
   return useMasterMarketStore((store) => {
-    const state = store.state
 
-    if (!state) return DEFAULT_STATE
-    if (state.symbol !== symbol) return DEFAULT_STATE
+    if (!store) return DEFAULT_STATE
+    if (store.symbol !== symbol) return DEFAULT_STATE
 
-    return state.actionGate ?? DEFAULT_STATE
+    return store.actionGate ?? DEFAULT_STATE
+
   })
 }
