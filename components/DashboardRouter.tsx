@@ -11,29 +11,48 @@ import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
 import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart'
 
 function DesktopDashboard() {
+
+  const symbol = 'BTCUSDT'
+
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
 
-      <ActionGateStatus />
+      <div className="space-y-4 mb-6">
+        <ActionGateStatus />
+        <RawObservationBar symbol={symbol} />
+      </div>
 
-      <RawObservationBar symbol="BTCUSDT" />
+      <div className="grid grid-cols-2 gap-6">
 
-      <VIPWhaleIntensityChart />
+        <VIPWhaleIntensityChart symbol={symbol} />
 
-      <VIPWhaleTradeFlowChart />
+        <VIPWhaleTradeFlowChart symbol={symbol} />
+
+      </div>
 
     </div>
   )
 }
 
 export default function DashboardRouter() {
-  const [mobile, setMobile] = useState(false)
+
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
-    setMobile(window.innerWidth < 768)
+
+    const check = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    check()
+
+    window.addEventListener('resize', check)
+
+    return () => window.removeEventListener('resize', check)
+
   }, [])
 
-  if (mobile) {
+  if (isMobile) {
     return <MobileDashboard />
   }
 
