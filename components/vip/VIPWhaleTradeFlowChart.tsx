@@ -21,20 +21,6 @@ import VIPWhaleTradeGuideCard from '@/components/vip/VIPWhaleTradeGuideCard'
 
 /* ========================================================= */
 
-type AbsorptionPoint = {
-  ts: number
-  strength: number
-  direction: 'LONG' | 'SHORT'
-}
-
-type SweepPoint = {
-  ts: number
-  strength: number
-  direction: 'SWEEP_UP' | 'SWEEP_DOWN'
-}
-
-/* ========================================================= */
-
 function VIPWhaleTradeFlowChart({
   symbol = 'BTCUSDT',
 }: {
@@ -62,9 +48,12 @@ function VIPWhaleTradeFlowChart({
 
   useEffect(() => {
 
+    if (!history?.length) return
+
     const now = Date.now()
 
     if (now - lastUpdateRef.current < 400) return
+
     lastUpdateRef.current = now
 
     setBufferHistory(history)
@@ -82,9 +71,15 @@ function VIPWhaleTradeFlowChart({
   /* ================= Map optimization ================= */
 
   const netMap = useMemo(() => {
+
     const m = new Map<number, number>()
-    netHistory.forEach(n => m.set(n.ts, n.normalized))
+
+    netHistory.forEach(n => {
+      m.set(n.ts, n.normalized)
+    })
+
     return m
+
   }, [netHistory])
 
   /* ================= timestamp merge ================= */
@@ -93,17 +88,13 @@ function VIPWhaleTradeFlowChart({
 
     if (!bufferHistory.length) return []
 
-    return bufferHistory.map(p => {
-
-      return {
-        ...p,
-        whaleNetRatio: netMap.get(p.ts) ?? 0,
-        fmaiScore: fmai,
-        absorptionStrength: absorption,
-        sweepStrength: sweep,
-      }
-
-    })
+    return bufferHistory.map(p => ({
+      ...p,
+      whaleNetRatio: netMap.get(p.ts) ?? 0,
+      fmaiScore: fmai ?? 0,
+      absorptionStrength: absorption ?? 0,
+      sweepStrength: sweep ?? 0,
+    }))
 
   }, [bufferHistory, netMap, fmai, absorption, sweep])
 
@@ -113,15 +104,19 @@ function VIPWhaleTradeFlowChart({
 
   const filtered = useMemo(() => {
 
+    if (!merged.length) return []
+
     return merged.map(p => {
 
       const score = p.fmaiScore ?? 0
 
       if (Math.abs(score) >= fmaiThreshold) {
+
         return {
           ...p,
           weightedRatio: p.ratio * Math.abs(score),
         }
+
       }
 
       return {
@@ -184,6 +179,7 @@ function VIPWhaleTradeFlowChart({
 
   return (
     <>
+
       <motion.div
         animate={dynamicPulse ? { scale: [1, 1.05, 1] } : { scale: 1 }}
         transition={{
@@ -213,7 +209,7 @@ function VIPWhaleTradeFlowChart({
 
         {absorptionDetected && (
           <div className="mb-1 text-xs text-purple-400 font-semibold">
-            🐳 Whale Absorption(세력이 물량을 받아먹거나 던지고 있는 흔적이 감지됩니다.)
+            🐳 Whale Absorption (세력이 물량을 받아먹거나 던지고 있는 흔적이 감지됩니다.)
           </div>
         )}
 
@@ -225,7 +221,7 @@ function VIPWhaleTradeFlowChart({
 
         <div className="h-[160px] w-full min-w-0">
 
-          <ResponsiveContainer width="100%" height="100%" minWidth={200}>
+          <ResponsiveContainer width="100%" height="100%">
 
             <AreaChart data={filtered}>
 

@@ -26,11 +26,13 @@ export function useVIPMarketStream(symbol: string) {
     const unsubOI = sseManager.subscribe(
       SSE_EVENT.OI_TICK,
       (msg: any) => {
+
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
           oi: msg.openInterest ?? msg.oi ?? 0,
         })
+
       },
     )
 
@@ -41,11 +43,13 @@ export function useVIPMarketStream(symbol: string) {
     const unsubVolume = sseManager.subscribe(
       SSE_EVENT.VOLUME_TICK,
       (msg: any) => {
+
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
           volume: msg.volume ?? 0,
         })
+
       },
     )
 
@@ -56,11 +60,13 @@ export function useVIPMarketStream(symbol: string) {
     const unsubFunding = sseManager.subscribe(
       SSE_EVENT.FUNDING_RATE_TICK,
       (msg: any) => {
+
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
           fundingRate: msg.fundingRate ?? 0,
         })
+
       },
     )
 
@@ -71,11 +77,13 @@ export function useVIPMarketStream(symbol: string) {
     const unsubWhaleIntensity = sseManager.subscribe(
       SSE_EVENT.WHALE_INTENSITY,
       (msg: any) => {
+
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
           whaleIntensity: msg.intensity ?? 0,
         })
+
       },
     )
 
@@ -86,6 +94,7 @@ export function useVIPMarketStream(symbol: string) {
     const unsubWhaleNet = sseManager.subscribe(
       SSE_EVENT.WHALE_NET_PRESSURE,
       (msg: any) => {
+
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -94,6 +103,24 @@ export function useVIPMarketStream(symbol: string) {
             msg.whaleNetPressure ??
             0,
         })
+
+      },
+    )
+
+    /* =========================
+       🔥 Whale Trade Flow (로그 추가)
+    ========================= */
+
+    const unsubTradeFlow = sseManager.subscribe(
+      SSE_EVENT.WHALE_TRADE_FLOW,
+      (msg: any) => {
+
+        if (msg.symbol?.toUpperCase() !== safeSymbol) return
+
+        scheduleVIPMarketUpdate({
+          whaleRatio: msg.ratio ?? 0,
+        })
+
       },
     )
 
@@ -167,17 +194,22 @@ export function useVIPMarketStream(symbol: string) {
     ========================= */
 
     return () => {
+
       unsubOI()
       unsubVolume()
       unsubFunding()
+
       unsubWhaleIntensity()
       unsubWhaleNet()
+
+      unsubTradeFlow()   // 🔥 추가 cleanup
 
       unsubFMAI()
       unsubAbsorption()
       unsubSweep()
 
       unsubMarketState()
+
     }
 
   }, [symbol])

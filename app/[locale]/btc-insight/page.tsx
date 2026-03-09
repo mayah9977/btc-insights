@@ -1,7 +1,14 @@
 'use client'
 
-import DashboardRouter from '@/components/DashboardRouter'
+import VIPMobilePage from '@/components/vip/mobile/VIPMobilePage'
 
 export default function BTCInsightPage() {
-  return <DashboardRouter />
+  return (
+    <VIPMobilePage
+      userId=""
+      weeklySummary={{}}
+      monthlySummary={{}}
+      vip3Metrics={{}}
+    />
+  )
 }

@@ -13,13 +13,15 @@ import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPLiveStatusStrip from '@/components/vip/VIPLiveStatusStrip'
 import VIPNoEntryReasonBanner from '@/components/vip/VIPNoEntryReasonBanner'
 import VIPWhaleWarningBanner from '@/components/vip/VIPWhaleWarningBanner'
+
 import VIPCompareTable from '@/components/vip/VIPCompareTable'
 import VIP30DayEvasionBadge from '@/components/vip/VIP30DayEvasionBadge'
 import VIPSummaryCards from '@/components/vip/VIPSummaryCards'
 import VIP3AdvancedMetrics from '@/components/vip/VIP3AdvancedMetrics'
+
 import VIPWhaleIntensityChart from '@/components/vip/VIPWhaleIntensityChart'
 import VIPWhaleTradeFlowChart from '@/components/vip/VIPWhaleTradeFlowChart'
-import VIPMobileLayout from '@/components/vip/VIPMobileLayout'
+
 import { VIPOverviewDashboard } from '@/components/vip/VIPOverviewDashboard'
 import { VIPJudgement } from '@/components/vip/VIPJudgement'
 import VIPJudgementTimeline from '@/components/vip/VIPJudgementTimeline'
@@ -27,18 +29,29 @@ import VIPRiskPanel from '@/components/vip/VIPRiskPanel'
 import VIPRiskScenarioHeatmap from '@/components/vip/VIPRiskScenarioHeatmap'
 import VIPNoEntryReason from '@/components/vip/VIPNoEntryReason'
 import VIPLossAvoidanceLog from '@/components/vip/VIPLossAvoidanceLog'
+
 import { NotificationHistoryView } from '@/components/notifications/NotificationHistoryView'
+
 import VIPTodayJudgementCard from '@/components/vip/VIPTodayJudgementCard'
 import VIPRiskAvoidanceCard from '@/components/vip/VIPRiskAvoidanceCard'
 import VIPDailySnapshot from '@/components/vip/VIPDailySnapshot'
+
 import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
 import { RawObservationBar } from '@/components/market/observation/RawObservationBar'
+
 import VIPSentimentPanel from '@/components/vip/VIPSentimentPanel'
 import VIPFortunePanel from '@/components/vip/VIPFortunePanel'
 
 /* =========================
-   🔥 Chart Dynamic Import
+   Mobile Page (NEW)
 ========================= */
+
+import VIPMobilePage from '@/components/vip/mobile/VIPMobilePage'
+
+/* =========================
+   Chart Dynamic Import
+========================= */
+
 const BtcLiveChart = dynamic(
   () => import('@/components/charts/BtcLiveChart'),
   { ssr: false }
@@ -59,30 +72,35 @@ export default function VIPClientPage({
 }: Props) {
 
   /* =========================
-     🔥 VIP Market Stream (SSE 시작)
+     SSE
   ========================= */
 
   useVIPMarketStream('BTCUSDT')
 
   /* =========================
-     🔥 모바일 판별
+     Mobile Detect
   ========================= */
 
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
+
     check()
+
     window.addEventListener('resize', check)
+
     return () => window.removeEventListener('resize', check)
   }, [])
 
   /* =========================
-     KPI 관련 (정적 데이터)
+     KPI
   ========================= */
 
   const { avoidedExtremeCount = 0, avoidedLossUSD = 0 } = useVipKpi()
+
   const { todayAvoidedLossPercent = 0 } = useVipHistoryStore()
+
   const { history } = useVipRiskHistoryStore()
 
   const hasExtremeInRiskHistory = useMemo(
@@ -98,6 +116,25 @@ export default function VIPClientPage({
 
   if (isMobile === null) return null
 
+  /* =========================
+     MOBILE
+  ========================= */
+
+  if (isMobile) {
+    return (
+      <VIPMobilePage
+        userId={userId}
+        weeklySummary={weeklySummary}
+        monthlySummary={monthlySummary}
+        vip3Metrics={vip3Metrics}
+      />
+    )
+  }
+
+  /* =========================
+     DESKTOP (기존 그대로)
+  ========================= */
+
   return (
     <>
       <VIPTopKPIBar
@@ -106,99 +143,63 @@ export default function VIPClientPage({
       />
 
       <VIPActionGateContextBar symbol="BTCUSDT" />
+
       <RawObservationBar symbol="BTCUSDT" />
+
       <VIPLiveStatusStrip />
 
       <VIPWhaleWarningBanner symbol="BTCUSDT" />
 
       <VIPNoEntryReasonBanner />
 
-      {/* ================= MOBILE ================= */}
+      <main className="space-y-10">
 
-      {isMobile && (
-        <VIPMobileLayout>
-
-          {shouldRenderAvoidanceSummary && (
-            <VIPSummaryCards
-              weekly={weeklySummary}
-              monthly={monthlySummary}
-            />
-          )}
-
-          <VIPWhaleIntensityChart symbol="BTCUSDT" />
-          <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
-          <VIPSentimentPanel symbol="BTCUSDT" />
-
-          <BtcLiveChart riskLevel="LOW" />
-
-          <VIPFortunePanel />
-          <VIPTodayJudgementCard />
-          <VIPJudgementTimeline />
-
-          <VIP3AdvancedMetrics {...vip3Metrics} />
-
-          <VIP30DayEvasionBadge
-            avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+        {shouldRenderAvoidanceSummary && (
+          <VIPSummaryCards
+            weekly={weeklySummary}
+            monthly={monthlySummary}
           />
+        )}
 
-          <VIPCompareTable />
+        <VIPWhaleIntensityChart symbol="BTCUSDT" />
 
-          <VIPRiskAvoidanceCard />
-          <VIPDailySnapshot />
+        <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
 
-          <VIPOverviewDashboard />
-          <VIPJudgement />
-          <VIPRiskPanel />
-          <VIPRiskScenarioHeatmap />
-          <VIPNoEntryReason />
-          <VIPLossAvoidanceLog />
+        <VIPSentimentPanel symbol="BTCUSDT" />
 
-        </VIPMobileLayout>
-      )}
+        <BtcLiveChart riskLevel="LOW" />
 
-      {/* ================= DESKTOP ================= */}
+        <VIPFortunePanel />
 
-      {!isMobile && (
-        <main className="space-y-10">
+        <VIPJudgementTimeline />
 
-          {shouldRenderAvoidanceSummary && (
-            <VIPSummaryCards
-              weekly={weeklySummary}
-              monthly={monthlySummary}
-            />
-          )}
+        <VIP3AdvancedMetrics {...vip3Metrics} />
 
-          <VIPWhaleIntensityChart symbol="BTCUSDT" />
-          <VIPWhaleTradeFlowChart symbol="BTCUSDT" />
-          <VIPSentimentPanel symbol="BTCUSDT" />
+        <VIP30DayEvasionBadge
+          avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
+        />
 
-          <BtcLiveChart riskLevel="LOW" />
+        <VIPCompareTable />
 
-          <VIPFortunePanel />
-          <VIPJudgementTimeline />
+        <VIPRiskAvoidanceCard />
 
-          <VIP3AdvancedMetrics {...vip3Metrics} />
+        <VIPDailySnapshot />
 
-          <VIP30DayEvasionBadge
-            avgAvoidedLossUSD={monthlySummary.avoidedLossUSD}
-          />
+        <VIPOverviewDashboard />
 
-          <VIPCompareTable />
+        <VIPJudgement />
 
-          <VIPRiskAvoidanceCard />
-          <VIPDailySnapshot />
+        <VIPRiskPanel />
 
-          <VIPOverviewDashboard />
-          <VIPJudgement />
-          <VIPRiskPanel />
-          <VIPRiskScenarioHeatmap />
-          <VIPNoEntryReason />
-          <VIPLossAvoidanceLog />
+        <VIPRiskScenarioHeatmap />
 
-          <NotificationHistoryView />
+        <VIPNoEntryReason />
 
-        </main>
-      )}
+        <VIPLossAvoidanceLog />
+
+        <NotificationHistoryView />
+
+      </main>
     </>
   )
 }

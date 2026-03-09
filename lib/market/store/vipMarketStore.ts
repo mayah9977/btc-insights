@@ -53,6 +53,7 @@ export const useVIPMarketStore = create<VIPMarketState>((set) => ({
 
   update: (data) =>
     set((state) => {
+
       let changed = false
       const next: Partial<VIPMarketState> = {}
 
@@ -82,6 +83,7 @@ let lastFlush = 0
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
+
   pending = { ...(pending || {}), ...data }
 
   if (scheduled) return
@@ -92,6 +94,7 @@ export function scheduleVIPMarketUpdate(
   const delay = Math.max(0, UPDATE_INTERVAL - (now - lastFlush))
 
   setTimeout(() => {
+
     if (pending) {
       useVIPMarketStore.getState().update(pending)
     }
