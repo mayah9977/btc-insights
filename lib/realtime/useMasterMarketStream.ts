@@ -1,10 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import {
-  scheduleMasterMarketUpdate
-} from '@/lib/market/store/masterMarketStore'
-
+import { scheduleMasterMarketUpdate } from '@/lib/market/store/masterMarketStore'
 import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 export function useMasterMarketStream(symbol: string) {
@@ -21,7 +18,8 @@ export function useMasterMarketStream(symbol: string) {
       'FINAL_DECISION',
       (data: any) => {
 
-        if (!data || data.symbol?.toUpperCase() !== upper) return
+        if (!data) return
+        if (data.symbol?.toUpperCase() !== upper) return
 
         scheduleMasterMarketUpdate({
           symbol: upper,
@@ -30,7 +28,7 @@ export function useMasterMarketStream(symbol: string) {
           confidence: data.confidence,
         })
 
-      },
+      }
     )
 
     /* ================= MARKET_STATE ================= */
@@ -39,20 +37,23 @@ export function useMasterMarketStream(symbol: string) {
       'MARKET_STATE',
       (data: any) => {
 
-        if (!data || data.symbol?.toUpperCase() !== upper) return
+        if (!data) return
+        if (data.symbol?.toUpperCase() !== upper) return
 
         scheduleMasterMarketUpdate({
           actionGate: data.actionGateState,
           macd: data.macd ?? null,
         })
 
-      },
+      }
     )
+
+    /* ================= CLEANUP ================= */
 
     return () => {
 
-      unsubDecision()
-      unsubMarketState()
+      if (unsubDecision) unsubDecision()
+      if (unsubMarketState) unsubMarketState()
 
     }
 

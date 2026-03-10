@@ -1,21 +1,36 @@
 'use client'
 
+import dynamic from 'next/dynamic'
+
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
-import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
+import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
 import RawObservationBarMobile from './RawObservationBarMobile'
 
-import VIPWhaleIntensityMiniChart from './VIPWhaleIntensityMiniChart'
-import VIPWhaleFlowMiniChart from './VIPWhaleFlowMiniChart'
-
-import VIPWhaleTradeGuideCardMobile from './VIPWhaleTradeGuideCardMobile'
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
-import VIPOverviewDashboardMobile from './VIPOverviewDashboardMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
-import { shallow } from 'zustand/shallow'
+
+/* ===============================
+   Mobile dynamic components
+=============================== */
+
+const VIPWhaleMiniCharts = dynamic(
+  () => import('./VIPWhaleMiniCharts'),
+  { ssr: false }
+)
+
+const VIPWhaleTradeGuideCardMobile = dynamic(
+  () => import('./VIPWhaleTradeGuideCardMobile'),
+  { ssr: false }
+)
+
+const VIPOverviewDashboardMobile = dynamic(
+  () => import('./VIPOverviewDashboardMobile'),
+  { ssr: false }
+)
 
 type Props = {
   userId: string
@@ -28,26 +43,23 @@ export default function VIPMobilePage(props: Props) {
 
   const symbol = 'BTCUSDT'
 
-  /* ================================
-     Mobile optimized stream
-  ================================= */
+  /* ===============================
+     Mobile optimized SSE
+  =============================== */
 
   useVIPMarketStream(symbol, { throttle: 4000 })
 
-  /* ================================
-     Zustand selector (optimized)
-  ================================= */
+  /* ===============================
+     Zustand selectors
+  =============================== */
 
-  const { whaleRatio, whaleNet, whaleIntensity } =
-  useVIPMarketStore((s: any) => ({
-    whaleRatio: s.whaleRatio,
-    whaleNet: s.whaleNet,
-    whaleIntensity: s.whaleIntensity
-  }))
+  const whaleRatio = useVIPMarketStore((s) => s.whaleRatio)
+  const whaleNet = useVIPMarketStore((s) => s.whaleNet)
+  const whaleIntensity = useVIPMarketStore((s) => s.whaleIntensity)
 
-  /* ================================
+  /* ===============================
      Derived values
-  ================================= */
+  =============================== */
 
   const long = Math.max(0, whaleNet * 100)
   const short = Math.max(0, -whaleNet * 100)
@@ -59,26 +71,25 @@ export default function VIPMobilePage(props: Props) {
       ? 'SHORT'
       : 'NONE'
 
-  const confidence = Math.min(Math.abs(whaleNet) * 100, 100)
+  const confidence =
+    Math.min(Math.abs(whaleNet) * 100, 100)
 
-  /* ================================
+  /* ===============================
      Render
-  ================================= */
+  =============================== */
 
   return (
     <main className="space-y-6 pb-20">
 
       <VIPTopKPIBar avoidedExtremeCount={0} />
 
-      <VIPActionGateContextBar symbol={symbol} />
+      <VIPActionGateContextBarMobile symbol={symbol} />
 
-      <VIPLiveStatusStripMobile />
+      <VIPLiveStatusStripMobile symbol={symbol} />
 
-      <RawObservationBarMobile />
+      <RawObservationBarMobile symbol={symbol} />
 
-      <VIPWhaleIntensityMiniChart />
-
-      <VIPWhaleFlowMiniChart />
+      <VIPWhaleMiniCharts />
 
       <VIPWhaleTradeGuideCardMobile
         ratio={whaleRatio}
@@ -97,4 +108,5 @@ export default function VIPMobilePage(props: Props) {
 
     </main>
   )
+
 }

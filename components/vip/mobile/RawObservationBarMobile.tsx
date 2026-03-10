@@ -1,37 +1,60 @@
 'use client'
 
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import React from 'react'
 
-export default function RawObservationBarMobile(){
+import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
+import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
+import { useRealtimeFundingRate } from '@/lib/realtime/useRealtimeFundingRate'
 
- const oi = useVIPMarketStore(s=>s.oi)
- const vol = useVIPMarketStore(s=>s.volume)
- const fund = useVIPMarketStore(s=>s.fundingRate)
+interface Props {
+  symbol: string
+}
 
- return(
-  <div className="grid grid-cols-3 gap-3 px-4 py-3 text-sm bg-black border-b border-zinc-800">
+export default function RawObservationBarMobile({
+  symbol
+}: Props) {
 
-   <div>
-    OI
-    <div className="text-green-400">
-     {oi?.toLocaleString() ?? '--'}
+  const oi = useRealtimeOI(symbol)
+  const vol = useRealtimeVolume(symbol)
+  const fund = useRealtimeFundingRate(symbol)
+
+  return (
+    <div
+      className="
+      grid
+      grid-cols-3
+      gap-3
+      px-4
+      py-3
+      text-xs
+      bg-black
+      border-b
+      border-zinc-800
+    "
+    >
+      <div>
+        <div className="text-gray-400">OI</div>
+
+        <div className="text-green-400 font-semibold">
+          {oi.openInterest?.toLocaleString() ?? '--'}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-gray-400">VOL</div>
+
+        <div className="text-green-400 font-semibold">
+          {vol.volume?.toLocaleString() ?? '--'}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-gray-400">FUNDING RATE</div>
+
+        <div className="text-green-400 font-semibold">
+          {fund.fundingRate?.toFixed(4) ?? '--'}
+        </div>
+      </div>
     </div>
-   </div>
-
-   <div>
-    VOL
-    <div className="text-green-400">
-     {vol?.toLocaleString() ?? '--'}
-    </div>
-   </div>
-
-   <div>
-    FUNDING RATE
-    <div className="text-green-400">
-     {fund?.toFixed(4) ?? '--'}
-    </div>
-   </div>
-
-  </div>
- )
+  )
 }

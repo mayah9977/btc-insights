@@ -1,28 +1,56 @@
 'use client'
 
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import React from 'react'
+import { useRealtimeMarketComposite } from '@/lib/realtime/useRealtimeMarketComposite'
 
-export default function VIPLiveStatusStripMobile(){
+interface Props {
+  symbol: string
+}
 
- const oi = useVIPMarketStore(s=>s.oi)
- const volume = useVIPMarketStore(s=>s.volume)
- const whaleIntensity = useVIPMarketStore(s=>s.whaleIntensity)
+export default function VIPLiveStatusStripMobile({
+  symbol
+}: Props) {
 
- return(
-  <div className="px-4 py-2 text-sm flex justify-between bg-zinc-900 border-b border-zinc-800">
+  const {
+    oi,
+    volume,
+    whaleIntensity
+  } = useRealtimeMarketComposite(symbol)
 
-   <div>
-    OI {oi?.toLocaleString() ?? '--'}
-   </div>
+  return (
+    <div
+      className="
+      px-4
+      py-2
+      text-xs
+      flex
+      justify-between
+      items-center
+      bg-zinc-900
+      border-b
+      border-zinc-800
+    "
+    >
+      <div className="flex flex-col">
+        <span className="text-gray-400">OI</span>
+        <span className="text-green-400 font-semibold">
+          {oi?.toLocaleString() ?? '--'}
+        </span>
+      </div>
 
-   <div>
-    Vol {volume?.toLocaleString() ?? '--'}
-   </div>
+      <div className="flex flex-col">
+        <span className="text-gray-400">VOL</span>
+        <span className="text-green-400 font-semibold">
+          {volume?.toLocaleString() ?? '--'}
+        </span>
+      </div>
 
-   <div>
-    Whale {(whaleIntensity ?? 0).toFixed(2)}
-   </div>
-
-  </div>
- )
+      <div className="flex flex-col">
+        <span className="text-gray-400">WHALE</span>
+        <span className="text-yellow-400 font-semibold">
+          {(whaleIntensity ?? 0).toFixed(2)}
+        </span>
+      </div>
+    </div>
+  )
 }

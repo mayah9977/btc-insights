@@ -23,7 +23,7 @@ export const VIPActionGateContextBar: React.FC<
 > = ({ symbol }) => {
 
   /* =========================
-     Stream Subscribe
+     Stream Subscribe (FIXED)
   ========================= */
 
   useMasterMarketStream(symbol)
