@@ -9,51 +9,72 @@ import RawObservationBarMobile from './RawObservationBarMobile'
 import VIPWhaleIntensityMiniChart from './VIPWhaleIntensityMiniChart'
 import VIPWhaleFlowMiniChart from './VIPWhaleFlowMiniChart'
 
+import VIPWhaleTradeGuideCardMobile from './VIPWhaleTradeGuideCardMobile'
+import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
+import VIPOverviewDashboardMobile from './VIPOverviewDashboardMobile'
+
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
 
-/* =========================
-   Props Type (Error Fix)
-========================= */
-
 type Props = {
-  userId: string
-  weeklySummary: any
-  monthlySummary: any
-  vip3Metrics: any
+  userId:string
+  weeklySummary:any
+  monthlySummary:any
+  vip3Metrics:any
 }
 
-export default function VIPMobilePage({
-  userId,
-  weeklySummary,
-  monthlySummary,
-  vip3Metrics,
-}: Props) {
+export default function VIPMobilePage(props:Props){
 
-  const symbol = 'BTCUSDT'
+  const symbol='BTCUSDT'
 
-  /* =========================
-     SSE Stream
-  ========================= */
+  useVIPMarketStream(symbol,{ throttle:2000 })
 
-  useVIPMarketStream(symbol)
+  const whaleRatio = useVIPMarketStore(s=>s.whaleRatio)
+  const whaleNet = useVIPMarketStore(s=>s.whaleNet)
+  const whaleIntensity = useVIPMarketStore(s=>s.whaleIntensity)
 
-  return (
+  const long = Math.max(0, whaleNet*100)
+  const short = Math.max(0, -whaleNet*100)
 
-    <main className="space-y-6 pb-20">
+  const dominant =
+    whaleNet>0.05 ? 'LONG' :
+    whaleNet<-0.05 ? 'SHORT' :
+    'NONE'
 
-      <VIPTopKPIBar avoidedExtremeCount={0} />
+  const confidence = Math.min(Math.abs(whaleNet)*100,100)
 
-      <VIPActionGateContextBar symbol={symbol} />
+  return(
 
-      <VIPLiveStatusStripMobile symbol={symbol} />
+  <main className="space-y-6 pb-20">
 
-      <RawObservationBarMobile symbol={symbol} />
+    <VIPTopKPIBar avoidedExtremeCount={0} />
 
-      <VIPWhaleIntensityMiniChart />
+    <VIPActionGateContextBar symbol={symbol} />
 
-      <VIPWhaleFlowMiniChart />
+    <VIPLiveStatusStripMobile symbol={symbol} />
 
-    </main>
+    <RawObservationBarMobile symbol={symbol} />
+
+    <VIPWhaleIntensityMiniChart />
+
+    <VIPWhaleFlowMiniChart />
+
+    <VIPWhaleTradeGuideCardMobile
+      ratio={whaleRatio}
+      net={whaleNet}
+    />
+
+    <VIPInstitutionalGuideCardMobile
+      long={long}
+      short={short}
+      confidence={confidence}
+      dominant={dominant}
+      intensity={whaleIntensity}
+    />
+
+    <VIPOverviewDashboardMobile/>
+
+  </main>
 
   )
 }

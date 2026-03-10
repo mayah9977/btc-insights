@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+
 import {
   scheduleVIPMarketUpdate,
 } from '@/lib/market/store/vipMarketStore'
@@ -14,7 +15,37 @@ import {
   subscribeLiquiditySweep,
 } from '@/lib/realtime/marketChannel'
 
-export function useVIPMarketStream(symbol: string) {
+/* =========================
+   Options Type
+========================= */
+
+type VIPMarketStreamOptions = {
+  throttle?: number
+}
+
+/* =========================
+   Hook
+========================= */
+
+export function useVIPMarketStream(
+  symbol: string,
+  options?: VIPMarketStreamOptions,
+) {
+
+  const throttle = options?.throttle ?? 0
+  const lastUpdateRef = useRef(0)
+
+  const shouldUpdate = () => {
+    if (!throttle) return true
+
+    const now = Date.now()
+
+    if (now - lastUpdateRef.current < throttle) return false
+
+    lastUpdateRef.current = now
+    return true
+  }
+
   useEffect(() => {
 
     const safeSymbol = symbol?.toUpperCase()
@@ -27,6 +58,7 @@ export function useVIPMarketStream(symbol: string) {
       SSE_EVENT.OI_TICK,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -44,6 +76,7 @@ export function useVIPMarketStream(symbol: string) {
       SSE_EVENT.VOLUME_TICK,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -61,6 +94,7 @@ export function useVIPMarketStream(symbol: string) {
       SSE_EVENT.FUNDING_RATE_TICK,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -78,6 +112,7 @@ export function useVIPMarketStream(symbol: string) {
       SSE_EVENT.WHALE_INTENSITY,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -95,6 +130,7 @@ export function useVIPMarketStream(symbol: string) {
       SSE_EVENT.WHALE_NET_PRESSURE,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -108,13 +144,14 @@ export function useVIPMarketStream(symbol: string) {
     )
 
     /* =========================
-       🔥 Whale Trade Flow (로그 추가)
+       Whale Trade Flow
     ========================= */
 
     const unsubTradeFlow = sseManager.subscribe(
       SSE_EVENT.WHALE_TRADE_FLOW,
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -132,6 +169,8 @@ export function useVIPMarketStream(symbol: string) {
       safeSymbol,
       (score, direction, ts) => {
 
+        if (!shouldUpdate()) return
+
         scheduleVIPMarketUpdate({
           fmai: score,
           ts: ts ?? Date.now(),
@@ -147,6 +186,8 @@ export function useVIPMarketStream(symbol: string) {
     const unsubAbsorption = subscribeWhaleAbsorption(
       safeSymbol,
       (direction, strength, confidence, ts) => {
+
+        if (!shouldUpdate()) return
 
         scheduleVIPMarketUpdate({
           absorption: strength,
@@ -164,6 +205,8 @@ export function useVIPMarketStream(symbol: string) {
       safeSymbol,
       (direction, strength, confidence, ts) => {
 
+        if (!shouldUpdate()) return
+
         scheduleVIPMarketUpdate({
           sweep: strength,
           ts: ts ?? Date.now(),
@@ -180,6 +223,7 @@ export function useVIPMarketStream(symbol: string) {
       'MARKET_STATE',
       (msg: any) => {
 
+        if (!shouldUpdate()) return
         if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
@@ -202,7 +246,7 @@ export function useVIPMarketStream(symbol: string) {
       unsubWhaleIntensity()
       unsubWhaleNet()
 
-      unsubTradeFlow()   // 🔥 추가 cleanup
+      unsubTradeFlow()
 
       unsubFMAI()
       unsubAbsorption()
@@ -212,5 +256,5 @@ export function useVIPMarketStream(symbol: string) {
 
     }
 
-  }, [symbol])
+  }, [symbol, throttle])
 }
