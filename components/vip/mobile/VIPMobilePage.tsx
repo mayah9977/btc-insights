@@ -15,66 +15,86 @@ import VIPOverviewDashboardMobile from './VIPOverviewDashboardMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
+import { shallow } from 'zustand/shallow'
 
 type Props = {
-  userId:string
-  weeklySummary:any
-  monthlySummary:any
-  vip3Metrics:any
+  userId: string
+  weeklySummary: any
+  monthlySummary: any
+  vip3Metrics: any
 }
 
-export default function VIPMobilePage(props:Props){
+export default function VIPMobilePage(props: Props) {
 
-  const symbol='BTCUSDT'
+  const symbol = 'BTCUSDT'
 
-  useVIPMarketStream(symbol,{ throttle:2000 })
+  /* ================================
+     Mobile optimized stream
+  ================================= */
 
-  const whaleRatio = useVIPMarketStore(s=>s.whaleRatio)
-  const whaleNet = useVIPMarketStore(s=>s.whaleNet)
-  const whaleIntensity = useVIPMarketStore(s=>s.whaleIntensity)
+  useVIPMarketStream(symbol, { throttle: 4000 })
 
-  const long = Math.max(0, whaleNet*100)
-  const short = Math.max(0, -whaleNet*100)
+  /* ================================
+     Zustand selector (optimized)
+  ================================= */
+
+  const { whaleRatio, whaleNet, whaleIntensity } =
+  useVIPMarketStore((s: any) => ({
+    whaleRatio: s.whaleRatio,
+    whaleNet: s.whaleNet,
+    whaleIntensity: s.whaleIntensity
+  }))
+
+  /* ================================
+     Derived values
+  ================================= */
+
+  const long = Math.max(0, whaleNet * 100)
+  const short = Math.max(0, -whaleNet * 100)
 
   const dominant =
-    whaleNet>0.05 ? 'LONG' :
-    whaleNet<-0.05 ? 'SHORT' :
-    'NONE'
+    whaleNet > 0.05
+      ? 'LONG'
+      : whaleNet < -0.05
+      ? 'SHORT'
+      : 'NONE'
 
-  const confidence = Math.min(Math.abs(whaleNet)*100,100)
+  const confidence = Math.min(Math.abs(whaleNet) * 100, 100)
 
-  return(
+  /* ================================
+     Render
+  ================================= */
 
-  <main className="space-y-6 pb-20">
+  return (
+    <main className="space-y-6 pb-20">
 
-    <VIPTopKPIBar avoidedExtremeCount={0} />
+      <VIPTopKPIBar avoidedExtremeCount={0} />
 
-    <VIPActionGateContextBar symbol={symbol} />
+      <VIPActionGateContextBar symbol={symbol} />
 
-    <VIPLiveStatusStripMobile symbol={symbol} />
+      <VIPLiveStatusStripMobile />
 
-    <RawObservationBarMobile symbol={symbol} />
+      <RawObservationBarMobile />
 
-    <VIPWhaleIntensityMiniChart />
+      <VIPWhaleIntensityMiniChart />
 
-    <VIPWhaleFlowMiniChart />
+      <VIPWhaleFlowMiniChart />
 
-    <VIPWhaleTradeGuideCardMobile
-      ratio={whaleRatio}
-      net={whaleNet}
-    />
+      <VIPWhaleTradeGuideCardMobile
+        ratio={whaleRatio}
+        net={whaleNet}
+      />
 
-    <VIPInstitutionalGuideCardMobile
-      long={long}
-      short={short}
-      confidence={confidence}
-      dominant={dominant}
-      intensity={whaleIntensity}
-    />
+      <VIPInstitutionalGuideCardMobile
+        long={long}
+        short={short}
+        confidence={confidence}
+        dominant={dominant}
+        intensity={whaleIntensity}
+      />
 
-    <VIPOverviewDashboardMobile/>
+      <VIPOverviewDashboardMobile />
 
-  </main>
-
+    </main>
   )
 }

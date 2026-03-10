@@ -1,41 +1,37 @@
 'use client'
 
-import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
-import { useRealtimeVolume } from '@/lib/realtime/useRealtimeVolume'
-import { useRealtimeFundingRate } from '@/lib/realtime/useRealtimeFundingRate'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
-export default function RawObservationBarMobile({symbol}:{symbol:string}){
+export default function RawObservationBarMobile(){
 
- const oi=useRealtimeOI(symbol)
- const vol=useRealtimeVolume(symbol)
- const fund=useRealtimeFundingRate(symbol)
+ const oi = useVIPMarketStore(s=>s.oi)
+ const vol = useVIPMarketStore(s=>s.volume)
+ const fund = useVIPMarketStore(s=>s.fundingRate)
 
  return(
-
- <div className="grid grid-cols-3 gap-3 px-4 py-3 text-sm bg-black border-b border-zinc-800">
+  <div className="grid grid-cols-3 gap-3 px-4 py-3 text-sm bg-black border-b border-zinc-800">
 
    <div>
-     OI
-     <div className="text-green-400">
-       {oi.openInterest?.toLocaleString() ?? '--'}
-     </div>
+    OI
+    <div className="text-green-400">
+     {oi?.toLocaleString() ?? '--'}
+    </div>
    </div>
 
    <div>
-     VOL
-     <div className="text-green-400">
-       {vol.volume?.toLocaleString() ?? '--'}
-     </div>
+    VOL
+    <div className="text-green-400">
+     {vol?.toLocaleString() ?? '--'}
+    </div>
    </div>
 
    <div>
-     FUND
-     <div className="text-green-400">
-       {fund.fundingRate?.toFixed(4) ?? '--'}
-     </div>
+    FUNDING RATE
+    <div className="text-green-400">
+     {fund?.toFixed(4) ?? '--'}
+    </div>
    </div>
 
- </div>
-
+  </div>
  )
 }
