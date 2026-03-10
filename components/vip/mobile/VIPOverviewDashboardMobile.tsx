@@ -2,10 +2,12 @@
 
 import dynamic from 'next/dynamic'
 
-const VIPOverviewDashboard = dynamic(
+import VIPReportDownloadCard from './VIPReportDownloadCard'
+
+const MarketContextPanel = dynamic(
   () =>
-    import('@/components/vip/VIPOverviewDashboard')
-      .then(mod => mod.VIPOverviewDashboard),
+    import('@/components/market/context/MarketContextPanel')
+      .then(mod => mod.MarketContextPanel),
   { ssr: false }
 )
 
@@ -13,9 +15,15 @@ export default function VIPOverviewDashboardMobile(){
 
   return (
 
-    <div className="px-4">
+    <div className="space-y-6">
 
-      <VIPOverviewDashboard />
+      {/* VIP Report Download */}
+
+      <VIPReportDownloadCard />
+
+      {/* Market Context */}
+
+      <MarketContextPanel />
 
     </div>
 
