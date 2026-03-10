@@ -6,7 +6,6 @@ import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
-import RawObservationBarMobile from './RawObservationBarMobile'
 
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
 
@@ -81,21 +80,25 @@ export default function VIPMobilePage(props: Props) {
   return (
     <main className="space-y-6 pb-20">
 
+      {/* KPI */}
       <VIPTopKPIBar avoidedExtremeCount={0} />
 
+      {/* Action Gate */}
       <VIPActionGateContextBarMobile symbol={symbol} />
 
+      {/* Live market strip */}
       <VIPLiveStatusStripMobile symbol={symbol} />
 
-      <RawObservationBarMobile symbol={symbol} />
-
+      {/* Whale charts */}
       <VIPWhaleMiniCharts />
 
+      {/* Whale trade guide */}
       <VIPWhaleTradeGuideCardMobile
         ratio={whaleRatio}
         net={whaleNet}
       />
 
+      {/* Institutional flow */}
       <VIPInstitutionalGuideCardMobile
         long={long}
         short={short}
@@ -104,6 +107,7 @@ export default function VIPMobilePage(props: Props) {
         intensity={whaleIntensity}
       />
 
+      {/* Market Context */}
       <VIPOverviewDashboardMobile />
 
     </main>
