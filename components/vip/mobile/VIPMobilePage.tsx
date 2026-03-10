@@ -6,6 +6,7 @@ import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
+import MobileBollingerContext from './MobileBollingerContext'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
@@ -80,6 +81,9 @@ export default function VIPMobilePage(props: Props) {
 
       {/* KPI */}
       <VIPTopKPIBar avoidedExtremeCount={0} />
+
+      {/* Bollinger Context */}
+      <MobileBollingerContext />
 
       {/* Live market strip */}
       <VIPLiveStatusStripMobile symbol={symbol} />
