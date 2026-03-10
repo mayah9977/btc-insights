@@ -12,12 +12,10 @@ import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
 export default function MobileBollingerContext() {
-
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
   const signal = useMemo(() => {
-
     if (
       confirmed?.signalType ===
       BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
@@ -26,41 +24,36 @@ export default function MobileBollingerContext() {
     }
 
     return confirmed ?? live
-
   }, [confirmed, live])
 
-  if (!signal) return null
+  const signalType = signal?.signalType
+  const sentence = signalType
+    ? BOLLINGER_SENTENCE_MAP[signalType]
+    : null
 
-  const sentence = BOLLINGER_SENTENCE_MAP[signal.signalType]
+  /* 항상 호출 */
+  const { flash, pulse, transition } =
+    usePremiumSignalAnimation(signalType)
 
-  if (!sentence) return null
+  const typedSummary = useTypewriter(
+    sentence?.summary ?? '',
+    10
+  )
 
-  /* =====================================================
-     Premium Signal Animation
-  ===================================================== */
+  const typedDescription = useTypewriter(
+    sentence?.description ?? '',
+    8
+  )
 
-  const {
-    flash,
-    pulse,
-    transition
-  } = usePremiumSignalAnimation(signal.signalType)
+  const typedTendency = useTypewriter(
+    sentence?.tendency ?? '',
+    12
+  )
 
-  /* =====================================================
-     Typewriter
-  ===================================================== */
-
-  const typedSummary = useTypewriter(sentence.summary + signal.signalType, 10)
-  const typedDescription = useTypewriter(sentence.description + signal.signalType, 8)
-  const typedTendency = useTypewriter(sentence.tendency + signal.signalType, 12)
+  if (!signal || !sentence) return null
 
   return (
-
     <div className="mx-4 relative">
-
-      {/* =========================================
-          Shimmer Sweep (safe version)
-      ========================================= */}
-
       {flash && (
         <div
           className="
@@ -76,10 +69,6 @@ export default function MobileBollingerContext() {
         />
       )}
 
-      {/* =========================================
-          Main Card
-      ========================================= */}
-
       <div
         className={`
         rounded-xl
@@ -91,54 +80,23 @@ export default function MobileBollingerContext() {
         space-y-3
         transition-all
         duration-500
-
         ${flash ? 'shadow-[0_0_25px_rgba(250,204,21,0.35)]' : ''}
-
         ${pulse ? 'animate-pulse' : ''}
-
         ${transition ? 'scale-[1.02]' : ''}
         `}
       >
-
-        {/* Summary */}
-
-        <div
-          className="
-          text-yellow-400
-          font-semibold
-          text-sm
-          tracking-wide
-          "
-        >
+        <div className="text-yellow-400 font-semibold text-sm tracking-wide">
           {typedSummary}
         </div>
 
-        {/* Description */}
-
-        <div
-          className="
-          text-gray-300
-          text-xs
-          leading-relaxed
-          "
-        >
+        <div className="text-gray-300 text-xs leading-relaxed">
           {typedDescription}
         </div>
 
-        {/* Keyword */}
-
-        <div
-          className="
-          text-gray-500
-          text-xs
-          italic
-          "
-        >
+        <div className="text-gray-500 text-xs italic">
           {typedTendency}
         </div>
-
       </div>
-
     </div>
   )
 }
