@@ -21,17 +21,17 @@ export default function ActionGateRendererMobile({
 
   const title =
     gate === 'OBSERVE'
-      ? '시장 관측 구간'
+      ? 'AI is observing the market.'
       : gate === 'CAUTION'
-      ? '시장 주의 구간'
-      : '위험 구간'
+      ? 'AI is observing the market.'
+      : 'AI is observing the market.'
 
   const description =
     gate === 'OBSERVE'
-      ? '현재 시장은 비교적 안정적인 상태이며 AI 시스템이 시장을 관측하고 있습니다.'
+      ? '현재 실시간데이터(고래움직임/체결량/거래량/온체인데이터/ Open Interest/Funding rate 등)를 기반으로 시장상황을 관찰중에 있습니다.'
       : gate === 'CAUTION'
-      ? '시장 변동성이 증가하고 있으며 리스크 관리가 필요합니다.'
-      : '현재 시장은 위험 구간으로 진입했으며 적극적인 리스크 관리가 필요합니다.'
+      ? '현재 실시간데이터(고래움직임/체결량/거래량/온체인데이터/ Open Interest/Funding rate 등)를 기반으로 시장상황을 관찰중에 있습니다.'
+      : '현재 실시간데이터(고래움직임/체결량/거래량/온체인데이터/ Open Interest/Funding rate 등)를 기반으로 시장상황을 관찰중에 있습니다.'
 
   const bg =
     gate === 'OBSERVE'

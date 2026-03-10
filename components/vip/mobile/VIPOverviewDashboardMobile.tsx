@@ -2,9 +2,10 @@
 
 import dynamic from 'next/dynamic'
 
-const MarketContextPanel = dynamic(
-  () => import('@/components/market/context/MarketContextPanel')
-    .then(mod => mod.MarketContextPanel),
+const VIPOverviewDashboard = dynamic(
+  () =>
+    import('@/components/vip/VIPOverviewDashboard')
+      .then(mod => mod.VIPOverviewDashboard),
   { ssr: false }
 )
 
@@ -14,7 +15,7 @@ export default function VIPOverviewDashboardMobile(){
 
     <div className="px-4">
 
-      <MarketContextPanel />
+      <VIPOverviewDashboard />
 
     </div>
 

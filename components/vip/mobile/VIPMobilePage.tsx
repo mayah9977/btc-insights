@@ -3,10 +3,8 @@
 import dynamic from 'next/dynamic'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
-import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
-
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
@@ -82,9 +80,6 @@ export default function VIPMobilePage(props: Props) {
 
       {/* KPI */}
       <VIPTopKPIBar avoidedExtremeCount={0} />
-
-      {/* Action Gate */}
-      <VIPActionGateContextBarMobile symbol={symbol} />
 
       {/* Live market strip */}
       <VIPLiveStatusStripMobile symbol={symbol} />
