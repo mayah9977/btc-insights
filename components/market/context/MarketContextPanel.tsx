@@ -42,9 +42,6 @@ export function MarketContextPanel() {
         const newData: MarketContextData = json.data
 
         setData((prev) => {
-          /* =========================
-             🔐 1️⃣ 유효성 검사
-          ========================= */
           const isValid =
             newData.summary &&
             newData.summary.trim().length > 20 &&
@@ -60,9 +57,6 @@ export function MarketContextPanel() {
             return prev
           }
 
-          /* =========================
-             🔄 2️⃣ updatedAt 변경 감지
-          ========================= */
           if (!prev || prev.updatedAt !== newData.updatedAt) {
 
             if (
@@ -102,10 +96,6 @@ export function MarketContextPanel() {
     }
   }, [])
 
-  /* =========================
-     🧱 로딩 / 대기 UI
-  ========================= */
-
   if (loading) {
     return (
       <section className="mt-8 rounded-2xl border border-yellow-500/20 bg-black/50 p-6 text-sm text-gray-400">
@@ -124,10 +114,6 @@ export function MarketContextPanel() {
 
   const updatedDate = new Date(data.updatedAt)
   const timeLabel = `${updatedDate.toLocaleDateString()} ${updatedDate.toLocaleTimeString()}`
-
-  /* =========================
-     🎨 렌더
-  ========================= */
 
   return (
     <>
@@ -163,10 +149,11 @@ export function MarketContextPanel() {
             rounded-3xl
             border border-yellow-500/20
             bg-gradient-to-b from-black via-zinc-900 to-black
-            p-8
+            p-5 md:p-8
             shadow-[0_30px_100px_rgba(0,0,0,0.8)]
           "
         >
+
           <AnimatePresence>
             {showFlash && (
               <motion.div
@@ -179,15 +166,25 @@ export function MarketContextPanel() {
             )}
           </AnimatePresence>
 
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold tracking-wide text-yellow-400">
-              📰 오늘의 주요뉴스와 전망
-            </h3>
+          {/* HEADER */}
 
-            <span className="text-xs text-yellow-500/70">
-              Updated: {timeLabel}
-            </span>
+          <div className="space-y-1">
+
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📰</span>
+
+              <h3 className="text-base md:text-xl font-bold tracking-wide text-yellow-400">
+                오늘의 주요뉴스와 전망
+              </h3>
+            </div>
+
+            <div className="text-xs text-yellow-500/70">
+              Updated {timeLabel}
+            </div>
+
           </div>
+
+          {/* HEADLINES */}
 
           <div className="space-y-4 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
@@ -206,23 +203,30 @@ export function MarketContextPanel() {
             </ul>
           </div>
 
+          {/* SUMMARY */}
+
           <div className="space-y-3 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
               🔎 시장 요약
             </h4>
+
             <p className="whitespace-pre-line leading-relaxed text-gray-300">
               {data.summary}
             </p>
           </div>
 
+          {/* MID LONG TERM */}
+
           <div className="space-y-3 text-sm mt-6">
             <h4 className="font-semibold text-yellow-300">
               🧭 중장기 해석
             </h4>
+
             <p className="whitespace-pre-line leading-relaxed text-gray-300">
               {data.midLongTerm}
             </p>
           </div>
+
         </motion.section>
       </AnimatePresence>
     </>

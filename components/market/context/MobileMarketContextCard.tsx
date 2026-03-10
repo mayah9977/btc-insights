@@ -23,18 +23,24 @@ export default function MobileMarketContextCard({
       border
       border-yellow-700/30
       bg-zinc-900
-      p-4
+      p-5
       space-y-4
       shadow-lg
       "
     >
 
-      {/* Header */}
+      <div className="space-y-1">
 
-      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
 
-        <div className="text-yellow-400 font-semibold">
-          📰 Market Intelligence
+          <span className="text-lg">
+            📰
+          </span>
+
+          <span className="text-yellow-400 font-semibold text-sm">
+            Market Intelligence
+          </span>
+
         </div>
 
         <div className="text-xs text-gray-400">
@@ -42,8 +48,6 @@ export default function MobileMarketContextCard({
         </div>
 
       </div>
-
-      {/* Headlines */}
 
       <div className="space-y-2">
 
@@ -63,8 +67,6 @@ export default function MobileMarketContextCard({
 
       </div>
 
-      {/* Summary */}
-
       <div className="space-y-1">
 
         <div className="text-yellow-400 text-sm">
@@ -76,8 +78,6 @@ export default function MobileMarketContextCard({
         </p>
 
       </div>
-
-      {/* Outlook */}
 
       <div className="space-y-1">
 
