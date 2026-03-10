@@ -1,12 +1,17 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 
 import ActionGateStatusMobile from './ActionGateStatusMobile'
 import ActionGateRendererMobile from './ActionGateRendererMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
+
+import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
+import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
+
+import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
 interface Props {
   symbol: string
@@ -15,6 +20,10 @@ interface Props {
 export default function VIPActionGateContextBarMobile({
   symbol
 }: Props) {
+
+  /* =========================
+     Gate State
+  ========================= */
 
   const vipGate = useVIPMarketStore(
     (s) => s.actionGateState
@@ -29,6 +38,30 @@ export default function VIPActionGateContextBarMobile({
     masterGate ??
     'OBSERVE'
 
+  /* =========================
+     Bollinger Signal
+  ========================= */
+
+  const confirmed = useRealtimeBollingerSignal()
+  const live = useLiveBollingerCommentary()
+
+  const effectiveSignal = useMemo(() => {
+
+    if (
+      confirmed?.signalType ===
+      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
+    ) {
+      return confirmed
+    }
+
+    return confirmed ?? live
+
+  }, [confirmed, live])
+
+  /* =========================
+     Render
+  ========================= */
+
   return (
     <div className="space-y-3 px-4">
 
@@ -38,6 +71,7 @@ export default function VIPActionGateContextBarMobile({
 
       <ActionGateRendererMobile
         gate={gate as any}
+        signalType={effectiveSignal?.signalType}
       />
 
     </div>

@@ -1,6 +1,8 @@
 'use client'
 
 import React from 'react'
+import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -9,10 +11,12 @@ export type ActionGateState =
 
 interface Props {
   gate: ActionGateState
+  signalType?: BollingerSignalType
 }
 
 export default function ActionGateRendererMobile({
-  gate
+  gate,
+  signalType
 }: Props) {
 
   const title =
@@ -36,24 +40,64 @@ export default function ActionGateRendererMobile({
       ? 'bg-yellow-900/20 border-yellow-600/30'
       : 'bg-red-900/20 border-red-600/30'
 
+  const sentence =
+    signalType
+      ? BOLLINGER_SENTENCE_MAP[signalType]
+      : null
+
   return (
-    <div
-      className={`
-        rounded-xl
-        border
-        px-4
-        py-4
-        text-sm
-        ${bg}
-      `}
-    >
-      <div className="font-semibold text-white mb-2">
-        {title}
+    <div className="space-y-3">
+
+      {/* Action Gate */}
+      <div
+        className={`
+          rounded-xl
+          border
+          px-4
+          py-4
+          text-sm
+          ${bg}
+        `}
+      >
+        <div className="font-semibold text-white mb-2">
+          {title}
+        </div>
+
+        <div className="text-gray-300 leading-relaxed">
+          {description}
+        </div>
       </div>
 
-      <div className="text-gray-300 leading-relaxed">
-        {description}
-      </div>
+      {/* Bollinger Interpretation */}
+      {sentence && (
+        <div
+          className="
+            rounded-xl
+            border
+            border-zinc-800
+            bg-zinc-900
+            px-4
+            py-4
+            text-sm
+            space-y-2
+          "
+        >
+
+          <div className="text-yellow-400 font-semibold">
+            {sentence.summary}
+          </div>
+
+          <div className="text-gray-300 text-xs leading-relaxed">
+            {sentence.description}
+          </div>
+
+          <div className="text-gray-500 text-xs">
+            {sentence.tendency}
+          </div>
+
+        </div>
+      )}
+
     </div>
   )
 }
