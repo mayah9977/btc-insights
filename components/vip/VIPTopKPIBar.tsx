@@ -29,29 +29,40 @@ function VIPTopKPIBar({
 
         {/* =========================
             📱 Mobile Compact KPI
+            BTC 가격 아래 버튼 배치
         ========================= */}
-        <div className="md:hidden px-4 py-2 text-sm flex items-center justify-between text-neutral-300">
+        <div className="md:hidden px-4 py-2 text-sm text-neutral-300 space-y-1">
 
-          <span>
-            BTC{' '}
-            <strong className="text-white">
-              <PriceTicker />
-            </strong>
-          </span>
+          {/* BTC 가격 */}
+          <div className="flex items-center justify-between">
 
-          <button
-            onClick={() => openGuide('HOW_TO_USE')}
-            className="text-green-400 hover:text-green-300 transition"
-          >
-            시스템 활용방법
-          </button>
+            <span>
+              BTC{' '}
+              <strong className="text-white">
+                <PriceTicker />
+              </strong>
+            </span>
 
-          <button
-            onClick={() => openGuide('DESCRIPTION')}
-            className="text-yellow-400 hover:text-yellow-300 transition"
-          >
-            시스템 설명
-          </button>
+          </div>
+
+          {/* 시스템 버튼 */}
+          <div className="flex gap-3">
+
+            <button
+              onClick={() => openGuide('HOW_TO_USE')}
+              className="text-green-400 hover:text-green-300 transition"
+            >
+              시스템 활용방법
+            </button>
+
+            <button
+              onClick={() => openGuide('DESCRIPTION')}
+              className="text-yellow-400 hover:text-yellow-300 transition"
+            >
+              시스템 설명
+            </button>
+
+          </div>
 
         </div>
 
