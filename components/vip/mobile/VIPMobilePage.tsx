@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
-
+import VIPRiskEngineBannerMobile from './VIPRiskEngineBannerMobile'
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
 import MobileBollingerContext from './MobileBollingerContext'
@@ -81,6 +81,9 @@ export default function VIPMobilePage(props: Props) {
 
       {/* KPI */}
       <VIPTopKPIBar avoidedExtremeCount={0} />
+
+      {/* RiskEngineBanner */} 
+      <VIPRiskEngineBannerMobile />
 
       {/* Bollinger Context */}
       <MobileBollingerContext />

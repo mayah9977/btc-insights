@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
+import { useSignalSound } from '@/lib/sound/useSignalSound'
 
 type Props = {
   long: number
@@ -18,6 +19,31 @@ export default function VIPInstitutionalGuideCardMobile({
   intensity
 }: Props) {
 
+  const { playSignal } = useSignalSound()
+  const prevConfidence = useRef(0)
+
+  /* =========================
+     🔊 Sound Trigger
+  ========================= */
+
+  useEffect(() => {
+
+    if (
+      confidence >= 65 &&
+      prevConfidence.current < 65
+    ) {
+      playSignal()
+    }
+
+    prevConfidence.current = confidence
+
+  }, [confidence, playSignal])
+
+
+  /* =========================
+     Derived Values
+  ========================= */
+
   const color =
     dominant === 'LONG'
       ? 'text-emerald-400'
@@ -34,6 +60,11 @@ export default function VIPInstitutionalGuideCardMobile({
 
   const gauge = Math.min(confidence, 100)
 
+
+  /* =========================
+     Render
+  ========================= */
+
   return (
     <div
       className="
@@ -47,6 +78,7 @@ export default function VIPInstitutionalGuideCardMobile({
       space-y-3
     "
     >
+
       <div className="flex justify-between">
 
         <div className="font-semibold text-white">
@@ -59,14 +91,17 @@ export default function VIPInstitutionalGuideCardMobile({
 
       </div>
 
+
       <div className="text-xs text-gray-400">
         매수 {long.toFixed(0)}% |
         매도 {short.toFixed(0)}%
       </div>
 
+
       <div className="text-xs text-gray-400">
         Whale Intensity {intensity.toFixed(1)}%
       </div>
+
 
       <div className="h-2 bg-zinc-800 rounded overflow-hidden">
 
@@ -76,6 +111,7 @@ export default function VIPInstitutionalGuideCardMobile({
         />
 
       </div>
+
 
       <div className="text-xs text-gray-500">
         신뢰도 {confidence.toFixed(1)}%

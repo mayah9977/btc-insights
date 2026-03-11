@@ -1,5 +1,8 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
+import { useSignalSound } from '@/lib/sound/useSignalSound'
+
 type Props = {
   ratio: number
   net: number
@@ -7,8 +10,32 @@ type Props = {
 
 export default function VIPWhaleTradeGuideCardMobile({
   ratio,
-  net
+  net,
 }: Props) {
+
+  const { playSignal } = useSignalSound()
+  const prev = useRef(0)
+
+  /* =========================
+     🔊 Sound Trigger
+  ========================= */
+
+  useEffect(() => {
+
+    if (
+      Math.abs(net) >= 0.4 &&
+      Math.abs(prev.current) < 0.4
+    ) {
+      playSignal()
+    }
+
+    prev.current = net
+
+  }, [net, playSignal])
+
+  /* =========================
+     Derived Values
+  ========================= */
 
   const direction =
     net > 0
@@ -23,6 +50,10 @@ export default function VIPWhaleTradeGuideCardMobile({
       : net < 0
       ? 'text-blue-400'
       : 'text-gray-400'
+
+  /* =========================
+     Render
+  ========================= */
 
   return (
 
@@ -51,9 +82,11 @@ export default function VIPWhaleTradeGuideCardMobile({
 
       </div>
 
+
       <div className="text-xs text-gray-400">
         Trade Ratio {(ratio * 100).toFixed(1)}%
       </div>
+
 
       <div className="text-xs text-gray-500">
         Net Flow {(net * 100).toFixed(1)}%
@@ -62,5 +95,4 @@ export default function VIPWhaleTradeGuideCardMobile({
     </div>
 
   )
-
 }

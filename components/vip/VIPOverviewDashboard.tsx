@@ -48,7 +48,7 @@ export function VIPOverviewDashboard() {
             active:scale-[0.98]
           "
         >
-          📄 Download today’s VIP report
+          📄 Download 크립토 분석 및 전망
         </button>
       )}
 
