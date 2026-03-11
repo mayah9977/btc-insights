@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-import { useSignalSound } from '@/lib/sound/useSignalSound'
+import { vipSound } from '@/lib/sound/vipSoundSystem'
 
 export default function VIPWhaleMiniCharts() {
 
@@ -17,8 +17,6 @@ export default function VIPWhaleMiniCharts() {
   const whaleNet = useVIPMarketStore(
     (s) => s.whaleNet
   )
-
-  const { playSignal } = useSignalSound()
 
   const prevIntensity = useRef(0)
   const prevFlow = useRef(0)
@@ -54,39 +52,42 @@ export default function VIPWhaleMiniCharts() {
   useEffect(() => {
 
     /* Whale Intensity ≥ 60 */
+
     if (
       prevIntensity.current < 60 &&
       intensityPercent >= 60
     ) {
-      playSignal()
+      vipSound.play('signal')
     }
 
     /* Whale Intensity ≥ 80 */
+
     if (
       prevIntensity.current < 80 &&
       intensityPercent >= 80
     ) {
-      playSignal()
+      vipSound.play('signal')
     }
 
     prevIntensity.current = intensityPercent
 
-  }, [intensityPercent, playSignal])
+  }, [intensityPercent])
 
 
   useEffect(() => {
 
     /* Whale Flow trigger */
+
     if (
       Math.abs(prevFlow.current) < 0.4 &&
       Math.abs(whaleNet) >= 0.4
     ) {
-      playSignal()
+      vipSound.play('signal')
     }
 
     prevFlow.current = whaleNet
 
-  }, [whaleNet, playSignal])
+  }, [whaleNet])
 
 
   /* =========================
@@ -94,6 +95,7 @@ export default function VIPWhaleMiniCharts() {
   ========================= */
 
   return (
+
     <div className="px-4 space-y-4">
 
       {/* Whale Intensity */}
@@ -140,5 +142,6 @@ export default function VIPWhaleMiniCharts() {
       </div>
 
     </div>
+
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { useSignalSound } from '@/lib/sound/useSignalSound'
+import { vipSound } from '@/lib/sound/vipSoundSystem'
 
 type Props = {
   long: number
@@ -19,7 +19,6 @@ export default function VIPInstitutionalGuideCardMobile({
   intensity
 }: Props) {
 
-  const { playSignal } = useSignalSound()
   const prevConfidence = useRef(0)
 
   /* =========================
@@ -32,12 +31,12 @@ export default function VIPInstitutionalGuideCardMobile({
       confidence >= 65 &&
       prevConfidence.current < 65
     ) {
-      playSignal()
+      vipSound.play('signal')
     }
 
     prevConfidence.current = confidence
 
-  }, [confidence, playSignal])
+  }, [confidence])
 
 
   /* =========================
@@ -66,6 +65,7 @@ export default function VIPInstitutionalGuideCardMobile({
   ========================= */
 
   return (
+
     <div
       className="
       mx-4
