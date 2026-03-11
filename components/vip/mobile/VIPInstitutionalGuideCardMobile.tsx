@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
+import VIPSignalCard from './VIPSignalCard'
 
 type Props = {
   long: number
@@ -19,7 +20,10 @@ export default function VIPInstitutionalGuideCardMobile({
   intensity
 }: Props) {
 
-  const prevConfidence = useRef(0)
+  const prevConfidence = useRef<number>(0)
+
+  /* animation trigger */
+  const [trigger, setTrigger] = useState(0)
 
   /* =========================
      🔊 Sound Trigger
@@ -32,12 +36,12 @@ export default function VIPInstitutionalGuideCardMobile({
       prevConfidence.current < 65
     ) {
       vipSound.play('signal')
+      setTrigger(Date.now())
     }
 
     prevConfidence.current = confidence
 
   }, [confidence])
-
 
   /* =========================
      Derived Values
@@ -59,64 +63,63 @@ export default function VIPInstitutionalGuideCardMobile({
 
   const gauge = Math.min(confidence, 100)
 
-
   /* =========================
      Render
   ========================= */
 
   return (
 
-    <div
-      className="
-      mx-4
-      rounded-xl
-      border
-      border-zinc-800
-      bg-zinc-900
-      p-4
-      text-sm
-      space-y-3
-    "
-    >
+    <VIPSignalCard trigger={trigger}>
 
-      <div className="flex justify-between">
+      <div
+        className="
+        mx-4
+        rounded-xl
+        border
+        border-zinc-800
+        bg-zinc-900
+        p-4
+        text-sm
+        space-y-3
+      "
+      >
 
-        <div className="font-semibold text-white">
-          기관 자금 흐름
+        <div className="flex justify-between">
+
+          <div className="font-semibold text-white">
+            기관 자금 흐름
+          </div>
+
+          <div className={`font-semibold ${color}`}>
+            {label}
+          </div>
+
         </div>
 
-        <div className={`font-semibold ${color}`}>
-          {label}
+        <div className="text-xs text-gray-400">
+          매수 {long.toFixed(0)}% | 매도 {short.toFixed(0)}%
+        </div>
+
+        <div className="text-xs text-gray-400">
+          Whale Intensity {intensity.toFixed(1)}%
+        </div>
+
+        <div className="h-2 bg-zinc-800 rounded overflow-hidden">
+
+          <div
+            className="h-full bg-emerald-400"
+            style={{ width: `${gauge}%` }}
+          />
+
+        </div>
+
+        <div className="text-xs text-gray-500">
+          신뢰도 {confidence.toFixed(1)}%
         </div>
 
       </div>
 
+    </VIPSignalCard>
 
-      <div className="text-xs text-gray-400">
-        매수 {long.toFixed(0)}% |
-        매도 {short.toFixed(0)}%
-      </div>
-
-
-      <div className="text-xs text-gray-400">
-        Whale Intensity {intensity.toFixed(1)}%
-      </div>
-
-
-      <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-
-        <div
-          className="h-full bg-emerald-400"
-          style={{ width: `${gauge}%` }}
-        />
-
-      </div>
-
-
-      <div className="text-xs text-gray-500">
-        신뢰도 {confidence.toFixed(1)}%
-      </div>
-
-    </div>
   )
 }

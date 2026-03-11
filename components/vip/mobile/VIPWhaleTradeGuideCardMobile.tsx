@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
+import VIPSignalCard from './VIPSignalCard'
 
 type Props = {
   ratio: number
@@ -13,7 +14,10 @@ export default function VIPWhaleTradeGuideCardMobile({
   net,
 }: Props) {
 
-  const prev = useRef(0)
+  const prev = useRef<number>(0)
+
+  /* animation trigger */
+  const [trigger, setTrigger] = useState(0)
 
   /* =========================
      🔊 Sound Trigger
@@ -26,12 +30,12 @@ export default function VIPWhaleTradeGuideCardMobile({
       Math.abs(prev.current) < 0.4
     ) {
       vipSound.play('signal')
+      setTrigger(Date.now())
     }
 
     prev.current = net
 
   }, [net])
-
 
   /* =========================
      Derived Values
@@ -51,49 +55,50 @@ export default function VIPWhaleTradeGuideCardMobile({
       ? 'text-blue-400'
       : 'text-gray-400'
 
-
   /* =========================
      Render
   ========================= */
 
   return (
 
-    <div
-      className="
-      mx-4
-      rounded-xl
-      border
-      border-zinc-800
-      bg-zinc-900
-      p-4
-      text-sm
-      space-y-3
-    "
-    >
+    <VIPSignalCard trigger={trigger}>
 
-      <div className="flex justify-between">
+      <div
+        className="
+        mx-4
+        rounded-xl
+        border
+        border-zinc-800
+        bg-zinc-900
+        p-4
+        text-sm
+        space-y-3
+      "
+      >
 
-        <div className="text-white font-semibold">
-          Whale Trade Flow
+        <div className="flex justify-between">
+
+          <div className="text-white font-semibold">
+            Whale Trade Flow
+          </div>
+
+          <div className={`font-semibold ${color}`}>
+            {direction}
+          </div>
+
         </div>
 
-        <div className={`font-semibold ${color}`}>
-          {direction}
+        <div className="text-xs text-gray-400">
+          Trade Ratio {(ratio * 100).toFixed(1)}%
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Net Flow {(net * 100).toFixed(1)}%
         </div>
 
       </div>
 
-
-      <div className="text-xs text-gray-400">
-        Trade Ratio {(ratio * 100).toFixed(1)}%
-      </div>
-
-
-      <div className="text-xs text-gray-500">
-        Net Flow {(net * 100).toFixed(1)}%
-      </div>
-
-    </div>
+    </VIPSignalCard>
 
   )
 }

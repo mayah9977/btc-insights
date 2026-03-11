@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
+import VIPSignalCard from './VIPSignalCard'
 
 export default function VIPWhaleMiniCharts() {
 
@@ -18,8 +19,11 @@ export default function VIPWhaleMiniCharts() {
     (s) => s.whaleNet
   )
 
-  const prevIntensity = useRef(0)
-  const prevFlow = useRef(0)
+  const prevIntensity = useRef<number>(0)
+  const prevFlow = useRef<number>(0)
+
+  const [intensityTrigger, setIntensityTrigger] = useState(0)
+  const [flowTrigger, setFlowTrigger] = useState(0)
 
   /* =========================
      Derived Values
@@ -51,22 +55,20 @@ export default function VIPWhaleMiniCharts() {
 
   useEffect(() => {
 
-    /* Whale Intensity ≥ 60 */
-
     if (
       prevIntensity.current < 60 &&
       intensityPercent >= 60
     ) {
       vipSound.play('signal')
+      setIntensityTrigger(Date.now())
     }
-
-    /* Whale Intensity ≥ 80 */
 
     if (
       prevIntensity.current < 80 &&
       intensityPercent >= 80
     ) {
       vipSound.play('signal')
+      setIntensityTrigger(Date.now())
     }
 
     prevIntensity.current = intensityPercent
@@ -76,13 +78,12 @@ export default function VIPWhaleMiniCharts() {
 
   useEffect(() => {
 
-    /* Whale Flow trigger */
-
     if (
       Math.abs(prevFlow.current) < 0.4 &&
       Math.abs(whaleNet) >= 0.4
     ) {
       vipSound.play('signal')
+      setFlowTrigger(Date.now())
     }
 
     prevFlow.current = whaleNet
@@ -100,48 +101,60 @@ export default function VIPWhaleMiniCharts() {
 
       {/* Whale Intensity */}
 
-      <div className="text-xs">
+      <VIPSignalCard trigger={intensityTrigger}>
 
-        <div className="flex justify-between text-zinc-400 mb-1">
-          <span>Whale Intensity</span>
-          <span>{intensityPercent.toFixed(1)}%</span>
+        <div className="text-xs">
+
+          <div className="flex justify-between text-zinc-400 mb-1">
+            <span>Whale Intensity</span>
+            <span>{intensityPercent.toFixed(1)}%</span>
+          </div>
+
+          <div className="h-2 bg-zinc-800 rounded overflow-hidden">
+
+            <div
+              className="h-full bg-yellow-400 transition-all duration-300"
+              style={{ width: `${intensityPercent}%` }}
+            />
+
+          </div>
+
         </div>
 
-        <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-
-          <div
-            className="h-full bg-yellow-400 transition-all duration-300"
-            style={{ width: `${intensityPercent}%` }}
-          />
-
-        </div>
-
-      </div>
+      </VIPSignalCard>
 
 
       {/* Whale Flow */}
 
-      <div className="text-xs">
+      <VIPSignalCard trigger={flowTrigger}>
 
-        <div className="flex justify-between text-zinc-400 mb-1">
-          <span>
-            Whale Flow ({directionLabel})
-          </span>
-          <span>{flowPercent.toFixed(1)}%</span>
+        <div className="text-xs">
+
+          <div className="flex justify-between text-zinc-400 mb-1">
+
+            <span>
+              Whale Flow ({directionLabel})
+            </span>
+
+            <span>
+              {flowPercent.toFixed(1)}%
+            </span>
+
+          </div>
+
+          <div className="h-2 bg-zinc-800 rounded overflow-hidden">
+
+            <div
+              className={`h-full ${flowColor} transition-all duration-300`}
+              style={{ width: `${flowPercent}%` }}
+            />
+
+          </div>
+
         </div>
 
-        <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-
-          <div
-            className={`h-full ${flowColor} transition-all duration-300`}
-            style={{ width: `${flowPercent}%` }}
-          />
-
-        </div>
-
-      </div>
+      </VIPSignalCard>
 
     </div>
-
   )
 }
