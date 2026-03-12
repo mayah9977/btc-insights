@@ -8,7 +8,7 @@ type Props = {
   short: number
   confidence: number
   dominant: 'LONG' | 'SHORT' | 'NONE'
-  intensity: number   // 🔥 추가 (WhaleIntensity 0~100)
+  intensity: number
   isPending?: boolean
 }
 
@@ -17,14 +17,14 @@ export default function VIPInstitutionalGuideCard({
   short,
   confidence,
   dominant,
-  intensity, // 🔥 추가
+  intensity,
   isPending = false,
 }: Props) {
 
   const [open, setOpen] = useState(false)
 
   /* =====================================================
-     1️⃣ 색상 & 강한 정렬 여부
+     1️⃣ 색상
   ===================================================== */
 
   const levelColor =
@@ -43,38 +43,32 @@ export default function VIPInstitutionalGuideCard({
   ===================================================== */
 
   let phase = '에너지 축적 구간'
-  let message =
-    'AI is currently monitoring the market situation.'
+  let message = 'AI is currently monitoring the market situation.'
   let action = '기관급 고래의 자금 흐름을 모니터링 중입니다.'
 
   if (isPending) {
     phase = '기관급 고래 체결 감지중'
-    message =
-      '기관급 체결이 감지되었으며 방향성 여부를 확인 중입니다.'
+    message = '기관급 체결이 감지되었으며 방향성 여부를 확인 중입니다.'
     action = '기관급 고래 체결 감지됨'
   }
   else if (confidence >= 45 && dominant === 'LONG') {
     phase = '강한 매수 압력 우세'
-    message =
-      '기관 자금이 매수 방향으로 강화되고 있습니다.'
+    message = '기관 자금이 매수 방향으로 강화되고 있습니다.'
     action = '강한 매수 압력'
   }
   else if (confidence >= 45 && dominant === 'SHORT') {
     phase = '강한 매도 압력 우세'
-    message =
-      '기관 자금이 매도 방향으로 강화되고 있습니다.'
+    message = '기관 자금이 매도 방향으로 강화되고 있습니다.'
     action = '강한 매도 압력'
   }
   else if (confidence >= 30 && dominant === 'LONG') {
     phase = '매수 압력 우세'
-    message =
-      '기관 순매수 압력이 점진적으로 형성되고 있습니다.'
+    message = '기관 순매수 압력이 점진적으로 형성되고 있습니다.'
     action = '매수 우위'
   }
   else if (confidence >= 30 && dominant === 'SHORT') {
     phase = '매도 압력 우세'
-    message =
-      '기관 순매도 압력이 점진적으로 형성되고 있습니다.'
+    message = '기관 순매도 압력이 점진적으로 형성되고 있습니다.'
     action = '매도 우위'
   }
 
@@ -129,17 +123,9 @@ export default function VIPInstitutionalGuideCard({
   ===================================================== */
 
   return (
+
     <motion.div
       onClick={() => setOpen(!open)}
-      animate={
-        strongSignal
-          ? { scale: [1, 1.02, 1] }
-          : { scale: 1 }
-      }
-      transition={{
-        duration: 1,
-        repeat: strongSignal ? Infinity : 0,
-      }}
       className="relative mt-4 rounded-xl border p-6 text-sm text-neutral-300 cursor-pointer overflow-hidden"
       style={{
         borderColor: levelColor,
@@ -149,21 +135,24 @@ export default function VIPInstitutionalGuideCard({
         boxShadow: strongSignal
           ? `0 0 45px ${levelColor}55`
           : `0 0 20px ${levelColor}25`,
+        animation: strongSignal
+          ? 'glow 2.5s ease-in-out infinite alternate'
+          : 'none'
       }}
     >
 
       {/* 상단 상태바 */}
+
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${gaugePercent}%` }}
         transition={{ duration: 0.8 }}
         className="absolute top-0 left-0 h-[3px]"
-        style={{
-          backgroundColor: levelColor,
-        }}
+        style={{ backgroundColor: levelColor }}
       />
 
       {/* 라이트 효과 */}
+
       <AnimatePresence>
         {strongSignal && (
           <motion.div
@@ -180,7 +169,9 @@ export default function VIPInstitutionalGuideCard({
       </AnimatePresence>
 
       {/* 헤더 */}
+
       <div className="mb-5 flex items-center justify-between relative z-10">
+
         <div>
           <motion.div
             initial={{ opacity: 0, y: -5 }}
@@ -190,36 +181,42 @@ export default function VIPInstitutionalGuideCard({
           >
             🧠 기관급 고래의 체결 강도에 따른 리포트
           </motion.div>
+
           <div className="text-xs text-neutral-400">
             (기관급 고래체결 강도상태 분석)
           </div>
         </div>
+
         {renderBadge()}
+
       </div>
 
       {/* 압력 요약 */}
+
       <div className="mb-4 text-xs text-neutral-400 relative z-10">
         기관 순매수 압력 {long.toFixed(0)}%
         <span className="mx-2 text-neutral-600">|</span>
         기관 순매도 압력 {short.toFixed(0)}%
       </div>
 
-      {/* 🔥 Whale Intensity 표시 */}
+      {/* Whale Intensity */}
+
       <div className="mb-4 text-xs text-neutral-400 relative z-10">
         기관급 고래 체결강도 {intensity.toFixed(1)}%
       </div>
 
       {/* 게이지 */}
+
       <div className="mb-6 relative z-10">
+
         <div className="text-xs text-neutral-500 mb-1">
           기관 방향성 신뢰도
         </div>
 
         <div className="w-full h-2 bg-zinc-800 rounded overflow-hidden relative">
+
           <motion.div
-            animate={{
-              width: `${gaugePercent}%`,
-            }}
+            animate={{ width: `${gaugePercent}%` }}
             transition={{ duration: 0.6 }}
             className="h-full"
             style={{ backgroundColor: levelColor }}
@@ -231,14 +228,17 @@ export default function VIPInstitutionalGuideCard({
               transition={{ duration: 1.2, repeat: Infinity }}
               className="absolute inset-0"
               style={{
-                background: `linear-gradient(90deg, transparent, ${levelColor}55, transparent)`,
+                background: `linear-gradient(90deg, transparent, ${levelColor}55, transparent)`
               }}
             />
           )}
+
         </div>
+
       </div>
 
       {/* 상태 */}
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -258,6 +258,7 @@ export default function VIPInstitutionalGuideCard({
       </div>
 
       {/* 상세 설명 */}
+
       <AnimatePresence>
         {open && (
           <motion.div
@@ -269,10 +270,13 @@ export default function VIPInstitutionalGuideCard({
           >
             ─────────────────────────
             <br />
-            • 45% 이상 → 강한 고래체결 확정 (추세 시작)  
-            • 30~44% → 방향 형성 단계  
-            • 15~29% → 준비 구간  
-            • 15% 미만 → 에너지 축적 단계  
+            • 45% 이상 → 강한 고래체결 확정 (추세 시작)
+            <br />
+            • 30~44% → 방향 형성 단계
+            <br />
+            • 15~29% → 준비 구간
+            <br />
+            • 15% 미만 → 에너지 축적 단계
             <br />
             • 신호는 최소 3초 이상 유지 시 확정됩니다.
             <br />

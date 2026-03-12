@@ -31,13 +31,10 @@ export default function VIPWhaleTradeGuideCard({
 
   /* =====================================================
      Institutional Flow 해석
-     ratio = 고래 체결 강도
-     net = 고래 순매수 / 순매도 압력
   ===================================================== */
 
   let phase = 'Institutional Flow 모니터링'
-  let interpretation =
-    '대형 자금 흐름을 추적 중입니다.'
+  let interpretation = '대형 자금 흐름을 추적 중입니다.'
   let status = '기관급 자금의 흐름 탐지중'
 
   if (strongFlow && net > 0.2) {
@@ -76,26 +73,20 @@ export default function VIPWhaleTradeGuideCard({
   }
 
   /* =====================================================
-     렌더
+     Render
   ===================================================== */
 
   return (
     <motion.div
-      animate={
-        strongFlow
-          ? { scale: [1, 1.02, 1] }
-          : { scale: 1 }
-      }
-      transition={{
-        duration: 0.8,
-        repeat: strongFlow ? Infinity : 0,
-      }}
       className="mt-4 rounded-xl border p-6 text-sm text-neutral-300 relative overflow-hidden"
       style={{
         borderColor: levelColor,
         background:
           'linear-gradient(145deg, rgba(10,10,10,0.9), rgba(0,0,0,0.95))',
         boxShadow: `0 0 25px ${levelColor}35`,
+        animation: strongFlow
+          ? 'glow 2.5s ease-in-out infinite alternate'
+          : 'none'
       }}
     >
 
@@ -122,10 +113,9 @@ export default function VIPWhaleTradeGuideCard({
       </div>
 
       {/* 핵심 데이터 */}
-
       <div className="mb-4 text-xs text-neutral-400">
 
-        Whale Trade Ratio  (시장 거래 중에서 대형 고래 체결이 차지하는 비율)
+        Whale Trade Ratio (시장 거래 중에서 대형 고래 체결이 차지하는 비율)
 
         <span className="text-yellow-400 font-semibold ml-1">
           {ratioPercent}%
@@ -145,7 +135,6 @@ export default function VIPWhaleTradeGuideCard({
       </div>
 
       {/* 해석 */}
-
       <div
         className="mb-4 text-sm font-medium"
         style={{ color: levelColor }}
@@ -154,37 +143,18 @@ export default function VIPWhaleTradeGuideCard({
       </div>
 
       {/* 트레이딩 가이드 */}
-
       <div className="text-xs text-neutral-500 leading-relaxed space-y-1">
 
-        <div>
-          • Whale Trade Ratio → 대형 체결 비중
-        </div>
-
-        <div>
-          • Net Pressure → 고래 순매수 / 순매도 방향
-        </div>
-
-        <div>
-          • Ratio + Net 상승 → 기관 매집 가능성 증가
-        </div>
-
-        <div>
-          • Ratio 상승 + Net 하락 → 기관 분배 가능성
-        </div>
-
-        <div>
-          • Sweep → 유동성 스탑 헌팅 가능성
-        </div>
-
-        <div>
-          • Absorption → 고래 물량 흡수 패턴
-        </div>
+        <div>• Whale Trade Ratio → 대형 체결 비중</div>
+        <div>• Net Pressure → 고래 순매수 / 순매도 방향</div>
+        <div>• Ratio + Net 상승 → 기관 매집 가능성 증가</div>
+        <div>• Ratio 상승 + Net 하락 → 기관 분배 가능성</div>
+        <div>• Sweep → 유동성 스탑 헌팅 가능성</div>
+        <div>• Absorption → 고래 물량 흡수 패턴</div>
 
       </div>
 
       {/* 상태 */}
-
       <div className="mt-5 text-center text-xs font-semibold text-white">
         Observing the flow of institutional funds : {status}
       </div>

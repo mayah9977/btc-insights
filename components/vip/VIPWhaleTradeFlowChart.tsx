@@ -196,7 +196,7 @@ function VIPWhaleTradeFlowChart({
           </div>
 
           <div className="text-xs text-zinc-300 text-right">
-            Institutional Flow (기관급 자금 흐름을 추정중입니다.)
+            Institutional Flow (기관급 자금 흐름을 관찰중입니다.)
           </div>
 
         </div>

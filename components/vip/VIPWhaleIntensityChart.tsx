@@ -35,6 +35,9 @@ type HistoryPoint = {
 
 const BUFFER_SIZE = 60
 
+/* 🔥 렌더 제한 */
+const RENDER_INTERVAL = 120
+
 function VIPWhaleIntensityChart({
   symbol = 'BTCUSDT',
   showTimeAxis = false,
@@ -56,6 +59,8 @@ function VIPWhaleIntensityChart({
 
   const rafRef = useRef<number | null>(null)
 
+  const lastRenderRef = useRef(0)
+
   const [shockwave, setShockwave] = useState(false)
   const [spikeGlow, setSpikeGlow] = useState(false)
 
@@ -65,7 +70,7 @@ function VIPWhaleIntensityChart({
     targetValueRef.current = whaleIntensity
   }, [whaleIntensity])
 
-  /* interpolation */
+  /* interpolation loop */
 
   useEffect(() => {
 
@@ -97,10 +102,16 @@ function VIPWhaleIntensityChart({
       historyIndexRef.current =
         (historyIndexRef.current + 1) % BUFFER_SIZE
 
-      setHistory([...buffer])
+      /* 🔥 render throttle */
+
+      const now = performance.now()
+
+      if (now - lastRenderRef.current > RENDER_INTERVAL) {
+        setHistory([...buffer])
+        lastRenderRef.current = now
+      }
 
       rafRef.current = requestAnimationFrame(loop)
-
     }
 
     rafRef.current = requestAnimationFrame(loop)
@@ -117,34 +128,22 @@ function VIPWhaleIntensityChart({
   const whalePulse = latest?.isSpike ?? false
   const netValue = latest?.whaleNetRatio ?? 0
 
-  /* FX trigger */
+  /* FX */
 
   useEffect(() => {
-
     if (whalePulse) {
-
       setSpikeGlow(true)
-
       const t = setTimeout(() => setSpikeGlow(false), 600)
-
       return () => clearTimeout(t)
-
     }
-
   }, [whalePulse])
 
   useEffect(() => {
-
     if (intensityValue > 80) {
-
       setShockwave(true)
-
       const t = setTimeout(() => setShockwave(false), 900)
-
       return () => clearTimeout(t)
-
     }
-
   }, [intensityValue])
 
   const yDomain = useMemo(() => {
@@ -155,12 +154,9 @@ function VIPWhaleIntensityChart({
     let max = -Infinity
 
     for (const p of history) {
-
       if (!p) continue
-
       if (p.value < min) min = p.value
       if (p.value > max) max = p.value
-
     }
 
     const padding = Math.max(2, (max - min) * 0.25)
@@ -235,8 +231,6 @@ function VIPWhaleIntensityChart({
         }}
       >
 
-        {/* Shockwave */}
-
         <AnimatePresence>
           {shockwave && (
             <motion.div
@@ -253,16 +247,6 @@ function VIPWhaleIntensityChart({
           )}
         </AnimatePresence>
 
-        {/* Energy field */}
-
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 60%, rgba(255,0,0,0.12), transparent 70%)',
-          }}
-        />
-
         <div className="mb-3">
           <div className="text-sm font-semibold text-white">
             Analysis of Institutional Fund Flows
@@ -274,32 +258,22 @@ function VIPWhaleIntensityChart({
         </div>
 
         <div className="w-full h-[176px]">
-
           <ResponsiveContainer width="100%" height="100%">
 
             <AreaChart data={history}>
 
               <defs>
-
                 <linearGradient id="intensityGradient" x1="0" y1="0" x2="0" y2="1">
-
                   <stop offset="0%" stopColor="#ff0000" stopOpacity="0.95"/>
-
                   <stop offset="40%" stopColor="#ff0000" stopOpacity="0.35"/>
-
                   <stop offset="100%" stopColor="#ff0000" stopOpacity="0"/>
-
                 </linearGradient>
-
               </defs>
 
               <XAxis dataKey="ts" hide={!showTimeAxis} />
-
               <YAxis domain={yDomain} hide />
 
               <Tooltip isAnimationActive={false} />
-
-              {/* Glow line */}
 
               <Line
                 type="natural"
@@ -310,8 +284,6 @@ function VIPWhaleIntensityChart({
                 opacity={0.15}
                 isAnimationActive={false}
               />
-
-              {/* Main line */}
 
               <Line
                 type="natural"
@@ -330,23 +302,10 @@ function VIPWhaleIntensityChart({
                 isAnimationActive={false}
               />
 
-              {/* Spike markers */}
-
               <Scatter
                 data={flags}
                 dataKey="value"
                 fill="#ff0000"
-                shape={(props: any) => (
-                  <circle
-                    cx={props.cx}
-                    cy={props.cy}
-                    r={4}
-                    fill="#ff0000"
-                    style={{
-                      filter: 'drop-shadow(0 0 6px red)',
-                    }}
-                  />
-                )}
               />
 
               <ReferenceLine
@@ -358,7 +317,6 @@ function VIPWhaleIntensityChart({
             </AreaChart>
 
           </ResponsiveContainer>
-
         </div>
 
       </motion.div>
@@ -370,7 +328,6 @@ function VIPWhaleIntensityChart({
         dominant={displayDominant}
         intensity={intensityValue}
       />
-
     </>
   )
 }

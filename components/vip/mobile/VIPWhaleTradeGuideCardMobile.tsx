@@ -79,7 +79,7 @@ export default function VIPWhaleTradeGuideCardMobile({
         <div className="flex justify-between">
 
           <div className="text-white font-semibold">
-            Whale Trade Flow(기관급자금흐름관찰중)
+            Whale Trade Flow
           </div>
 
           <div className={`font-semibold ${color}`}>
