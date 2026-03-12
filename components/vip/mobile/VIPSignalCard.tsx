@@ -7,22 +7,6 @@ interface Props {
   trigger?: number | boolean
 }
 
-/*
-=========================================================
- VIP Signal Card Animation Wrapper
----------------------------------------------------------
- 적용 효과
- 1️⃣ Flash Glow
- 2️⃣ Pulse
- 3️⃣ Scale Boost
- 4️⃣ Premium Shadow
-
- 모바일 성능 고려
-  - framer-motion 미사용
-  - Tailwind animation만 사용
-=========================================================
-*/
-
 export default function VIPSignalCard({
   children,
   trigger
@@ -35,7 +19,6 @@ export default function VIPSignalCard({
 
     if (!trigger) return
 
-    /* Flash effect */
     setFlash(true)
     setPulse(true)
 
@@ -56,9 +39,20 @@ export default function VIPSignalCard({
 
   return (
 
-    <div className="relative">
-
-      {/* Flash Glow Layer */}
+    <div
+      className={`
+      relative
+      rounded-xl
+      border
+      border-zinc-800
+      bg-zinc-900
+      p-4
+      transition-all
+      duration-500
+      ${pulse ? 'scale-[1.02]' : ''}
+      ${flash ? 'shadow-[0_0_25px_rgba(250,204,21,0.35)]' : ''}
+      `}
+    >
 
       {flash && (
         <div
@@ -68,7 +62,7 @@ export default function VIPSignalCard({
           rounded-xl
           bg-gradient-to-r
           from-transparent
-          via-yellow-500/20
+          via-yellow-400/40
           to-transparent
           animate-pulse
           pointer-events-none
@@ -76,18 +70,7 @@ export default function VIPSignalCard({
         />
       )}
 
-      {/* Card */}
-
-      <div
-        className={`
-        transition-all
-        duration-500
-        ${pulse ? 'scale-[1.02]' : ''}
-        ${flash ? 'shadow-[0_0_25px_rgba(250,204,21,0.35)]' : ''}
-        `}
-      >
-        {children}
-      </div>
+      {children}
 
     </div>
 

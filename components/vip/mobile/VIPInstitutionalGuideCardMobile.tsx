@@ -59,7 +59,7 @@ export default function VIPInstitutionalGuideCardMobile({
       ? '매수 우위'
       : dominant === 'SHORT'
       ? '매도 우위'
-      : '중립'
+      : '시장관찰중'
 
   const gauge = Math.min(confidence, 100)
 
@@ -87,7 +87,7 @@ export default function VIPInstitutionalGuideCardMobile({
         <div className="flex justify-between">
 
           <div className="font-semibold text-white">
-            기관 자금 흐름
+            기관급 자금 흐름강도
           </div>
 
           <div className={`font-semibold ${color}`}>
@@ -97,11 +97,11 @@ export default function VIPInstitutionalGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-400">
-          매수 {long.toFixed(0)}% | 매도 {short.toFixed(0)}%
+          매수예상 {long.toFixed(0)}% | 매도예상 {short.toFixed(0)}%
         </div>
 
         <div className="text-xs text-gray-400">
-          Whale Intensity {intensity.toFixed(1)}%
+          Whale Intensity(고래체결강도) {intensity.toFixed(1)}%
         </div>
 
         <div className="h-2 bg-zinc-800 rounded overflow-hidden">
@@ -114,7 +114,7 @@ export default function VIPInstitutionalGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-500">
-          신뢰도 {confidence.toFixed(1)}%
+          고래확정확율 {confidence.toFixed(1)}%
         </div>
 
       </div>

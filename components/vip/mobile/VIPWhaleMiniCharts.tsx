@@ -97,16 +97,16 @@ export default function VIPWhaleMiniCharts() {
 
   return (
 
-    <div className="px-4 space-y-4">
+    <div className="space-y-4">
 
       {/* Whale Intensity */}
 
       <VIPSignalCard trigger={intensityTrigger}>
 
-        <div className="text-xs">
+        <div className="text-xs mx-4">
 
           <div className="flex justify-between text-zinc-400 mb-1">
-            <span>Whale Intensity</span>
+            <span>Whale Intensity(기관급 고래체결강도)</span>
             <span>{intensityPercent.toFixed(1)}%</span>
           </div>
 
@@ -128,12 +128,12 @@ export default function VIPWhaleMiniCharts() {
 
       <VIPSignalCard trigger={flowTrigger}>
 
-        <div className="text-xs">
+        <div className="text-xs mx-4">
 
           <div className="flex justify-between text-zinc-400 mb-1">
 
             <span>
-              Whale Flow ({directionLabel})
+              Whale Flow(기관급 자금흐름) ({directionLabel})
             </span>
 
             <span>
@@ -156,5 +156,6 @@ export default function VIPWhaleMiniCharts() {
       </VIPSignalCard>
 
     </div>
+
   )
 }

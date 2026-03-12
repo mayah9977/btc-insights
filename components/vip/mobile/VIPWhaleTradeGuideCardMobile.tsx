@@ -79,7 +79,7 @@ export default function VIPWhaleTradeGuideCardMobile({
         <div className="flex justify-between">
 
           <div className="text-white font-semibold">
-            Whale Trade Flow
+            Whale Trade Flow(기관급자금흐름관찰중)
           </div>
 
           <div className={`font-semibold ${color}`}>
@@ -89,11 +89,11 @@ export default function VIPWhaleTradeGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-400">
-          Trade Ratio {(ratio * 100).toFixed(1)}%
+          Trade Ratio(기관급 고래체결 비중) {(ratio * 100).toFixed(1)}%
         </div>
 
         <div className="text-xs text-gray-500">
-          Net Flow {(net * 100).toFixed(1)}%
+          Net Flow(큰 자금이 매수 우위인지 매도 우위인지 보여주는 값) {(net * 100).toFixed(1)}%
         </div>
 
       </div>
