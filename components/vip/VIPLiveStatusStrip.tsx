@@ -2,11 +2,69 @@
 
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRealtimeMarketComposite } from '@/lib/realtime/useRealtimeMarketComposite'
+import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
 
 const FLASH_DURATION = 200
 
+type MarketState = {
+  oi: number | null
+  oiDelta: number | null
+  volume: number | null
+  whaleIntensity: number | null
+  whaleSpike: boolean
+}
+
 function VIPLiveStatusStripComponent() {
+
+  const marketRef = useRef<MarketState>({
+    oi: null,
+    oiDelta: null,
+    volume: null,
+    whaleIntensity: null,
+    whaleSpike: false,
+  })
+
+  const [renderState, setRenderState] = useState(marketRef.current)
+
+  const lastRenderRef = useRef(0)
+
+  const prevVolumeRef = useRef<number | null>(null)
+
+  const [pulse, setPulse] = useState(false)
+  const [flash, setFlash] = useState(false)
+  const [volumeFlash, setVolumeFlash] =
+    useState<'UP' | 'DOWN' | null>(null)
+
+  /* ===============================
+     realtime register
+  =============================== */
+
+  useEffect(() => {
+
+    chartRealtimeBridge.register(
+      'liveStatus_desktop',
+      (data: Partial<MarketState>) => {
+
+        marketRef.current = {
+          ...marketRef.current,
+          ...data,
+        }
+
+        const now = performance.now()
+
+        if (now - lastRenderRef.current > 120) {
+          setRenderState({ ...marketRef.current })
+          lastRenderRef.current = now
+        }
+
+      }
+    )
+
+    return () => {
+      chartRealtimeBridge.unregister('liveStatus_desktop')
+    }
+
+  }, [])
 
   const {
     oi,
@@ -14,19 +72,11 @@ function VIPLiveStatusStripComponent() {
     volume,
     whaleIntensity,
     whaleSpike,
-    connected,
-    lastUpdatedAt,
-  } = useRealtimeMarketComposite('BTCUSDT')
+  } = renderState
 
-  const [pulse, setPulse] = useState(false)
-  const [flash, setFlash] = useState(false)
-  const [volumeFlash, setVolumeFlash] = useState<'UP' | 'DOWN' | null>(null)
-
-  const prevVolumeRef = useRef<number | null>(null)
-
-  /* =========================================================
-     🔥 Volume Flash
-  ========================================================= */
+  /* ===============================
+     Volume flash
+  =============================== */
 
   useEffect(() => {
 
@@ -47,18 +97,16 @@ function VIPLiveStatusStripComponent() {
         prevVolumeRef.current = volume
 
         return () => clearTimeout(t)
-
       }
-
     }
 
     prevVolumeRef.current = volume
 
   }, [volume])
 
-  /* =========================================================
-     🔥 Composite Intensity
-  ========================================================= */
+  /* ===============================
+     Composite intensity
+  =============================== */
 
   const normalized = useMemo(() => {
 
@@ -71,17 +119,19 @@ function VIPLiveStatusStripComponent() {
         : 0
 
     return Math.min(
-      volScore * 0.5 + whaleScore * 0.3 + oiScore * 0.2,
-      1,
+      volScore * 0.5 +
+      whaleScore * 0.3 +
+      oiScore * 0.2,
+      1
     )
 
   }, [volume, whaleIntensity, oiDelta])
 
   const isExtreme = normalized > 0.9
 
-  /* =========================================================
-     🧠 AI Level
-  ========================================================= */
+  /* ===============================
+     AI Level
+  =============================== */
 
   const aiLevel = useMemo(() => {
 
@@ -99,17 +149,17 @@ function VIPLiveStatusStripComponent() {
     CRITICAL: 'text-red-500',
   }
 
-  /* =========================================================
-     🧨 Squeeze Detection
-  ========================================================= */
+  /* ===============================
+     Squeeze Detection
+  =============================== */
 
   const squeezeType = useMemo(() => {
 
-    if (!oi || !oiDelta || !volume || !whaleIntensity) return null
+    if (!oi || !oiDelta || !volume || !whaleIntensity)
+      return null
 
     const oiRatio = oiDelta / oi
-
-    const volCondition = volume > 600_000
+    const volCondition = volume > 600000
     const whaleCondition = whaleIntensity > 0.7
 
     if (oiRatio > 0.015 && volCondition && whaleCondition)
@@ -122,9 +172,9 @@ function VIPLiveStatusStripComponent() {
 
   }, [oi, oiDelta, volume, whaleIntensity])
 
-  /* =========================================================
-     🔥 Pulse
-  ========================================================= */
+  /* ===============================
+     Pulse
+  =============================== */
 
   useEffect(() => {
 
@@ -132,17 +182,19 @@ function VIPLiveStatusStripComponent() {
 
       setPulse(true)
 
-      const t = setTimeout(() => setPulse(false), 800)
+      const t = setTimeout(
+        () => setPulse(false),
+        800
+      )
 
       return () => clearTimeout(t)
-
     }
 
   }, [whaleSpike, normalized])
 
-  /* =========================================================
-     🔥 Liquidation Flash
-  ========================================================= */
+  /* ===============================
+     Flash
+  =============================== */
 
   useEffect(() => {
 
@@ -150,17 +202,15 @@ function VIPLiveStatusStripComponent() {
 
       setFlash(true)
 
-      const t = setTimeout(() => setFlash(false), 300)
+      const t = setTimeout(
+        () => setFlash(false),
+        300
+      )
 
       return () => clearTimeout(t)
-
     }
 
   }, [isExtreme])
-
-  /* =========================================================
-     🎨 Shake
-  ========================================================= */
 
   const shake =
     isExtreme
@@ -182,16 +232,16 @@ function VIPLiveStatusStripComponent() {
       : ''
 
   return (
+
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0, ...shake }}
       transition={{ duration: 0.35 }}
       className="
-        sticky top-[64px] z-50 mb-4
-        border-b border-red-900
-        backdrop-blur-lg
-        relative
-        overflow-hidden
+      sticky top-[64px] z-50 mb-4
+      border-b border-red-900
+      backdrop-blur-lg
+      relative overflow-hidden
       "
       style={{
         backgroundColor: isExtreme
@@ -200,7 +250,6 @@ function VIPLiveStatusStripComponent() {
       }}
     >
 
-      {/* Liquidation Flash */}
       <AnimatePresence>
         {flash && (
           <motion.div
@@ -217,14 +266,12 @@ function VIPLiveStatusStripComponent() {
         )}
       </AnimatePresence>
 
-      {/* Squeeze Banner */}
       {squeezeType && (
         <div className="absolute top-0 left-0 w-full text-center text-xs py-1 bg-red-800 text-white">
           🧨 {squeezeType} DETECTED
         </div>
       )}
 
-      {/* Whale Overlay */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
         animate={{ opacity: whaleOverlayOpacity }}
@@ -235,7 +282,6 @@ function VIPLiveStatusStripComponent() {
         }}
       />
 
-      {/* Main Content */}
       <div className="relative max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-8 gap-y-1 text-sm">
 
         <div className={`font-semibold ${AI_COLOR[aiLevel]}`}>
@@ -243,21 +289,19 @@ function VIPLiveStatusStripComponent() {
         </div>
 
         <div className="text-zinc-200">
-          Open Interet {oi != null ? oi.toLocaleString() : '--'}
+          Open Interest {oi != null ? oi.toLocaleString() : '--'}
         </div>
 
-        {/* Volume */}
         <div className={`font-bold text-red-400 ${volumeFlashClass}`}>
           실시간 체결량 {volume != null ? volume.toLocaleString() : '--'}
         </div>
 
         <div className="text-yellow-300">
-          Whale-class fastener strength (고래 체결 강도) {whaleIntensity?.toFixed(2) ?? '--'}
+          Whale intensity (고래급기관 체결강도) {whaleIntensity?.toFixed(2) ?? '--'}
         </div>
 
       </div>
 
-      {/* Intensity Bar */}
       <motion.div
         className="absolute bottom-0 left-0 h-[4px]"
         initial={{ width: 0 }}
@@ -265,33 +309,13 @@ function VIPLiveStatusStripComponent() {
         transition={{ duration: 0.2 }}
         style={{
           background: `linear-gradient(
-            90deg,
-            rgba(255,0,0,${normalized}),
-            rgba(120,0,0,0.9)
-          )`,
+          90deg,
+          rgba(255,0,0,${normalized}),
+          rgba(120,0,0,0.9)
+        )`,
           boxShadow: `0 0 ${15 + normalized * 30}px rgba(255,0,0,0.9)`,
         }}
       />
-
-      <style jsx>{`
-        .volume-flash-up {
-          animation: flashUp ${FLASH_DURATION}ms ease-out;
-        }
-
-        .volume-flash-down {
-          animation: flashDown ${FLASH_DURATION}ms ease-out;
-        }
-
-        @keyframes flashUp {
-          0% { background-color: rgba(255,0,0,0.35); }
-          100% { background-color: transparent; }
-        }
-
-        @keyframes flashDown {
-          0% { background-color: rgba(30,30,30,0.5); }
-          100% { background-color: transparent; }
-        }
-      `}</style>
 
     </motion.div>
   )

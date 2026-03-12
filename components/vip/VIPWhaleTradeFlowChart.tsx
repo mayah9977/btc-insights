@@ -13,13 +13,21 @@ import {
   Scatter,
 } from 'recharts'
 
-import { useWhaleTradeFlow } from '@/lib/realtime/useWhaleTradeFlow'
 import { useWhaleNetPressure } from '@/lib/realtime/useWhaleNetPressure'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import VIPWhaleTradeGuideCard from '@/components/vip/VIPWhaleTradeGuideCard'
+import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
 
-/* ========================================================= */
+type TradePoint = {
+  ts: number
+  ratio: number
+  whaleVolume: number
+  totalVolume: number
+}
+
+const BUFFER_SIZE = 30
+const RENDER_INTERVAL = 120
 
 function VIPWhaleTradeFlowChart({
   symbol = 'BTCUSDT',
@@ -27,48 +35,61 @@ function VIPWhaleTradeFlowChart({
   symbol?: string
 }) {
 
-  const { history } = useWhaleTradeFlow({ symbol, limit: 30 })
-
   const { history: netHistory } =
     useWhaleNetPressure({
       symbol,
       limit: 30,
     })
 
-  /* ================= Store selectors ================= */
-
   const fmai = useVIPMarketStore(s => s.fmai)
   const absorption = useVIPMarketStore(s => s.absorption)
   const sweep = useVIPMarketStore(s => s.sweep)
 
-  /* ================= Throttle Buffer ================= */
+  const chartBufferRef = useRef<TradePoint[]>([])
+  const historyIndexRef = useRef(0)
 
-  const [bufferHistory, setBufferHistory] = useState<typeof history>([])
-  const lastUpdateRef = useRef(0)
+  const [history, setHistory] = useState<TradePoint[]>([])
+
+  const lastRenderRef = useRef(0)
+
+  /* =========================
+     chartRealtimeBridge register
+  ========================= */
 
   useEffect(() => {
 
-    if (!history?.length) return
+    chartRealtimeBridge.register(
+      'whaleTradeFlow_desktop',
+      (point: TradePoint) => {
 
-    const now = Date.now()
+        const buffer = chartBufferRef.current
 
-    if (now - lastUpdateRef.current < 400) return
+        if (buffer.length < BUFFER_SIZE) {
+          buffer.push(point)
+        } else {
+          buffer.shift()
+          buffer.push(point)
+        }
 
-    lastUpdateRef.current = now
+        const now = performance.now()
 
-    setBufferHistory(history)
+        if (now - lastRenderRef.current > RENDER_INTERVAL) {
+          setHistory([...buffer])
+          lastRenderRef.current = now
+        }
 
-  }, [history])
+      }
+    )
 
-  /* ========================================================= */
+    return () => {
+      chartRealtimeBridge.unregister('whaleTradeFlow_desktop')
+    }
 
-  const latest = bufferHistory.at(-1)
-  const currentValue = latest?.ratio ?? 0
+  }, [])
 
-  const latestNet = netHistory.at(-1)
-  const netValue = latestNet?.normalized ?? 0
-
-  /* ================= Map optimization ================= */
+  /* =========================
+     Net Map
+  ========================= */
 
   const netMap = useMemo(() => {
 
@@ -82,13 +103,15 @@ function VIPWhaleTradeFlowChart({
 
   }, [netHistory])
 
-  /* ================= timestamp merge ================= */
+  /* =========================
+     merge
+  ========================= */
 
   const merged = useMemo(() => {
 
-    if (!bufferHistory.length) return []
+    if (!history.length) return []
 
-    return bufferHistory.map(p => ({
+    return history.map(p => ({
       ...p,
       whaleNetRatio: netMap.get(p.ts) ?? 0,
       fmaiScore: fmai ?? 0,
@@ -96,9 +119,11 @@ function VIPWhaleTradeFlowChart({
       sweepStrength: sweep ?? 0,
     }))
 
-  }, [bufferHistory, netMap, fmai, absorption, sweep])
+  }, [history, netMap, fmai, absorption, sweep])
 
-  /* ================= FMAI Weight ================= */
+  /* =========================
+     FMAI Weight
+  ========================= */
 
   const fmaiThreshold = 0.35
 
@@ -111,12 +136,10 @@ function VIPWhaleTradeFlowChart({
       const score = p.fmaiScore ?? 0
 
       if (Math.abs(score) >= fmaiThreshold) {
-
         return {
           ...p,
           weightedRatio: p.ratio * Math.abs(score),
         }
-
       }
 
       return {
@@ -128,7 +151,9 @@ function VIPWhaleTradeFlowChart({
 
   }, [merged])
 
-  /* ================= Scatter 제한 ================= */
+  /* =========================
+     Scatter flags
+  ========================= */
 
   const institutionalFlags = useMemo(() => {
 
@@ -154,28 +179,29 @@ function VIPWhaleTradeFlowChart({
 
   }, [filtered])
 
-  /* ========================================================= */
+  const latest = filtered.at(-1)
 
-  const latestFiltered = filtered.at(-1)
+  const currentValue = latest?.ratio ?? 0
+
+  const latestNet = netHistory.at(-1)
+  const netValue = latestNet?.normalized ?? 0
 
   const dynamicPulse =
-    Math.abs(latestFiltered?.weightedRatio ?? 0) > 0.2
+    Math.abs(latest?.weightedRatio ?? 0) > 0.2
 
   const institutionalDetected =
-    Math.abs(latestFiltered?.weightedRatio ?? 0) > 0.25
+    Math.abs(latest?.weightedRatio ?? 0) > 0.25
 
   const absorptionDetected =
-    (latestFiltered?.absorptionStrength ?? 0) > 0.6
+    (latest?.absorptionStrength ?? 0) > 0.6
 
   const sweepDetected =
-    (latestFiltered?.sweepStrength ?? 0) > 0.6
+    (latest?.sweepStrength ?? 0) > 0.6
 
   const netColor =
     netValue >= 0 ? '#22c55e' : '#3b82f6'
 
   const gradientId = 'tradeFlowGradient'
-
-  /* ========================================================= */
 
   return (
     <>
@@ -196,26 +222,26 @@ function VIPWhaleTradeFlowChart({
           </div>
 
           <div className="text-xs text-zinc-300 text-right">
-            Institutional Flow (기관급 자금 흐름을 관찰중입니다.)
+            Institutional Flow
           </div>
 
         </div>
 
         {institutionalDetected && (
           <div className="mb-1 text-xs text-red-400 font-semibold">
-            🚨 Institutional Accumulation (기관급 고래의 거래 패턴이 감지된 상태입니다.)
+            🚨 Institutional Accumulation
           </div>
         )}
 
         {absorptionDetected && (
           <div className="mb-1 text-xs text-purple-400 font-semibold">
-            🐳 Whale Absorption (세력이 물량을 받아먹거나 던지고 있는 흔적이 감지됩니다.)
+            🐳 Whale Absorption
           </div>
         )}
 
         {sweepDetected && (
           <div className="mb-2 text-xs text-cyan-400 font-semibold">
-            ⚡ Liquidity Sweep (세력이 스탑 주문과 청산을 유도하기 위해 가격을 빠르게 밀어 유동성을 쓸어가는 움직임이 감지됩니다.)
+            ⚡ Liquidity Sweep
           </div>
         )}
 
@@ -233,7 +259,6 @@ function VIPWhaleTradeFlowChart({
               </defs>
 
               <XAxis dataKey="ts" hide />
-
               <YAxis hide />
 
               <ReferenceLine

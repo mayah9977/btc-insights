@@ -20,6 +20,8 @@ import { calculateInstitutionalProbability } from '@/lib/market/institutionalPro
 import VIPInstitutionalGuideCard from '@/components/vip/VIPInstitutionalGuideCard'
 import { useConfirmedInstitutionalSignal } from '@/lib/engine/useConfirmedInstitutionalSignal'
 
+import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
+
 type Props = {
   symbol?: string
   showTimeAxis?: boolean
@@ -34,8 +36,6 @@ type HistoryPoint = {
 }
 
 const BUFFER_SIZE = 60
-
-/* 🔥 렌더 제한 */
 const RENDER_INTERVAL = 120
 
 function VIPWhaleIntensityChart({
@@ -52,13 +52,14 @@ function VIPWhaleIntensityChart({
   const historyBufferRef = useRef<HistoryPoint[]>([])
   const historyIndexRef = useRef(0)
 
+  const chartDataRef = useRef<HistoryPoint[]>([])
+
   const [history, setHistory] = useState<HistoryPoint[]>([])
 
   const visualValueRef = useRef(whaleIntensity)
   const targetValueRef = useRef(whaleIntensity)
 
   const rafRef = useRef<number | null>(null)
-
   const lastRenderRef = useRef(0)
 
   const [shockwave, setShockwave] = useState(false)
@@ -70,6 +71,33 @@ function VIPWhaleIntensityChart({
     targetValueRef.current = whaleIntensity
   }, [whaleIntensity])
 
+  /* chartRealtimeBridge register */
+
+  useEffect(() => {
+
+    chartRealtimeBridge.register(
+      'whaleIntensity_desktop',
+      (point: HistoryPoint) => {
+
+        const buffer = chartDataRef.current
+
+        if (buffer.length < BUFFER_SIZE) {
+          buffer.push(point)
+        } else {
+          buffer.shift()
+          buffer.push(point)
+        }
+
+        historyBufferRef.current = buffer
+      }
+    )
+
+    return () => {
+      chartRealtimeBridge.unregister('whaleIntensity_desktop')
+    }
+
+  }, [])
+
   /* interpolation loop */
 
   useEffect(() => {
@@ -80,7 +108,6 @@ function VIPWhaleIntensityChart({
       const target = targetValueRef.current
 
       const diff = target - current
-
       visualValueRef.current = current + diff * 0.15
 
       const point: HistoryPoint = {
@@ -101,8 +128,6 @@ function VIPWhaleIntensityChart({
 
       historyIndexRef.current =
         (historyIndexRef.current + 1) % BUFFER_SIZE
-
-      /* 🔥 render throttle */
 
       const now = performance.now()
 
@@ -258,6 +283,7 @@ function VIPWhaleIntensityChart({
         </div>
 
         <div className="w-full h-[176px]">
+
           <ResponsiveContainer width="100%" height="100%">
 
             <AreaChart data={history}>
@@ -317,8 +343,8 @@ function VIPWhaleIntensityChart({
             </AreaChart>
 
           </ResponsiveContainer>
-        </div>
 
+        </div>
       </motion.div>
 
       <VIPInstitutionalGuideCard

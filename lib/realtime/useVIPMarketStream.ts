@@ -15,8 +15,10 @@ import {
   subscribeLiquiditySweep,
 } from '@/lib/realtime/marketChannel'
 
+import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
+
 /* =========================
-   Options Type
+Options
 ========================= */
 
 type VIPMarketStreamOptions = {
@@ -24,7 +26,7 @@ type VIPMarketStreamOptions = {
 }
 
 /* =========================
-   Hook
+Hook
 ========================= */
 
 export function useVIPMarketStream(
@@ -36,6 +38,7 @@ export function useVIPMarketStream(
   const lastUpdateRef = useRef(0)
 
   const shouldUpdate = () => {
+
     if (!throttle) return true
 
     const now = Date.now()
@@ -61,8 +64,18 @@ export function useVIPMarketStream(
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
+        const oi = msg.openInterest ?? msg.oi ?? 0
+        const oiDelta = msg.delta ?? 0
+
         scheduleVIPMarketUpdate({
-          oi: msg.openInterest ?? msg.oi ?? 0,
+          oi,
+        })
+
+        /* Desktop Status Strip */
+
+        chartRealtimeBridge.update('liveStatus_desktop', {
+          oi,
+          oiDelta,
         })
 
       },
@@ -79,8 +92,14 @@ export function useVIPMarketStream(
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
+        const volume = msg.volume ?? 0
+
         scheduleVIPMarketUpdate({
-          volume: msg.volume ?? 0,
+          volume,
+        })
+
+        chartRealtimeBridge.update('liveStatus_desktop', {
+          volume,
         })
 
       },
@@ -115,9 +134,31 @@ export function useVIPMarketStream(
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
+        const intensity = msg.intensity ?? 0
+
         scheduleVIPMarketUpdate({
-          whaleIntensity: msg.intensity ?? 0,
+          whaleIntensity: intensity,
         })
+
+        /* Desktop Chart Update */
+
+        chartRealtimeBridge.update(
+          'whaleIntensity_desktop',
+          {
+            ts: Date.now(),
+            value: intensity,
+          }
+        )
+
+        /* Desktop Status Strip */
+
+        chartRealtimeBridge.update(
+          'liveStatus_desktop',
+          {
+            whaleIntensity: intensity,
+            whaleSpike: intensity > 0.8,
+          }
+        )
 
       },
     )
@@ -154,9 +195,23 @@ export function useVIPMarketStream(
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
+        const ratio = msg.ratio ?? 0
+
         scheduleVIPMarketUpdate({
-          whaleRatio: msg.ratio ?? 0,
+          whaleRatio: ratio,
         })
+
+        /* Desktop Chart Update */
+
+        chartRealtimeBridge.update(
+          'whaleTradeFlow_desktop',
+          {
+            ts: Date.now(),
+            ratio,
+            whaleVolume: msg.whaleVolume ?? 0,
+            totalVolume: msg.totalVolume ?? 0,
+          }
+        )
 
       },
     )
@@ -245,7 +300,6 @@ export function useVIPMarketStream(
 
       unsubWhaleIntensity()
       unsubWhaleNet()
-
       unsubTradeFlow()
 
       unsubFMAI()
