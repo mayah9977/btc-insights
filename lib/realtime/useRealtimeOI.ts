@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { subscribeOpenInterest } from '@/lib/realtime/marketChannel'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 type RealtimeOIState = {
   openInterest: number | null
@@ -11,72 +10,21 @@ type RealtimeOIState = {
   lastUpdatedAt: number | null
 }
 
-const INITIAL_STATE: RealtimeOIState = {
-  openInterest: null,
-  delta: 0,
-  direction: 'FLAT',
-  connected: false,
-  lastUpdatedAt: null,
-}
+export function useRealtimeOI(symbol: string): RealtimeOIState {
+  const oi = useVIPMarketStore((s) => s.oi)
+  const delta = useVIPMarketStore((s) => s.oiDelta)
+  const ts = useVIPMarketStore((s) => s.ts)
 
-export function useRealtimeOI(symbol: string) {
+  let direction: 'UP' | 'DOWN' | 'FLAT' = 'FLAT'
 
-  const [state, setState] = useState<RealtimeOIState>(INITIAL_STATE)
+  if (delta > 0) direction = 'UP'
+  else if (delta < 0) direction = 'DOWN'
 
-  useEffect(() => {
-
-    if (!symbol) return
-
-    const upperSymbol = symbol.toUpperCase()
-
-    const unsubscribe = subscribeOpenInterest(
-      upperSymbol,
-      (openInterest, delta, direction, ts) => {
-
-        setState(prev => {
-
-          const normalizedDelta =
-            Number.isFinite(delta) ? delta : 0
-
-          const normalizedDirection =
-            direction ?? 'FLAT'
-
-          /* 값 동일하면 업데이트 차단 */
-
-          if (
-            prev.openInterest === openInterest &&
-            prev.delta === normalizedDelta &&
-            prev.direction === normalizedDirection
-          ) {
-            return prev
-          }
-
-          return {
-            openInterest,
-            delta: normalizedDelta,
-            direction: normalizedDirection,
-            connected: true,
-            lastUpdatedAt: ts ?? Date.now(),
-          }
-
-        })
-
-      },
-    )
-
-    return () => {
-
-      unsubscribe()
-
-      setState(prev => ({
-        ...prev,
-        connected: false,
-      }))
-
-    }
-
-  }, [symbol])
-
-  return state
-
+  return {
+    openInterest: oi ?? null,
+    delta: delta ?? 0,
+    direction,
+    connected: oi !== undefined,
+    lastUpdatedAt: ts ?? null,
+  }
 }

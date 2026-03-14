@@ -43,9 +43,10 @@ export default function VIPMobilePage(props: Props) {
 
   /* ===============================
      Mobile optimized SSE
+     (속도 개선: 4000 → 1500)
   =============================== */
 
-  useVIPMarketStream(symbol, { throttle: 4000 })
+  useVIPMarketStream(symbol, { throttle: 1500 })
 
   /* ===============================
      Zustand selectors
@@ -82,7 +83,7 @@ export default function VIPMobilePage(props: Props) {
       {/* KPI */}
       <VIPTopKPIBar avoidedExtremeCount={0} />
 
-      {/* RiskEngineBanner */} 
+      {/* RiskEngineBanner */}
       <VIPRiskEngineBannerMobile />
 
       {/* Bollinger Context */}
@@ -114,5 +115,4 @@ export default function VIPMobilePage(props: Props) {
 
     </main>
   )
-
 }
