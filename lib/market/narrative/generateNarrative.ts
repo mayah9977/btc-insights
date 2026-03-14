@@ -11,12 +11,12 @@ import { interpretPositionPressure } from '@/lib/market/pressure/positionPressur
 import { interpretLiquidationMap } from '@/lib/market/liquidation/liquidationMapInterpreter'
 
 import { composeFinalNarrativeReport } from '@/lib/market/narrative/finalNarrativeComposer'
-
 import { mapSignalsToNarrativeSections } from '@/lib/market/narrative/signalNarrativeMapper'
 
 import {
   FinalNarrativeReport
 } from '@/lib/market/narrative/types'
+
 
 /* =========================================================
 Sentence Cache
@@ -24,6 +24,14 @@ signalType 변경 전까지 문장 유지
 ========================================================= */
 
 const sentenceCache: Record<string, string> = {}
+
+
+/* =========================================================
+🔥 Narrative Cache (성능 최적화)
+========================================================= */
+
+const narrativeCache: Record<string, FinalNarrativeReport> = {}
+
 
 /* =========================================================
 Narrative Engine
@@ -33,11 +41,19 @@ export function generateNarrative(
   base: ActionGateSentence
 ): FinalNarrativeReport {
 
+  const cacheKey = base.summary
+
+  /* =========================================================
+  Cache Hit
+  ========================================================= */
+
+  if (narrativeCache[cacheKey]) {
+    return narrativeCache[cacheKey]
+  }
+
   /* =========================================================
   Sentence Variation
   ========================================================= */
-
-  const cacheKey = base.summary
 
   if (!sentenceCache[cacheKey]) {
     sentenceCache[cacheKey] = pickSentence(base.description)
@@ -118,7 +134,6 @@ export function generateNarrative(
       regimeSignals,
 
       guidanceSignals,
-
     })
 
   /* =========================================================
@@ -134,8 +149,13 @@ export function generateNarrative(
     baseDescription,
 
     sections,
-
   })
+
+  /* =========================================================
+  Cache 저장
+  ========================================================= */
+
+  narrativeCache[cacheKey] = report
 
   return report
 }
