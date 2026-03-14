@@ -11,9 +11,6 @@ import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenc
 /* Narrative Engine */
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 
-/* Store */
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
@@ -21,6 +18,10 @@ export default function MobileBollingerContext() {
 
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
+
+  /* ======================================================
+     Signal Selection
+  ====================================================== */
 
   const signal = useMemo(() => {
 
@@ -38,13 +39,8 @@ export default function MobileBollingerContext() {
   const signalType = signal?.signalType
 
   /* ======================================================
-     Market Store subscription (Narrative refresh)
-  ====================================================== */
-
-  const marketTick = useVIPMarketStore((s) => s.ts)
-
-  /* ======================================================
      Narrative Engine
+     (signalType 변경 시에만 생성)
   ====================================================== */
 
   const sentence = useMemo(() => {
@@ -52,22 +48,21 @@ export default function MobileBollingerContext() {
     if (!signalType) return null
 
     const base = BOLLINGER_SENTENCE_MAP[signalType]
-
     if (!base) return null
 
     return generateNarrative(base)
 
-  }, [signalType, marketTick])
+  }, [signalType])
 
   /* ======================================================
-     Premium animation
+     Premium Animation
   ====================================================== */
 
   const { flash, pulse, transition } =
     usePremiumSignalAnimation(signalType)
 
   /* ======================================================
-     Typewriter effect
+     Typewriter Effect
   ====================================================== */
 
   const typedSummary = useTypewriter(
@@ -106,7 +101,8 @@ export default function MobileBollingerContext() {
       )}
 
       <div
-        className={`
+        key={signalType}
+        className="
         rounded-xl
         border
         border-zinc-800
@@ -116,26 +112,20 @@ export default function MobileBollingerContext() {
         space-y-3
         transition-all
         duration-500
-        ${flash ? 'shadow-[0_0_25px_rgba(250,204,21,0.35)]' : ''}
-        ${pulse ? 'animate-pulse' : ''}
-        ${transition ? 'scale-[1.02]' : ''}
-        `}
+        "
       >
 
         {/* SUMMARY */}
-
         <div className="text-yellow-400 font-semibold text-sm tracking-wide">
           {typedSummary}
         </div>
 
         {/* DESCRIPTION */}
-
         <div className="text-gray-300 text-xs leading-relaxed">
           {typedDescription}
         </div>
 
         {/* TENDENCY */}
-
         <div className="text-gray-500 text-xs italic">
           {typedTendency}
         </div>
