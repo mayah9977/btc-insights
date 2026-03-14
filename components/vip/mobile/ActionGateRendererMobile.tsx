@@ -7,6 +7,8 @@ import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenc
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
+import { pickSentence } from '@/lib/market/narrative/sentenceVariation'
+
 export type ActionGateState =
   | 'OBSERVE'
   | 'CAUTION'
@@ -53,7 +55,7 @@ export default function ActionGateRendererMobile({
   )
 
   const typedDescription = useTypewriter(
-    sentence?.description ?? '',
+    sentence ? pickSentence(sentence.description) : '',
     8
   )
 
@@ -85,7 +87,6 @@ export default function ActionGateRendererMobile({
           {description}
         </div>
       </div>
-
 
       {/* Bollinger Interpretation */}
 
@@ -140,7 +141,6 @@ export default function ActionGateRendererMobile({
             </div>
 
           </div>
-
         </div>
       )}
 

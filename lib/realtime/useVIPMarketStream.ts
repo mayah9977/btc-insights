@@ -33,12 +33,10 @@ export function useVIPMarketStream(
   symbol: string,
   options?: VIPMarketStreamOptions,
 ) {
-
   const throttle = options?.throttle ?? 0
   const lastUpdateRef = useRef(0)
 
   const shouldUpdate = () => {
-
     if (!throttle) return true
 
     const now = Date.now()
@@ -50,7 +48,6 @@ export function useVIPMarketStream(
   }
 
   useEffect(() => {
-
     const safeSymbol = symbol?.toUpperCase()
 
     /* =========================
@@ -60,7 +57,6 @@ export function useVIPMarketStream(
     const unsubOI = sseManager.subscribe(
       SSE_EVENT.OI_TICK,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
@@ -69,15 +65,13 @@ export function useVIPMarketStream(
 
         scheduleVIPMarketUpdate({
           oi,
+          oiDelta,
         })
-
-        /* Desktop Status Strip */
 
         chartRealtimeBridge.update('liveStatus_desktop', {
           oi,
           oiDelta,
         })
-
       },
     )
 
@@ -88,7 +82,6 @@ export function useVIPMarketStream(
     const unsubVolume = sseManager.subscribe(
       SSE_EVENT.VOLUME_TICK,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
@@ -101,7 +94,6 @@ export function useVIPMarketStream(
         chartRealtimeBridge.update('liveStatus_desktop', {
           volume,
         })
-
       },
     )
 
@@ -112,14 +104,12 @@ export function useVIPMarketStream(
     const unsubFunding = sseManager.subscribe(
       SSE_EVENT.FUNDING_RATE_TICK,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
           fundingRate: msg.fundingRate ?? 0,
         })
-
       },
     )
 
@@ -130,7 +120,6 @@ export function useVIPMarketStream(
     const unsubWhaleIntensity = sseManager.subscribe(
       SSE_EVENT.WHALE_INTENSITY,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
@@ -140,26 +129,21 @@ export function useVIPMarketStream(
           whaleIntensity: intensity,
         })
 
-        /* Desktop Chart Update */
-
         chartRealtimeBridge.update(
           'whaleIntensity_desktop',
           {
             ts: Date.now(),
             value: intensity,
-          }
+          },
         )
-
-        /* Desktop Status Strip */
 
         chartRealtimeBridge.update(
           'liveStatus_desktop',
           {
             whaleIntensity: intensity,
             whaleSpike: intensity > 0.8,
-          }
+          },
         )
-
       },
     )
 
@@ -170,17 +154,13 @@ export function useVIPMarketStream(
     const unsubWhaleNet = sseManager.subscribe(
       SSE_EVENT.WHALE_NET_PRESSURE,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
-          whaleNet:
-            msg.whaleNetRatio ??
-            msg.whaleNetPressure ??
-            0,
+          whaleNet: msg.whaleNetPressure ?? 0,
+          whaleNetRatio: msg.whaleNetRatio ?? 0,
         })
-
       },
     )
 
@@ -191,7 +171,6 @@ export function useVIPMarketStream(
     const unsubTradeFlow = sseManager.subscribe(
       SSE_EVENT.WHALE_TRADE_FLOW,
       (msg: any) => {
-
         if (!shouldUpdate()) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
@@ -201,8 +180,6 @@ export function useVIPMarketStream(
           whaleRatio: ratio,
         })
 
-        /* Desktop Chart Update */
-
         chartRealtimeBridge.update(
           'whaleTradeFlow_desktop',
           {
@@ -210,9 +187,8 @@ export function useVIPMarketStream(
             ratio,
             whaleVolume: msg.whaleVolume ?? 0,
             totalVolume: msg.totalVolume ?? 0,
-          }
+          },
         )
-
       },
     )
 
@@ -223,14 +199,12 @@ export function useVIPMarketStream(
     const unsubFMAI = subscribeVIPChannel(
       safeSymbol,
       (score, direction, ts) => {
-
         if (!shouldUpdate()) return
 
         scheduleVIPMarketUpdate({
           fmai: score,
           ts: ts ?? Date.now(),
         })
-
       },
     )
 
@@ -241,14 +215,12 @@ export function useVIPMarketStream(
     const unsubAbsorption = subscribeWhaleAbsorption(
       safeSymbol,
       (direction, strength, confidence, ts) => {
-
         if (!shouldUpdate()) return
 
         scheduleVIPMarketUpdate({
           absorption: strength,
           ts: ts ?? Date.now(),
         })
-
       },
     )
 
@@ -259,14 +231,12 @@ export function useVIPMarketStream(
     const unsubSweep = subscribeLiquiditySweep(
       safeSymbol,
       (direction, strength, confidence, ts) => {
-
         if (!shouldUpdate()) return
 
         scheduleVIPMarketUpdate({
           sweep: strength,
           ts: ts ?? Date.now(),
         })
-
       },
     )
 
@@ -277,14 +247,13 @@ export function useVIPMarketStream(
     const unsubMarketState = sseManager.subscribe(
       'MARKET_STATE',
       (msg: any) => {
-
         if (!shouldUpdate()) return
-        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
+        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol)
+          return
 
         scheduleVIPMarketUpdate({
           actionGateState: msg.actionGateState ?? 'OBSERVE',
         })
-
       },
     )
 
@@ -293,7 +262,6 @@ export function useVIPMarketStream(
     ========================= */
 
     return () => {
-
       unsubOI()
       unsubVolume()
       unsubFunding()
@@ -307,8 +275,6 @@ export function useVIPMarketStream(
       unsubSweep()
 
       unsubMarketState()
-
     }
-
   }, [symbol, throttle])
 }

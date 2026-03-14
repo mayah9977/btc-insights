@@ -8,14 +8,22 @@ import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerComme
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 
+/* Narrative Engine */
+import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
+
+/* Store */
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
 export default function MobileBollingerContext() {
+
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
   const signal = useMemo(() => {
+
     if (
       confirmed?.signalType ===
       BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
@@ -24,16 +32,43 @@ export default function MobileBollingerContext() {
     }
 
     return confirmed ?? live
+
   }, [confirmed, live])
 
   const signalType = signal?.signalType
-  const sentence = signalType
-    ? BOLLINGER_SENTENCE_MAP[signalType]
-    : null
 
-  /* 항상 호출 */
+  /* ======================================================
+     Market Store subscription (Narrative refresh)
+  ====================================================== */
+
+  const marketTick = useVIPMarketStore((s) => s.ts)
+
+  /* ======================================================
+     Narrative Engine
+  ====================================================== */
+
+  const sentence = useMemo(() => {
+
+    if (!signalType) return null
+
+    const base = BOLLINGER_SENTENCE_MAP[signalType]
+
+    if (!base) return null
+
+    return generateNarrative(base)
+
+  }, [signalType, marketTick])
+
+  /* ======================================================
+     Premium animation
+  ====================================================== */
+
   const { flash, pulse, transition } =
     usePremiumSignalAnimation(signalType)
+
+  /* ======================================================
+     Typewriter effect
+  ====================================================== */
 
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
@@ -54,6 +89,7 @@ export default function MobileBollingerContext() {
 
   return (
     <div className="mx-4 relative">
+
       {flash && (
         <div
           className="
@@ -85,17 +121,25 @@ export default function MobileBollingerContext() {
         ${transition ? 'scale-[1.02]' : ''}
         `}
       >
+
+        {/* SUMMARY */}
+
         <div className="text-yellow-400 font-semibold text-sm tracking-wide">
           {typedSummary}
         </div>
+
+        {/* DESCRIPTION */}
 
         <div className="text-gray-300 text-xs leading-relaxed">
           {typedDescription}
         </div>
 
+        {/* TENDENCY */}
+
         <div className="text-gray-500 text-xs italic">
           {typedTendency}
         </div>
+
       </div>
     </div>
   )

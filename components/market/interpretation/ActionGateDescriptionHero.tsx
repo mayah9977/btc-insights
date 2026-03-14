@@ -1,6 +1,8 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRef, useEffect } from 'react'
+
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { useInterpretationTransition } from '@/hooks/useInterpretationTransition'
@@ -13,13 +15,14 @@ interface Props {
 }
 
 /* =========================================================
-   🎖 Premium Action Gate Description Hero (Ultra)
+   🎖 Premium Action Gate Description Hero (Stable)
    - Typewriter
    - Keyword Highlight
    - Interpretation Flash
    - Premium Glow
    - Light Sweep Component
    - Volatility Pulse
+   - Description Freeze
 ========================================================= */
 
 export function ActionGateDescriptionHero({
@@ -27,27 +30,41 @@ export function ActionGateDescriptionHero({
   signalType,
 }: Props) {
 
-  /* =============================
-     1️⃣ 상태별 Accent 컬러
-  ============================= */
+  /* =====================================================
+     1️⃣ Description Freeze (signalType 기준 유지)
+  ===================================================== */
+
+  const stableDescriptionRef = useRef(description)
+
+  useEffect(() => {
+    stableDescriptionRef.current = description
+  }, [signalType])
+
+  const stableDescription = stableDescriptionRef.current
+
+  /* =====================================================
+     2️⃣ 상태별 Accent 컬러
+  ===================================================== */
 
   const getAccent = () => {
-    if (!signalType) return 'rgba(16,185,129,0.45)'
+
+    if (!signalType)
+      return 'rgba(16,185,129,0.45)'
 
     if (signalType.toString().includes('UPPER'))
-      return 'rgba(251,191,36,0.55)' // gold
+      return 'rgba(251,191,36,0.55)'
 
     if (signalType.toString().includes('LOWER'))
-      return 'rgba(239,68,68,0.55)' // red
+      return 'rgba(239,68,68,0.55)'
 
-    return 'rgba(16,185,129,0.55)' // center
+    return 'rgba(16,185,129,0.55)'
   }
 
   const accent = getAccent()
 
-  /* =============================
-     2️⃣ 위험 신호 pulse
-  ============================= */
+  /* =====================================================
+     3️⃣ 위험 신호 pulse
+  ===================================================== */
 
   const isExtreme =
     signalType ===
@@ -55,22 +72,23 @@ export function ActionGateDescriptionHero({
     signalType ===
       BollingerSignalType.INSIDE_LOWER_BREAK_AND_DEVIATE
 
-  /* =============================
-     3️⃣ 타자기 효과
-  ============================= */
+  /* =====================================================
+     4️⃣ Typewriter
+  ===================================================== */
 
-  const typedText = useTypewriter(description, 12)
+  const typedText = useTypewriter(stableDescription, 12)
 
-  /* =============================
-     4️⃣ 해석 변경 감지
-  ============================= */
+  /* =====================================================
+     5️⃣ 해석 변경 감지
+  ===================================================== */
 
   const { flash } =
     useInterpretationTransition(signalType)
 
   return (
+
     <motion.div
-      key={description}
+      key={signalType ?? 'default'}
       initial={{ opacity: 0, y: 18, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.6 }}
@@ -81,7 +99,7 @@ export function ActionGateDescriptionHero({
     >
 
       {/* =================================================
-         🔥 Interpretation Flash
+         Interpretation Flash
       ================================================= */}
 
       <AnimatePresence>
@@ -100,13 +118,13 @@ export function ActionGateDescriptionHero({
       </AnimatePresence>
 
       {/* =================================================
-         ✨ Premium Light Sweep Component
+         Premium Light Sweep
       ================================================= */}
 
       <PremiumLightSweep />
 
       {/* =================================================
-         🌊 Aura Glow
+         Aura Glow
       ================================================= */}
 
       <motion.div
@@ -124,7 +142,7 @@ export function ActionGateDescriptionHero({
       />
 
       {/* =================================================
-         ⚡ Volatility Pulse (Extreme only)
+         Volatility Pulse
       ================================================= */}
 
       {isExtreme && (
@@ -145,7 +163,7 @@ export function ActionGateDescriptionHero({
       )}
 
       {/* =================================================
-         ✨ Horizontal Scan Line
+         Horizontal Scan Line
       ================================================= */}
 
       <motion.div
@@ -166,7 +184,7 @@ export function ActionGateDescriptionHero({
       />
 
       {/* =================================================
-         🧠 Description
+         Description
       ================================================= */}
 
       <motion.p

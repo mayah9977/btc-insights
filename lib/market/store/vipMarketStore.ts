@@ -4,71 +4,140 @@ import { create } from 'zustand'
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
+export type FundingBias =
+  | 'LONG_HEAVY'
+  | 'SHORT_HEAVY'
+  | 'NEUTRAL'
+
 type VIPMarketState = {
+  /* =========================
+     Core Market
+  ========================= */
+
   oi: number
+  oiDelta: number
+
   volume: number
+  volumeRatio: number
+
   fundingRate: number
+  fundingBias: FundingBias
+
+  /* =========================
+     Whale
+  ========================= */
 
   whaleIntensity: number
   whaleRatio: number
   whaleNet: number
-  fmai: number
+  whaleNetRatio: number
 
+  /* =========================
+     Derived Signals
+  ========================= */
+
+  fmai: number
   absorption: number
   sweep: number
 
+  /* =========================
+     Action Gate
+  ========================= */
+
   actionGateState: ActionGateState
+
   macd?: any
 
   decision?: string
   dominant?: string
   confidence?: number
 
+  /* =========================
+     Timestamp
+  ========================= */
+
   ts: number
+
+  /* =========================
+     Store Update
+  ========================= */
 
   update: (data: Partial<VIPMarketState>) => void
 }
 
-export const useVIPMarketStore = create<VIPMarketState>((set) => ({
-  oi: 0,
-  volume: 0,
-  fundingRate: 0,
+export const useVIPMarketStore =
+  create<VIPMarketState>((set) => ({
+    /* =========================
+       Core Market
+    ========================= */
 
-  whaleIntensity: 0,
-  whaleRatio: 0,
-  whaleNet: 0,
-  fmai: 0,
+    oi: 0,
+    oiDelta: 0,
 
-  absorption: 0,
-  sweep: 0,
+    volume: 0,
+    volumeRatio: 1,
 
-  actionGateState: 'OBSERVE',
-  macd: null,
+    fundingRate: 0,
+    fundingBias: 'NEUTRAL',
 
-  decision: undefined,
-  dominant: undefined,
-  confidence: undefined,
+    /* =========================
+       Whale
+    ========================= */
 
-  ts: 0,
+    whaleIntensity: 0,
+    whaleRatio: 0,
+    whaleNet: 0,
+    whaleNetRatio: 0,
 
-  update: (data) =>
-    set((state) => {
+    /* =========================
+       Derived Signals
+    ========================= */
 
-      let changed = false
-      const next: Partial<VIPMarketState> = {}
+    fmai: 0,
+    absorption: 0,
+    sweep: 0,
 
-      for (const key in data) {
-        const k = key as keyof VIPMarketState
+    /* =========================
+       Action Gate
+    ========================= */
 
-        if (state[k] !== data[k]) {
-          ;(next as any)[k] = data[k]
-          changed = true
+    actionGateState: 'OBSERVE',
+
+    macd: null,
+
+    decision: undefined,
+    dominant: undefined,
+    confidence: undefined,
+
+    /* =========================
+       Timestamp
+    ========================= */
+
+    ts: 0,
+
+    /* =========================
+       Update Logic
+    ========================= */
+
+    update: (data) =>
+      set((state) => {
+        let changed = false
+        const next: Partial<VIPMarketState> = {}
+
+        for (const key in data) {
+          const k = key as keyof VIPMarketState
+
+          if (state[k] !== data[k]) {
+            ;(next as any)[k] = data[k]
+            changed = true
+          }
         }
-      }
 
-      return changed ? { ...state, ...next } : state
-    }),
-}))
+        return changed
+          ? { ...state, ...next }
+          : state
+      }),
+  }))
 
 /* =========================================================
    Scheduler
@@ -83,7 +152,6 @@ let lastFlush = 0
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
-
   pending = { ...(pending || {}), ...data }
 
   if (scheduled) return
@@ -91,10 +159,12 @@ export function scheduleVIPMarketUpdate(
   scheduled = true
 
   const now = performance.now()
-  const delay = Math.max(0, UPDATE_INTERVAL - (now - lastFlush))
+  const delay = Math.max(
+    0,
+    UPDATE_INTERVAL - (now - lastFlush),
+  )
 
   setTimeout(() => {
-
     if (pending) {
       useVIPMarketStore.getState().update(pending)
     }
