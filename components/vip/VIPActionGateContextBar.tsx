@@ -79,7 +79,6 @@ export const VIPActionGateContextBar: React.FC<
       <ActionGateStatus symbol={symbol} />
 
       <ActionGateRenderer
-        gate={gate}
         signalType={effectiveSignal?.signalType}
       />
 
