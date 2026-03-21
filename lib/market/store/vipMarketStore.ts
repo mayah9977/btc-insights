@@ -13,7 +13,6 @@ type VIPMarketState = {
   /* =========================
      Core Market
   ========================= */
-
   oi: number
   oiDelta: number
 
@@ -23,10 +22,12 @@ type VIPMarketState = {
   fundingRate: number
   fundingBias: FundingBias
 
+  price: number
+  priceChangePercent: number
+
   /* =========================
      Whale
   ========================= */
-
   whaleIntensity: number
   whaleRatio: number
   whaleNet: number
@@ -35,7 +36,6 @@ type VIPMarketState = {
   /* =========================
      Derived Signals
   ========================= */
-
   fmai: number
   absorption: number
   sweep: number
@@ -43,11 +43,9 @@ type VIPMarketState = {
   /* =========================
      Action Gate
   ========================= */
-
   actionGateState: ActionGateState
 
   macd?: any
-
   decision?: string
   dominant?: string
   confidence?: number
@@ -55,13 +53,11 @@ type VIPMarketState = {
   /* =========================
      Timestamp
   ========================= */
-
   ts: number
 
   /* =========================
      Store Update
   ========================= */
-
   update: (data: Partial<VIPMarketState>) => void
 }
 
@@ -70,7 +66,6 @@ export const useVIPMarketStore =
     /* =========================
        Core Market
     ========================= */
-
     oi: 0,
     oiDelta: 0,
 
@@ -80,10 +75,12 @@ export const useVIPMarketStore =
     fundingRate: 0,
     fundingBias: 'NEUTRAL',
 
+    price: 0,
+    priceChangePercent: 0,
+
     /* =========================
        Whale
     ========================= */
-
     whaleIntensity: 0,
     whaleRatio: 0,
     whaleNet: 0,
@@ -92,7 +89,6 @@ export const useVIPMarketStore =
     /* =========================
        Derived Signals
     ========================= */
-
     fmai: 0,
     absorption: 0,
     sweep: 0,
@@ -100,11 +96,9 @@ export const useVIPMarketStore =
     /* =========================
        Action Gate
     ========================= */
-
     actionGateState: 'OBSERVE',
 
     macd: null,
-
     decision: undefined,
     dominant: undefined,
     confidence: undefined,
@@ -112,13 +106,11 @@ export const useVIPMarketStore =
     /* =========================
        Timestamp
     ========================= */
-
     ts: 0,
 
     /* =========================
        Update Logic
     ========================= */
-
     update: (data) =>
       set((state) => {
         let changed = false
@@ -127,32 +119,55 @@ export const useVIPMarketStore =
         for (const key in data) {
           const k = key as keyof VIPMarketState
 
-          if (state[k] !== data[k]) {
-            ;(next as any)[k] = data[k]
-            changed = true
+          if (data[k] !== undefined) {
+            const value = data[k]
+
+            const isInvalidZero =
+              (k === 'oiDelta' &&
+                value === 0 &&
+                state.oiDelta !== 0) ||
+
+              (k === 'whaleNetRatio' &&
+                value === 0 &&
+                state.whaleNetRatio !== 0) ||
+
+              (k === 'volumeRatio' &&
+                value === 1 &&
+                state.volumeRatio !== 1)
+
+            if (!isInvalidZero) {
+              ;(next as any)[k] = value
+              changed = true
+            }
           }
         }
 
         return changed
-          ? { ...state, ...next }
+          ? {
+              ...state,
+              ...next,
+              ts: Date.now(),
+            }
           : state
       }),
   }))
 
 /* =========================================================
-   Scheduler
+   Scheduler (OPTIMIZED)
 ========================================================= */
 
-let pending: Partial<VIPMarketState> | null = null
+let pending: Partial<VIPMarketState> = {}
 let scheduled = false
 
-const UPDATE_INTERVAL = 250
+// 🔥 핵심 변경 (250 → 50)
+const UPDATE_INTERVAL = 50
+
 let lastFlush = 0
 
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
-  pending = { ...(pending || {}), ...data }
+  pending = { ...pending, ...data }
 
   if (scheduled) return
 
@@ -165,11 +180,11 @@ export function scheduleVIPMarketUpdate(
   )
 
   setTimeout(() => {
-    if (pending) {
+    if (Object.keys(pending).length > 0) {
       useVIPMarketStore.getState().update(pending)
     }
 
-    pending = null
+    pending = {}
     scheduled = false
     lastFlush = performance.now()
   }, delay)

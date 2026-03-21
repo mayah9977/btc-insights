@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { subscribeMarketPrice } from '@/lib/realtime/marketChannel'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 type RealtimePriceState = {
   price: number | null
@@ -22,7 +23,6 @@ export function useRealtimePrice(symbol: string) {
 
   const prevPriceRef = useRef<number | null>(null)
 
-  /* 🔥 throttle 추가 */
   const lastUpdateRef = useRef(0)
 
   useEffect(() => {
@@ -32,13 +32,22 @@ export function useRealtimePrice(symbol: string) {
 
     const unsubscribe = subscribeMarketPrice(
       upperSymbol,
-      (price) => {
+      (price, ts) => {
         const now = Date.now()
 
-        /* 🔥 250ms throttle */
+        /* 🔥 throttle */
         if (now - lastUpdateRef.current < 250) return
         lastUpdateRef.current = now
 
+        /* =====================================================
+           🔥 핵심 추가 (원상복구)
+        ===================================================== */
+        useVIPMarketStore.getState().update({
+          price,
+          ts: ts ?? now,
+        })
+
+        /* 기존 UI 상태 유지 */
         setState(() => {
           const next = {
             price,

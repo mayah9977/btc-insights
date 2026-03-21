@@ -14,13 +14,11 @@ interface RawObservationBarProps {
 /* =========================================================
    Open Interest
 ========================================================= */
-
 const OpenInterestValue = React.memo(function OpenInterestValue({
   symbol,
 }: {
   symbol: string
 }) {
-
   const oiState = useRealtimeOI(symbol)
 
   return (
@@ -35,6 +33,7 @@ const OpenInterestValue = React.memo(function OpenInterestValue({
         glowMode="direction"
         flashOnChange
         disableAnimation
+        format={(v) => Math.floor(v).toLocaleString()} // 🔥 소수점 제거
         className="font-bold text-emerald-400 tracking-wide"
       />
     </div>
@@ -44,13 +43,11 @@ const OpenInterestValue = React.memo(function OpenInterestValue({
 /* =========================================================
    Volume
 ========================================================= */
-
 const VolumeValue = React.memo(function VolumeValue({
   symbol,
 }: {
   symbol: string
 }) {
-
   const volumeState = useRealtimeVolume(symbol)
 
   return (
@@ -65,6 +62,7 @@ const VolumeValue = React.memo(function VolumeValue({
         glowMode="direction"
         flashOnChange
         disableAnimation
+        format={(v) => Math.floor(v).toLocaleString()} // 🔥 소수점 제거
         suffix={volumeState.volume != null ? ' K' : ''}
         className="font-bold text-emerald-400 tracking-wide"
       />
@@ -75,13 +73,11 @@ const VolumeValue = React.memo(function VolumeValue({
 /* =========================================================
    Funding Rate
 ========================================================= */
-
 const FundingRateValue = React.memo(function FundingRateValue({
   symbol,
 }: {
   symbol: string
 }) {
-
   const fundingState = useRealtimeFundingRate(symbol)
 
   return (
@@ -106,21 +102,20 @@ const FundingRateValue = React.memo(function FundingRateValue({
 /* =========================================================
    RawObservationBar
 ========================================================= */
-
-export function RawObservationBar({ symbol }: RawObservationBarProps) {
-
+export const RawObservationBar = React.memo(function RawObservationBar({
+  symbol,
+}: RawObservationBarProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="relative overflow-hidden"
     >
-
       {/* Luxury moving light sweep */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
         animate={{ backgroundPosition: ['0% 0%', '200% 0%'] }}
-        transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+        transition={{ duration: 10, repeat: 1, ease: 'linear' }}
         style={{
           backgroundImage:
             'linear-gradient(90deg, transparent, rgba(16,185,129,0.05), transparent)',
@@ -142,14 +137,11 @@ export function RawObservationBar({ symbol }: RawObservationBarProps) {
 
       <div className="relative px-4 py-6">
         <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:items-center md:gap-16">
-
           <OpenInterestValue symbol={symbol} />
           <VolumeValue symbol={symbol} />
           <FundingRateValue symbol={symbol} />
-
         </div>
       </div>
-
     </motion.div>
   )
-}
+})

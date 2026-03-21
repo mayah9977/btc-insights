@@ -1,117 +1,102 @@
-/* =========================================================
-Risk Guidance Result
-Strategy guidance layer
-========================================================= */
+import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { MarketSignal } from '@/lib/market/signalEngine'
 
 export interface RiskGuidanceResult {
   guidanceSignals: string[]
 }
 
+export function interpretRiskGuidance(params: {
+  snapshot: MarketSnapshot
+  signal: MarketSignal
+}): RiskGuidanceResult {
 
-/* =========================================================
-Interpret Risk Guidance
-Market analysis results → strategy guide
-========================================================= */
+  const { snapshot, signal } = params
+  const { oiDelta = 0, volumeRatio = 1, whaleNetRatio = 0 } = snapshot
 
-export function interpretRiskGuidance(
-  signals: string[]
-): RiskGuidanceResult {
-
-  const guidanceSignals: string[] = []
-
-  for (const s of signals) {
-
-    /* =========================
-    기관 매집
-    ========================= */
-
-    if (s.includes('기관 매집')) {
-      guidanceSignals.push(
-        '기관 매집 흐름이 감지되고 있어 추격 매수보다는 분할 진입 전략을 고려하는 것이 유리할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    롱 청산
-    ========================= */
-
-    if (s.includes('롱 포지션 청산')) {
-      guidanceSignals.push(
-        '현재 구간에서는 무리한 진입보다는 시장 안정 여부를 확인하며 관망 대응이 보다 유리할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    숏 청산
-    ========================= */
-
-    if (s.includes('숏 포지션 청산')) {
-      guidanceSignals.push(
-        '단기 반등 이후 변동성이 확대될 수 있어 신중한 접근과 리스크 관리가 필요할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    고래 매수
-    ========================= */
-
-    if (s.includes('고래 매수')) {
-      guidanceSignals.push(
-        '고래 매수 흐름이 감지되고 있어 시장 안정 여부를 확인하며 점진적인 포지션 구축 전략을 고려할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    고래 매도
-    ========================= */
-
-    if (s.includes('고래 매도')) {
-      guidanceSignals.push(
-        '고래 매도 압력이 감지되고 있어 보수적인 대응과 리스크 관리 중심 전략이 필요할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    박스권
-    ========================= */
-
-    if (s.includes('박스권')) {
-      guidanceSignals.push(
-        '명확한 추세 형성 전까지는 무리한 진입보다는 관망하며 돌파 여부를 확인하는 전략이 유리할 수 있습니다.'
-      )
-    }
-
-
-    /* =========================
-    변동성 확대
-    ========================= */
-
-    if (s.includes('변동성')) {
-      guidanceSignals.push(
-        '변동성이 확대되는 구간에서는 포지션 규모를 조절하고 리스크 관리 기준을 함께 설정하는 전략이 필요할 수 있습니다.'
-      )
-    }
-
-  }
-
+  const out: string[] = []
 
   /* =========================================================
-  Default Strategy
+   1. Liquidation Zone (핵심)
   ========================================================= */
+  if (oiDelta < 0 && volumeRatio > 1.3) {
 
-  if (guidanceSignals.length === 0) {
+    if (signal.direction === 'short') {
+      out.push(
+        `청산 진행 (OI↓ ${oiDelta.toFixed(2)}, Vol ${volumeRatio.toFixed(2)}x) → 하락 추세 지속 가능 → 반등 시 숏 진입 유리`
+      )
+    } else {
+      out.push(
+        `청산 진행 구간 → 방향 불안정 → 신규 진입 회피`
+      )
+    }
+  }
 
-    guidanceSignals.push(
-      '현재 시장 방향성이 명확하지 않아 무리한 진입보다는 관망하며 시장 흐름을 확인하는 전략이 유리할 수 있습니다.'
+  /* =========================================================
+   2. Trend Follow (핵심)
+  ========================================================= */
+  if (Math.abs(whaleNetRatio) > 0.1 && volumeRatio > 1.2) {
+
+    if (whaleNetRatio > 0) {
+      out.push(
+        `고래 매수 우위(${whaleNetRatio.toFixed(2)}) + 거래량 동반 → 상승 추세 추종 전략`
+      )
+    } else {
+      out.push(
+        `고래 매도 우위(${whaleNetRatio.toFixed(2)}) + 거래량 동반 → 하락 추세 추종 전략`
+      )
+    }
+  }
+
+  /* =========================================================
+   3. Overheat (리스크 트리거)
+  ========================================================= */
+  if (signal.tags.includes('LONG_OVERHEAT')) {
+    out.push(
+      `롱 과열 → 롱 진입 금지 / 익절 구간`
     )
   }
 
-  return {
-    guidanceSignals,
+  if (signal.tags.includes('SHORT_OVERHEAT')) {
+    out.push(
+      `숏 과열 → 숏 진입 금지 / 숏 스퀴즈 주의`
+    )
   }
+
+  /* =========================================================
+   4. Low Volume (무의미 구간 제거)
+  ========================================================= */
+  if (volumeRatio < 0.9) {
+    out.push(
+      `저유동성 (${volumeRatio.toFixed(2)}x) → 신호 신뢰도 낮음 → 관망`
+    )
+  }
+
+  /* =========================================================
+   5. Strong Signal (VIP)
+  ========================================================= */
+  if (signal.strength > 1.2) {
+
+    if (signal.direction === 'long') {
+      out.push(
+        `고신뢰 LONG (${signal.strength.toFixed(2)}) → 눌림 매수 전략`
+      )
+    }
+
+    if (signal.direction === 'short') {
+      out.push(
+        `고신뢰 SHORT (${signal.strength.toFixed(2)}) → 반등 숏 전략`
+      )
+    }
+  }
+
+  /* =========================================================
+   Default
+  ========================================================= */
+  if (out.length === 0) {
+    out.push(
+      `신호 약함 (Strength ${signal.strength.toFixed(2)}) → 진입 비추천`
+    )
+  }
+
+  return { guidanceSignals: out }
 }

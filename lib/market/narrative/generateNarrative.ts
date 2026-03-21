@@ -1,161 +1,177 @@
 import { ActionGateSentence } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { pickSentence } from '@/lib/market/narrative/sentenceVariation'
 
-import { interpretMarketStructure } from '@/lib/market/narrative/marketStructureInterpreter'
-import { interpretLiquidation } from '@/lib/market/narrative/liquidationInterpreter'
-import { interpretWhaleControl } from '@/lib/market/narrative/whaleControlInterpreter'
-import { interpretMarketRegime } from '@/lib/market/narrative/marketRegimeInterpreter'
-import { interpretRiskGuidance } from '@/lib/market/narrative/riskGuidanceInterpreter'
-
-import { interpretPositionPressure } from '@/lib/market/pressure/positionPressureInterpreter'
-import { interpretLiquidationMap } from '@/lib/market/liquidation/liquidationMapInterpreter'
-
 import { composeFinalNarrativeReport } from '@/lib/market/narrative/finalNarrativeComposer'
 import { mapSignalsToNarrativeSections } from '@/lib/market/narrative/signalNarrativeMapper'
 
-import {
-  FinalNarrativeReport
-} from '@/lib/market/narrative/types'
+import { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
+import {
+  getCachedNarrative,
+  setCachedNarrative,
+} from '@/lib/market/narrative/narrativeSnapshotStore'
+
+import { applySignalPriority } from '@/lib/market/narrative/signalPriorityEngine'
+import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+
+import { runInterpreterEngine } from '@/lib/market/engine/interpreterEngine'
+import { buildSignal } from '@/lib/market/signalEngine'
+
+/* 🔥 핵심 */
+import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 /* =========================================================
-Sentence Cache
-signalType 변경 전까지 문장 유지
+   Sentence Cache
 ========================================================= */
-
 const sentenceCache: Record<string, string> = {}
 
+/* 🔥 ultra fast cache */
+let lastTs = 0
+let lastResult: FinalNarrativeReport | null = null
 
 /* =========================================================
-🔥 Narrative Cache (성능 최적화)
+   Narrative Engine
 ========================================================= */
-
-const narrativeCache: Record<string, FinalNarrativeReport> = {}
-
-
-/* =========================================================
-Narrative Engine
-========================================================= */
-
 export function generateNarrative(
-  base: ActionGateSentence
+  base: ActionGateSentence,
+  signalType: BollingerSignalType,
 ): FinalNarrativeReport {
-
-  const cacheKey = base.summary
-
   /* =========================================================
-  Cache Hit
+     Snapshot
   ========================================================= */
+  const snapshot = getMarketSnapshot()
 
-  if (narrativeCache[cacheKey]) {
-    return narrativeCache[cacheKey]
+  /* 🔥 ultra fast cache */
+  if (snapshot.ts === lastTs && lastResult) {
+    return lastResult
   }
 
-  /* =========================================================
-  Sentence Variation
-  ========================================================= */
-
-  if (!sentenceCache[cacheKey]) {
-    sentenceCache[cacheKey] = pickSentence(base.description)
+  /* 🔥 기존 캐시 */
+  const cachePayload = {
+    ...snapshot,
+    signalType,
+    __ts: snapshot.ts,
   }
 
-  const baseDescription = sentenceCache[cacheKey]
+  const cached = getCachedNarrative(cachePayload as any)
+  if (cached) return cached
 
   /* =========================================================
-  Interpreter Engines
+     Strategy Base
   ========================================================= */
+  const sentenceKey = `${signalType}_${snapshot.ts}`
+
+  if (!sentenceCache[sentenceKey]) {
+    sentenceCache[sentenceKey] =
+      pickSentence(base.description, signalType)
+  }
+
+  const strategyBase = sentenceCache[sentenceKey]
+
+  /* =========================================================
+     Interpreter (🔥 제한 실행)
+  ========================================================= */
+  const shouldRunHeavy =
+    Math.abs(snapshot.oiDelta ?? 0) > 0.01 ||
+    Math.abs(snapshot.whaleNetRatio ?? 0) > 0.003 ||
+    Math.abs(snapshot.fundingRate ?? 0) > 0.00001
+
+  const interpreterResult = shouldRunHeavy
+    ? runInterpreterEngine(snapshot)
+    : {
+        structureSignals: [],
+        liquidationSignals: [],
+        whaleSignals: [],
+        regimeSignals: [],
+        pressureSignals: [],
+        liquidationMapSignals: [],
+        allSignals: [],
+      }
 
   const {
-    trends,
     structureSignals,
-  } = interpretMarketStructure()
-
-  const { liquidationSignals } = interpretLiquidation()
-
-  const { whaleSignals } = interpretWhaleControl()
-
-  const { regimeSignals } = interpretMarketRegime()
-
-  const { pressureSignals } = interpretPositionPressure()
-
-  const {
-    liquidationSignals: liquidationMapSignals
-  } = interpretLiquidationMap()
+    liquidationSignals,
+    whaleSignals,
+    regimeSignals,
+    pressureSignals,
+    liquidationMapSignals,
+  } = interpreterResult
 
   /* =========================================================
-  Cause Layer 강화
-  OI / Funding / Volume / Whale 구조 신호 포함
+     🔥 signal 없으면 즉시 종료
   ========================================================= */
+  if (
+    !structureSignals.length &&
+    !liquidationSignals.length &&
+    !whaleSignals.length &&
+    !regimeSignals.length &&
+    !pressureSignals.length &&
+    !liquidationMapSignals.length
+  ) {
+    const empty: FinalNarrativeReport = {
+      summary: base.summary,
+      tendency: base.tendency,
+      description: strategyBase,
+      situation: '',
+      cause: '',
+      risk: '',
+      strategy: '',
+    }
 
-  const causeSignals = [
-    ...structureSignals,
-    ...pressureSignals,
-    ...whaleSignals,
-  ]
+    lastTs = snapshot.ts
+    lastResult = empty
+
+    return empty
+  }
 
   /* =========================================================
-  Risk Layer
+     Signal
   ========================================================= */
-
-  const riskSignals = [
-    ...liquidationSignals,
-    ...liquidationMapSignals,
-    ...regimeSignals,
-  ]
-
-  /* =========================================================
-  Strategy Layer
-  ========================================================= */
-
-  const { guidanceSignals } =
-    interpretRiskGuidance([
-      ...causeSignals,
-      ...riskSignals,
-    ])
-
-  /* =========================================================
-  Signal → Narrative Section Mapping
-  중앙 관리 Layer
-  ========================================================= */
-
-  const sections =
-    mapSignalsToNarrativeSections({
-
-      structureSignals: causeSignals,
-
-      pressureSignals,
-
-      whaleSignals,
-
-      liquidationSignals,
-
-      liquidationMapSignals,
-
-      regimeSignals,
-
-      guidanceSignals,
-    })
-
-  /* =========================================================
-  Final AI Narrative Composer
-  ========================================================= */
-
-  const report = composeFinalNarrativeReport({
-
-    summary: base.summary,
-
-    tendency: base.tendency,
-
-    baseDescription,
-
-    sections,
+  const signal = buildSignal({
+    ...interpreterResult,
+    snapshot,
   })
 
   /* =========================================================
-  Cache 저장
+     🔥 Priority (한 번만 계산)
   ========================================================= */
+  const prioritized = applySignalPriority({
+    liquidationSignals: [
+      ...liquidationSignals.map((s) => s.type),
+      ...liquidationMapSignals.map((s) => s.type),
+    ],
+    whaleSignals: whaleSignals.map((s) => s.type),
+    pressureSignals: pressureSignals.map((s) => s.type),
+    structureSignals: structureSignals.map((s) => s.type),
+    regimeSignals: regimeSignals.map((s) => s.type),
+  })
 
-  narrativeCache[cacheKey] = report
+  /* =========================================================
+     🔥 Mapper (경량화된 구조)
+  ========================================================= */
+  const sections = mapSignalsToNarrativeSections(
+    prioritized,
+  )
+
+  /* =========================================================
+     Final Composer
+  ========================================================= */
+  const report = composeFinalNarrativeReport({
+    summary: base.summary,
+    tendency: base.tendency,
+    baseDescription: strategyBase,
+    sections,
+    signal,
+    snapshot,
+  })
+
+  /* =========================================================
+     Cache Save
+  ========================================================= */
+  setCachedNarrative(cachePayload as any, report)
+
+  lastTs = snapshot.ts
+  lastResult = report
 
   return report
 }

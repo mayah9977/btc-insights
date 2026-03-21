@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useEffect, useRef, useState } from 'react'
+import React, { useMemo, useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   ResponsiveContainer,
@@ -17,7 +17,8 @@ import { useWhaleNetPressure } from '@/lib/realtime/useWhaleNetPressure'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import VIPWhaleTradeGuideCard from '@/components/vip/VIPWhaleTradeGuideCard'
-import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
+
+import { chartController } from '@/lib/chart/chartController'
 
 type TradePoint = {
   ts: number
@@ -27,13 +28,14 @@ type TradePoint = {
 }
 
 const BUFFER_SIZE = 30
-const RENDER_INTERVAL = 120
 
 function VIPWhaleTradeFlowChart({
   symbol = 'BTCUSDT',
 }: {
   symbol?: string
 }) {
+
+  const chartId = 'whaleTradeFlow_desktop'
 
   const { history: netHistory } =
     useWhaleNetPressure({
@@ -45,51 +47,31 @@ function VIPWhaleTradeFlowChart({
   const absorption = useVIPMarketStore(s => s.absorption)
   const sweep = useVIPMarketStore(s => s.sweep)
 
-  const chartBufferRef = useRef<TradePoint[]>([])
-  const historyIndexRef = useRef(0)
-
   const [history, setHistory] = useState<TradePoint[]>([])
 
-  const lastRenderRef = useRef(0)
-
   /* =========================
-     chartRealtimeBridge register
-  ========================= */
+     Chart Controller Register
+     ========================= */
 
   useEffect(() => {
 
-    chartRealtimeBridge.register(
-      'whaleTradeFlow_desktop',
-      (point: TradePoint) => {
-
-        const buffer = chartBufferRef.current
-
-        if (buffer.length < BUFFER_SIZE) {
-          buffer.push(point)
-        } else {
-          buffer.shift()
-          buffer.push(point)
-        }
-
-        const now = performance.now()
-
-        if (now - lastRenderRef.current > RENDER_INTERVAL) {
-          setHistory([...buffer])
-          lastRenderRef.current = now
-        }
-
+    chartController.registerChart<TradePoint>(
+      chartId,
+      BUFFER_SIZE,
+      (data) => {
+        setHistory(data)
       }
     )
 
     return () => {
-      chartRealtimeBridge.unregister('whaleTradeFlow_desktop')
+      chartController.unregisterChart(chartId)
     }
 
   }, [])
 
   /* =========================
      Net Map
-  ========================= */
+     ========================= */
 
   const netMap = useMemo(() => {
 
@@ -105,7 +87,7 @@ function VIPWhaleTradeFlowChart({
 
   /* =========================
      merge
-  ========================= */
+     ========================= */
 
   const merged = useMemo(() => {
 
@@ -123,7 +105,7 @@ function VIPWhaleTradeFlowChart({
 
   /* =========================
      FMAI Weight
-  ========================= */
+     ========================= */
 
   const fmaiThreshold = 0.35
 
@@ -153,7 +135,7 @@ function VIPWhaleTradeFlowChart({
 
   /* =========================
      Scatter flags
-  ========================= */
+     ========================= */
 
   const institutionalFlags = useMemo(() => {
 
@@ -252,10 +234,20 @@ function VIPWhaleTradeFlowChart({
             <AreaChart data={filtered}>
 
               <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+
+                <linearGradient
+                  id={gradientId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+
                   <stop offset="5%" stopColor="#ff0000" stopOpacity={0.8}/>
                   <stop offset="95%" stopColor="#ff0000" stopOpacity={0}/>
+
                 </linearGradient>
+
               </defs>
 
               <XAxis dataKey="ts" hide />

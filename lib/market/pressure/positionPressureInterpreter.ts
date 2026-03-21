@@ -1,128 +1,184 @@
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-
 /* =========================================================
-Position Pressure Signal Type
+  Position Pressure Interpreter (FINAL - FIXED FOR REAL DATA)
 ========================================================= */
 
-export type PositionPressureSignalType =
-  | 'LONG_LIQUIDATION_PRESSURE'
-  | 'SHORT_LIQUIDATION_PRESSURE'
-  | 'LONG_BUILDUP'
-  | 'SHORT_BUILDUP'
-  | 'SQUEEZE_RISK'
+import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { PressureSignal } from '@/lib/market/types/signalTypes'
 
 /* =========================================================
-Position Pressure Result
+  🔥 Whale Pressure Type
 ========================================================= */
-
-export interface PositionPressureSignal {
-  pressureSignals: string[]
-}
+export type WhalePressure =
+  | 'NORMAL'
+  | 'ELEVATED'
+  | 'EXTREME'
 
 /* =========================================================
-Threshold Config
-시장 민감도 설정
+  🔥 Threshold Config (실데이터 기준 완화)
 ========================================================= */
-
 const OI_INCREASE_THRESHOLD = 0
 const OI_DECREASE_THRESHOLD = 0
 
-const VOLUME_SURGE_THRESHOLD = 1.3
+const VOLUME_SURGE_THRESHOLD = 1.1
 
-const WHALE_STRONG_BUY = 0.1
-const WHALE_STRONG_SELL = -0.1
+const WHALE_STRONG_BUY = 0.02
+const WHALE_STRONG_SELL = -0.02
+
+const WHALE_ELEVATED = 0.01
+const WHALE_EXTREME = 0.05
+
+/* 🔥 Overheat 기준 */
+const OI_STRONG_INCREASE = 0.2
 
 /* =========================================================
-Interpret Position Pressure
+  🔥 Whale Pressure 계산
 ========================================================= */
+export function deriveWhalePressure(
+  snapshot: MarketSnapshot,
+): WhalePressure {
+  const ratio = snapshot.whaleNetRatio ?? 0
+  const abs = Math.abs(ratio)
 
-export function interpretPositionPressure(): PositionPressureSignal {
+  if (abs >= WHALE_EXTREME) return 'EXTREME'
+  if (abs >= WHALE_ELEVATED) return 'ELEVATED'
+  return 'NORMAL'
+}
 
-  const market = useVIPMarketStore.getState()
+/* =========================================================
+  Interpret Position Pressure
+========================================================= */
+export function interpretPositionPressure(
+  snapshot: MarketSnapshot,
+): { pressureSignals: PressureSignal[] } {
 
-  const pressureSignals: string[] = []
+  const pressureSignals: PressureSignal[] = []
 
   const {
-    oiDelta,
-    volumeRatio,
+    oiDelta = 0,
+    volumeRatio = 1,
     fundingBias,
-    whaleNetRatio
-  } = market
+    whaleNetRatio = 0,
+  } = snapshot
 
   /* =========================================================
-  LONG Liquidation Pressure
-  조건
-  OI 감소 + Volume 급증 + LONG_HEAVY
+    LONG Liquidation Pressure
   ========================================================= */
-
   if (
     oiDelta < OI_DECREASE_THRESHOLD &&
     volumeRatio > VOLUME_SURGE_THRESHOLD &&
     fundingBias === 'LONG_HEAVY'
   ) {
-    pressureSignals.push(
-      '롱 포지션 청산 압력이 증가하고'
-    )
+    pressureSignals.push({
+      type: 'LONG_LIQUIDATION_PRESSURE',
+      category: 'pressure',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  SHORT Liquidation Pressure
-  조건
-  OI 감소 + Volume 급증 + SHORT_HEAVY
+    SHORT Liquidation Pressure
   ========================================================= */
-
   if (
     oiDelta < OI_DECREASE_THRESHOLD &&
     volumeRatio > VOLUME_SURGE_THRESHOLD &&
     fundingBias === 'SHORT_HEAVY'
   ) {
-    pressureSignals.push(
-      '숏 포지션 청산이 발생하며 시장 반등 압력이 형성되고'
-    )
+    pressureSignals.push({
+      type: 'SHORT_LIQUIDATION_PRESSURE',
+      category: 'pressure',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  LONG Position Build-up
-  조건
-  OI 증가 + LONG_HEAVY
+    LONG Build-up
   ========================================================= */
-
   if (
     oiDelta > OI_INCREASE_THRESHOLD &&
     fundingBias === 'LONG_HEAVY'
   ) {
-    pressureSignals.push(
-      '롱 포지션이 빠르게 증가하며 시장 레버리지 위험이 확대되고'
-    )
+    pressureSignals.push({
+      type: 'LONG_BUILDUP',
+      category: 'pressure',
+      value: oiDelta,
+      strength: Math.min(oiDelta, 2),
+    })
   }
 
   /* =========================================================
-  SHORT Position Build-up
-  조건
-  OI 증가 + SHORT_HEAVY
+    SHORT Build-up
   ========================================================= */
-
   if (
     oiDelta > OI_INCREASE_THRESHOLD &&
     fundingBias === 'SHORT_HEAVY'
   ) {
-    pressureSignals.push(
-      '숏 포지션이 증가하며 하락 압력이 강화되고'
-    )
+    pressureSignals.push({
+      type: 'SHORT_BUILDUP',
+      category: 'pressure',
+      value: oiDelta,
+      strength: Math.min(oiDelta, 2),
+    })
   }
 
   /* =========================================================
-  Squeeze Risk Detection
-  고래 포지션 + OI 증가
+    LONG OVERHEAT
   ========================================================= */
+  if (
+    oiDelta > OI_STRONG_INCREASE &&
+    fundingBias === 'LONG_HEAVY' &&
+    volumeRatio > 1.15
+  ) {
+    pressureSignals.push({
+      type: 'LONG_OVERHEAT',
+      category: 'pressure',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
+  }
 
+  /* =========================================================
+    SHORT OVERHEAT
+  ========================================================= */
+  if (
+    oiDelta > OI_STRONG_INCREASE &&
+    fundingBias === 'SHORT_HEAVY' &&
+    volumeRatio > 1.15
+  ) {
+    pressureSignals.push({
+      type: 'SHORT_OVERHEAT',
+      category: 'pressure',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
+  }
+
+  /* =========================================================
+    Squeeze Risk (완화)
+  ========================================================= */
   if (
     oiDelta > 0 &&
-    Math.abs(whaleNetRatio) > 0.1
+    Math.abs(whaleNetRatio) > WHALE_STRONG_BUY
   ) {
-    pressureSignals.push(
-      '대규모 포지션 압력이 형성되며 숏 또는 롱 스퀴즈 가능성이 높아지고'
-    )
+    pressureSignals.push({
+      type: 'SQUEEZE_RISK',
+      category: 'pressure',
+      value: whaleNetRatio,
+      strength: Math.abs(whaleNetRatio),
+    })
+  }
+
+  /* =========================================================
+   🔥 Fallback (핵심 추가)
+  ========================================================= */
+  if (pressureSignals.length === 0 && oiDelta !== 0) {
+    pressureSignals.push({
+      type: oiDelta > 0 ? 'LONG_BUILDUP' : 'SHORT_BUILDUP',
+      category: 'pressure',
+      value: oiDelta,
+      strength: Math.abs(oiDelta),
+    })
   }
 
   return {

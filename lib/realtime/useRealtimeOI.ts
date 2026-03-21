@@ -12,17 +12,17 @@ type RealtimeOIState = {
 
 export function useRealtimeOI(symbol: string): RealtimeOIState {
   const oi = useVIPMarketStore((s) => s.oi)
-  const delta = useVIPMarketStore((s) => s.oiDelta)
+  const oiDelta = useVIPMarketStore((s) => s.oiDelta)
   const ts = useVIPMarketStore((s) => s.ts)
 
   let direction: 'UP' | 'DOWN' | 'FLAT' = 'FLAT'
 
-  if (delta > 0) direction = 'UP'
-  else if (delta < 0) direction = 'DOWN'
+  if (oiDelta > 0) direction = 'UP'
+  else if (oiDelta < 0) direction = 'DOWN'
 
   return {
     openInterest: oi ?? null,
-    delta: delta ?? 0,
+    delta: oiDelta ?? 0,
     direction,
     connected: oi !== undefined,
     lastUpdatedAt: ts ?? null,

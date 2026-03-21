@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 type RealtimeVolumeState = {
@@ -19,7 +19,11 @@ export function useRealtimeVolume(symbol: string): RealtimeVolumeState {
 
   const historyRef = useRef<number[]>([])
 
-  if (volume != null) {
+  /* =========================
+     Update history on volume change
+  ========================= */
+  useEffect(() => {
+    if (volume == null) return
 
     const history = historyRef.current
 
@@ -31,9 +35,15 @@ export function useRealtimeVolume(symbol: string): RealtimeVolumeState {
     }
 
     historyRef.current = history
-  }
+  }, [volume])
 
-  const rolling10s = historyRef.current.reduce((a, b) => a + b, 0)
+  /* =========================
+     Rolling 10s volume
+  ========================= */
+  const rolling10s =
+    historyRef.current.length === 0
+      ? 0
+      : historyRef.current.reduce((a, b) => a + b, 0)
 
   return {
     volume: volume ?? null,

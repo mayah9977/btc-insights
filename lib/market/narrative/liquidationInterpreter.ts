@@ -1,90 +1,85 @@
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { LiquidationSignal } from '@/lib/market/types/signalTypes'
 
 /* =========================================================
-Liquidation Signal Type
+ Threshold Config
 ========================================================= */
-
-export interface LiquidationSignal {
-  liquidationSignals: string[]
-}
-
-/* =========================================================
-Threshold Config
-시장 민감도 조정 가능
-========================================================= */
-
 const VOLUME_SPIKE_THRESHOLD = 1.35
 const OI_DROP_THRESHOLD = -0.0001
 
 /* =========================================================
-Interpret Liquidation Map
-oiDelta + volumeRatio + fundingBias → liquidation signals
+ Interpret Liquidation (Typed)
 ========================================================= */
+export function interpretLiquidation(
+  snapshot: MarketSnapshot
+): { liquidationSignals: LiquidationSignal[] } {
 
-export function interpretLiquidation(): LiquidationSignal {
+  const liquidationSignals: LiquidationSignal[] = []
 
-  const market = useVIPMarketStore.getState()
-
-  const liquidationSignals: string[] = []
-
-  const oiDelta = market.oiDelta ?? 0
-  const volumeRatio = market.volumeRatio ?? 1
-  const fundingBias = market.fundingBias
+  const oiDelta = snapshot.oiDelta ?? 0
+  const volumeRatio = snapshot.volumeRatio ?? 1
+  const fundingBias = snapshot.fundingBias
 
   /* =========================================================
-  Long Liquidation
-  OI 감소 + 거래량 급증
+   Long Liquidation
   ========================================================= */
-
   if (
     oiDelta < OI_DROP_THRESHOLD &&
     volumeRatio > VOLUME_SPIKE_THRESHOLD &&
     fundingBias === 'LONG_HEAVY'
   ) {
-    liquidationSignals.push(
-      '롱 포지션 청산이 발생하며 하락 압력이 확대되고'
-    )
+    liquidationSignals.push({
+      type: 'LONG_LIQUIDATION',
+      category: 'liquidation',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  Short Liquidation
-  OI 감소 + 거래량 급증
+   Short Liquidation
   ========================================================= */
-
   if (
     oiDelta < OI_DROP_THRESHOLD &&
     volumeRatio > VOLUME_SPIKE_THRESHOLD &&
     fundingBias === 'SHORT_HEAVY'
   ) {
-    liquidationSignals.push(
-      '숏 포지션 청산이 발생하며 상승 압력이 확대되고'
-    )
+    liquidationSignals.push({
+      type: 'SHORT_LIQUIDATION',
+      category: 'liquidation',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  Cascade Liquidation
+   Cascade Liquidation
   ========================================================= */
-
   if (
     oiDelta < OI_DROP_THRESHOLD &&
     volumeRatio > 1.6
   ) {
-    liquidationSignals.push(
-      '연쇄 청산이 발생하며 시장 변동성이 급격히 확대되고'
-    )
+    liquidationSignals.push({
+      type: 'CASCADE_LIQUIDATION',
+      category: 'liquidation',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  Early Liquidation Signal
+   Early Liquidation
   ========================================================= */
-
   if (
     oiDelta < 0 &&
     volumeRatio > 1.2
   ) {
-    liquidationSignals.push(
-      '청산 초기 신호가 나타나며 포지션 정리가 진행되고'
-    )
+    liquidationSignals.push({
+      type: 'EARLY_LIQUIDATION',
+      category: 'liquidation',
+      value: oiDelta,
+      strength: volumeRatio,
+    })
   }
 
   return {

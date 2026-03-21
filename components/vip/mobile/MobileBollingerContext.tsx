@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
@@ -15,56 +15,53 @@ import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
 export default function MobileBollingerContext() {
-
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
   /* ======================================================
-     Signal Selection
+     🔥 Store 기반 준비 상태
   ====================================================== */
+  const isReady = useVIPMarketStore((s) => {
+    return (
+      s.ts > 0 &&
+      (s.oiDelta !== 0 ||
+        s.volumeRatio !== 1 ||
+        s.fundingRate !== 0 ||
+        s.whaleNetRatio !== 0)
+    )
+  })
 
-  const signal = useMemo(() => {
-
-    if (
-      confirmed?.signalType ===
-      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
-    ) {
-      return confirmed
-    }
-
-    return confirmed ?? live
-
-  }, [confirmed, live])
+  /* ======================================================
+     Signal Selection (useMemo 제거)
+  ====================================================== */
+  const signal =
+    confirmed?.signalType ===
+    BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
+      ? confirmed
+      : confirmed ?? live
 
   const signalType = signal?.signalType
 
   /* ======================================================
-     Narrative Engine
-     (signalType 변경 시에만 생성)
+     🔥 Narrative (useMemo 제거)
   ====================================================== */
-
-  const sentence = useMemo(() => {
-
-    if (!signalType) return null
-
-    const base = BOLLINGER_SENTENCE_MAP[signalType]
-    if (!base) return null
-
-    return generateNarrative(base)
-
-  }, [signalType])
+  const sentence =
+    signalType && isReady
+      ? generateNarrative(
+          BOLLINGER_SENTENCE_MAP[signalType],
+          signalType
+        )
+      : null
 
   /* ======================================================
-     Premium Animation
+     ✅ Animation (요청대로 그대로 유지)
   ====================================================== */
-
   const { flash, pulse, transition } =
     usePremiumSignalAnimation(signalType)
 
   /* ======================================================
-     Typewriter Effect
+     🔥 Typewriter 최적화
   ====================================================== */
-
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
     10
@@ -84,7 +81,6 @@ export default function MobileBollingerContext() {
 
   return (
     <div className="mx-4 relative">
-
       {flash && (
         <div
           className="
@@ -114,7 +110,6 @@ export default function MobileBollingerContext() {
         duration-500
         "
       >
-
         {/* SUMMARY */}
         <div className="text-yellow-400 font-semibold text-sm tracking-wide">
           {typedSummary}
@@ -129,7 +124,6 @@ export default function MobileBollingerContext() {
         <div className="text-gray-500 text-xs italic">
           {typedTendency}
         </div>
-
       </div>
     </div>
   )

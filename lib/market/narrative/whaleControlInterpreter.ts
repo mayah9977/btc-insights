@@ -1,110 +1,124 @@
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { WhaleSignal } from '@/lib/market/types/signalTypes'
 
 /* =========================================================
-Whale Control Signal Type
+ Threshold Config (🔥 실데이터 기준 완화)
 ========================================================= */
+const WHALE_BASE_THRESHOLD = 0.002
+const WHALE_DOMINANT_THRESHOLD = 0.01
 
-export interface WhaleControlSignal {
-  whaleSignals: string[]
-}
+const VOLUME_CONFIRM_THRESHOLD = 1.02
 
 /* =========================================================
-Threshold Config
-시장 민감도 조정 가능
+ Interpret Whale Control (Typed)
 ========================================================= */
+export function interpretWhaleControl(
+  snapshot: MarketSnapshot
+): { whaleSignals: WhaleSignal[] } {
 
-const WHALE_BUY_THRESHOLD = 0.05
-const WHALE_SELL_THRESHOLD = -0.05
+  const whaleSignals: WhaleSignal[] = []
 
-const WHALE_DOMINANT_THRESHOLD = 0.1
-
-const VOLUME_CONFIRM_THRESHOLD = 1.2
-
-/* =========================================================
-Interpret Whale Market Control
-whaleNetRatio + volumeRatio + oiDelta
-→ whale market control signals
-========================================================= */
-
-export function interpretWhaleControl(): WhaleControlSignal {
-
-  const market = useVIPMarketStore.getState()
-
-  const whaleSignals: string[] = []
-
-  const whaleNet = market.whaleNetRatio ?? 0
-  const volumeRatio = market.volumeRatio ?? 1
-  const oiDelta = market.oiDelta ?? 0
+  const whaleNet = snapshot.whaleNetRatio ?? 0
+  const volumeRatio = snapshot.volumeRatio ?? 1
+  const oiDelta = snapshot.oiDelta ?? 0
 
   /* =========================================================
-  Whale Buying Dominance
-  고래 매수 주도
+   Whale Base Detection
   ========================================================= */
+  if (whaleNet > WHALE_BASE_THRESHOLD) {
+    whaleSignals.push({
+      type: 'WHALE_BUY_CONTROL',
+      category: 'whale',
+      value: whaleNet,
+      strength: whaleNet,
+    })
+  }
 
+  if (whaleNet < -WHALE_BASE_THRESHOLD) {
+    whaleSignals.push({
+      type: 'WHALE_SELL_CONTROL',
+      category: 'whale',
+      value: whaleNet,
+      strength: Math.abs(whaleNet),
+    })
+  }
+
+  /* =========================================================
+   Whale Dominance
+  ========================================================= */
   if (
     whaleNet > WHALE_DOMINANT_THRESHOLD &&
     volumeRatio > VOLUME_CONFIRM_THRESHOLD
   ) {
-    whaleSignals.push(
-      '고래 매수 세력이 시장 상승을 주도하고 있으며'
-    )
+    whaleSignals.push({
+      type: 'WHALE_BUY_CONTROL',
+      category: 'whale',
+      value: whaleNet,
+      strength: volumeRatio,
+    })
   }
-
-  /* =========================================================
-  Whale Selling Dominance
-  고래 매도 주도
-  ========================================================= */
 
   if (
     whaleNet < -WHALE_DOMINANT_THRESHOLD &&
     volumeRatio > VOLUME_CONFIRM_THRESHOLD
   ) {
-    whaleSignals.push(
-      '고래 매도 세력이 시장 하락을 주도하고 있으며'
-    )
+    whaleSignals.push({
+      type: 'WHALE_SELL_CONTROL',
+      category: 'whale',
+      value: whaleNet,
+      strength: volumeRatio,
+    })
   }
 
   /* =========================================================
-  Whale Accumulation
-  고래 매집
+   Whale Accumulation
   ========================================================= */
-
-  if (
-    whaleNet > WHALE_BUY_THRESHOLD &&
-    oiDelta > 0 &&
-    volumeRatio <= VOLUME_CONFIRM_THRESHOLD
-  ) {
-    whaleSignals.push(
-      '고래 매집 흐름이 형성되며 하락이 제한되는 움직임이 나타나고'
-    )
+  if (whaleNet > WHALE_BASE_THRESHOLD && oiDelta > 0) {
+    whaleSignals.push({
+      type: 'WHALE_ACCUMULATION',
+      category: 'whale',
+      value: whaleNet,
+      strength: whaleNet,
+    })
   }
 
   /* =========================================================
-  Whale Distribution
-  고래 분배
+   Whale Distribution
   ========================================================= */
-
-  if (
-    whaleNet < WHALE_SELL_THRESHOLD &&
-    oiDelta < 0 &&
-    volumeRatio <= VOLUME_CONFIRM_THRESHOLD
-  ) {
-    whaleSignals.push(
-      '고래 분배 흐름이 나타나며 상승 압력이 제한되는 움직임이 나타나고'
-    )
+  if (whaleNet < -WHALE_BASE_THRESHOLD && oiDelta < 0) {
+    whaleSignals.push({
+      type: 'WHALE_DISTRIBUTION',
+      category: 'whale',
+      value: whaleNet,
+      strength: Math.abs(whaleNet),
+    })
   }
 
   /* =========================================================
-  Whale Market Control Warning
+   Whale Influence
   ========================================================= */
-
   if (
     Math.abs(whaleNet) > WHALE_DOMINANT_THRESHOLD &&
     volumeRatio < 1
   ) {
-    whaleSignals.push(
-      '고래 흐름이 시장 방향성에 영향을 주기 시작하고'
-    )
+    whaleSignals.push({
+      type: 'WHALE_INFLUENCE',
+      category: 'whale',
+      value: whaleNet,
+      strength: Math.abs(whaleNet),
+    })
+  }
+
+  /* =========================================================
+   🔥 Fallback (핵심)
+  ========================================================= */
+  if (whaleSignals.length === 0 && Math.abs(whaleNet) > 0) {
+    whaleSignals.push({
+      type: whaleNet > 0 ? 'WHALE_BUY_CONTROL' : 'WHALE_SELL_CONTROL',
+      category: 'whale',
+      value: whaleNet,
+      strength: Math.abs(whaleNet),
+    })
   }
 
   return {

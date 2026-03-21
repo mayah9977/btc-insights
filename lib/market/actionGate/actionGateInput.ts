@@ -33,6 +33,6 @@ export interface ActionGateInput {
   whalePressure: 'NORMAL' | 'ELEVATED' | 'EXTREME'
 
   /* 6) 🔥 FMAI 확장 (선택적 사용) */
-  fmaiScore?: number          // 정량 점수 기반 gate 확장 대비
-  fmai?: FMAIResult | null    // 전체 FMAI 객체 전달 가능
+  fmaiScore?: number // 정량 점수 기반 gate 확장 대비
+  fmai?: FMAIResult | null // 전체 FMAI 객체 전달 가능
 }

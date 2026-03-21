@@ -1,8 +1,7 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ActionGateState } from '@/components/system/ActionGateStatus'
 
 import { RiskNumericPanel } from './numeric/RiskNumericPanel'
 import { RiskLimitedPanel } from './limited/RiskLimitedPanel'
@@ -16,32 +15,40 @@ import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 /* Narrative Engine */
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 
-/* Store subscription */
+/* Store */
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 /* Hero */
 import { ActionGateDescriptionHero } from './ActionGateDescriptionHero'
 
 interface ActionGateRendererProps {
-  gate: ActionGateState
   signalType?: BollingerSignalType
 }
 
-export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
-  gate,
-  signalType,
-}) => {
-
+export const ActionGateRenderer: React.FC<
+  ActionGateRendererProps
+> = ({ signalType }) => {
   /* ======================================================
-     Store Subscription (market 변화 감지)
+     🔥 selector 기반 최소 구독 (핵심)
   ====================================================== */
 
+  const gate = useVIPMarketStore((s) => s.actionGateState)
+
   const marketTick = useVIPMarketStore((s) => s.ts)
+
+  const isReady = useVIPMarketStore((s) => {
+    return (
+      s.ts > 0 &&
+      (s.oiDelta !== 0 ||
+        s.volumeRatio !== 1 ||
+        s.fundingRate !== 0 ||
+        s.whaleNetRatio !== 0)
+    )
+  })
 
   /* ======================================================
      Container tone
   ====================================================== */
-
   const containerClass =
     gate === 'OBSERVE'
       ? 'from-emerald-900/40 to-teal-900/20 border-emerald-700/40 text-emerald-200 shadow-[0_0_40px_rgba(16,185,129,0.15)]'
@@ -57,32 +64,26 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
       : 'bg-slate-400/30'
 
   /* ======================================================
-     Narrative Sentence
+     🔥 즉시 계산 (useMemo 제거)
   ====================================================== */
-
-  const sentence = useMemo(() => {
-
-    if (!signalType) return null
-
-    const base = BOLLINGER_SENTENCE_MAP[signalType]
-
-    if (!base) return null
-
-    return generateNarrative(base)
-
-  }, [signalType, marketTick])
+  const sentence =
+    signalType && isReady
+      ? generateNarrative(
+          BOLLINGER_SENTENCE_MAP[signalType],
+          signalType,
+        )
+      : null
 
   /* ======================================================
      Background animation
   ====================================================== */
-
-  const bgMotionClass: Partial<Record<ActionGateState, string>> = {
+  const bgMotionClass = {
     OBSERVE: 'ag-bg-observe',
     CAUTION: 'ag-bg-caution',
     IGNORE: 'ag-bg-ignore',
   }
 
-  const densityClass: Partial<Record<ActionGateState, string>> = {
+  const densityClass = {
     OBSERVE: 'ag-density-open',
     CAUTION: 'ag-density-medium',
     IGNORE: 'ag-density-compact',
@@ -98,9 +99,7 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
         ${densityClass[gate]}
       `}
     >
-
       {/* Animated Background */}
-
       <div
         aria-hidden
         className={`
@@ -111,17 +110,15 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
       />
 
       {/* Left Rail */}
-
-      <div className={`relative z-10 w-[4px] shrink-0 ${railClass}`} />
+      <div
+        className={`relative z-10 w-[4px] shrink-0 ${railClass}`}
+      />
 
       <div className="relative z-10 mx-auto max-w-7xl px-6 w-full flex flex-col justify-center py-6">
-
         {/* Header */}
-
         <ActionGateCopy gate={gate} />
 
         {/* HERO DESCRIPTION */}
-
         <AnimatePresence mode="wait">
           {sentence && (
             <motion.div
@@ -132,9 +129,7 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
               transition={{ duration: 0.45 }}
               className="mt-8"
             >
-
               {/* SUMMARY */}
-
               <motion.div
                 className="
                   text-lg md:text-xl
@@ -152,7 +147,6 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
               </motion.div>
 
               {/* DESCRIPTION */}
-
               <div className="mt-6">
                 <ActionGateDescriptionHero
                   description={sentence.description}
@@ -161,7 +155,6 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
               </div>
 
               {/* TENDENCY */}
-
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -175,23 +168,19 @@ export const ActionGateRenderer: React.FC<ActionGateRendererProps> = ({
               >
                 {sentence.tendency}
               </motion.div>
-
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Live Commentary */}
-
         <LiveBollingerCommentaryBanner />
 
         {/* Panels */}
-
         <div className="mt-4">
           {gate === 'IGNORE' && <RiskNumericPanel />}
           {gate === 'CAUTION' && <RiskLimitedPanel />}
           {gate === 'OBSERVE' && <RiskFullPanel />}
         </div>
-
       </div>
     </div>
   )

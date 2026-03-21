@@ -7,7 +7,8 @@ import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenc
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
-import { pickSentence } from '@/lib/market/narrative/sentenceVariation'
+import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -23,7 +24,6 @@ export default function ActionGateRendererMobile({
   gate,
   signalType,
 }: Props) {
-
   const title =
     'AI is observing the market.'
 
@@ -37,25 +37,46 @@ export default function ActionGateRendererMobile({
       ? 'bg-yellow-900/20 border-yellow-600/30'
       : 'bg-red-900/20 border-red-600/30'
 
+  /* ======================================================
+     🔥 Store 기반 준비 상태
+  ====================================================== */
+  const isReady = useVIPMarketStore((s) => {
+    return (
+      s.ts > 0 &&
+      (s.oiDelta !== 0 ||
+        s.volumeRatio !== 1 ||
+        s.fundingRate !== 0 ||
+        s.whaleNetRatio !== 0)
+    )
+  })
+
+  /* ======================================================
+     🔥 Narrative 적용
+  ====================================================== */
   const sentence =
-    signalType
-      ? BOLLINGER_SENTENCE_MAP[signalType]
+    signalType && isReady
+      ? generateNarrative(
+          BOLLINGER_SENTENCE_MAP[signalType],
+          signalType
+        )
       : null
 
   /* =========================
-     Animation Hooks
+     Animation Hooks (유지)
   ========================= */
-
   const { flash, pulse, transition } =
     usePremiumSignalAnimation(signalType)
 
+  /* =========================
+     Typewriter 최적화
+  ========================= */
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
     10
   )
 
   const typedDescription = useTypewriter(
-    sentence ? pickSentence(sentence.description) : '',
+    sentence?.description ?? '',
     8
   )
 
@@ -66,9 +87,7 @@ export default function ActionGateRendererMobile({
 
   return (
     <div className="space-y-3">
-
       {/* Action Gate */}
-
       <div
         className={`
           rounded-xl
@@ -89,12 +108,9 @@ export default function ActionGateRendererMobile({
       </div>
 
       {/* Bollinger Interpretation */}
-
       {sentence && (
         <div className="relative">
-
           {/* Flash */}
-
           {flash && (
             <div
               className="
@@ -127,7 +143,6 @@ export default function ActionGateRendererMobile({
               ${transition ? 'scale-[1.02]' : ''}
             `}
           >
-
             <div className="text-yellow-400 font-semibold">
               {typedSummary}
             </div>
@@ -139,11 +154,9 @@ export default function ActionGateRendererMobile({
             <div className="text-gray-500 text-xs">
               {typedTendency}
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   )
 }

@@ -1,9 +1,16 @@
+/* =========================================================
+  Market Regime Interpreter (Final - ActionGate Sync 안정화)
+========================================================= */
+
+import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { RegimeSignal } from '@/lib/market/types/signalTypes'
+
+/* 🔥 추가 (store 직접 참조) */
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 /* =========================================================
-Market Regime Type
+  Market Regime Type
 ========================================================= */
-
 export type MarketRegime =
   | 'TREND'
   | 'RANGE'
@@ -11,78 +18,77 @@ export type MarketRegime =
   | 'UNKNOWN'
 
 /* =========================================================
-Market Regime Signal
+  ActionGateState → MarketRegime Mapping
 ========================================================= */
-
-export interface MarketRegimeSignal {
-  regimeSignals: string[]
-}
-
-/* =========================================================
-ActionGateState → MarketRegime Mapping
-========================================================= */
-
 function mapActionGateToRegime(
-  state?: 'OBSERVE' | 'CAUTION' | 'IGNORE'
+  state?: 'OBSERVE' | 'CAUTION' | 'IGNORE',
 ): MarketRegime {
-
   if (state === 'IGNORE') return 'VOLATILE'
   if (state === 'CAUTION') return 'TREND'
   if (state === 'OBSERVE') return 'RANGE'
-
   return 'UNKNOWN'
 }
 
 /* =========================================================
-Interpret Market Regime
+  Interpret Market Regime (Final)
+  🔥 snapshot 의 stale 값 방지 → store 기준 우선 사용
 ========================================================= */
+export function interpretMarketRegime(
+  snapshot: MarketSnapshot,
+): { regimeSignals: RegimeSignal[] } {
+  const regimeSignals: RegimeSignal[] = []
 
-export function interpretMarketRegime(): MarketRegimeSignal {
+  /* 🔥 핵심 FIX: snapshot 대신 store 우선 */
+  const storeState =
+    useVIPMarketStore.getState().actionGateState
 
-  const market = useVIPMarketStore.getState()
+  const actionGateState =
+    storeState ?? snapshot.actionGateState
 
-  const regimeSignals: string[] = []
-
-  const regime = mapActionGateToRegime(market.actionGateState)
+  const regime = mapActionGateToRegime(actionGateState)
 
   /* =========================================================
-  TREND Market
+    TREND
   ========================================================= */
-
   if (regime === 'TREND') {
-    regimeSignals.push(
-      '시장 추세 전환 흐름이 형성되며 방향성이 강화되고'
-    )
+    regimeSignals.push({
+      type: 'TREND',
+      category: 'regime',
+      strength: 1,
+    })
   }
 
   /* =========================================================
-  RANGE Market
+    RANGE
   ========================================================= */
-
   if (regime === 'RANGE') {
-    regimeSignals.push(
-      '박스권 구간에서 방향성이 제한되는 흐름이 형성되고'
-    )
+    regimeSignals.push({
+      type: 'RANGE',
+      category: 'regime',
+      strength: 0.5,
+    })
   }
 
   /* =========================================================
-  VOLATILE Market
+    VOLATILE
   ========================================================= */
-
   if (regime === 'VOLATILE') {
-    regimeSignals.push(
-      '시장 변동성이 확대되는 흐름이 나타나며 급격한 가격 움직임이 동반되고'
-    )
+    regimeSignals.push({
+      type: 'VOLATILE',
+      category: 'regime',
+      strength: 1.2,
+    })
   }
 
   /* =========================================================
-  UNKNOWN Market
+    UNKNOWN
   ========================================================= */
-
   if (regime === 'UNKNOWN') {
-    regimeSignals.push(
-      '시장 구조가 명확하지 않은 상태에서 방향성 탐색 흐름이 이어지고'
-    )
+    regimeSignals.push({
+      type: 'UNKNOWN',
+      category: 'regime',
+      strength: 0.3,
+    })
   }
 
   return {

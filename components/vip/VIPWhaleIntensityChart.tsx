@@ -20,7 +20,7 @@ import { calculateInstitutionalProbability } from '@/lib/market/institutionalPro
 import VIPInstitutionalGuideCard from '@/components/vip/VIPInstitutionalGuideCard'
 import { useConfirmedInstitutionalSignal } from '@/lib/engine/useConfirmedInstitutionalSignal'
 
-import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
+import { chartController } from '@/lib/chart/chartController'
 
 type Props = {
   symbol?: string
@@ -36,7 +36,6 @@ type HistoryPoint = {
 }
 
 const BUFFER_SIZE = 60
-const RENDER_INTERVAL = 120
 
 function VIPWhaleIntensityChart({
   symbol = 'BTCUSDT',
@@ -49,58 +48,45 @@ function VIPWhaleIntensityChart({
   const whaleNet = useVIPMarketStore(s => s.whaleNet)
   const fmai = useVIPMarketStore(s => s.fmai)
 
-  const historyBufferRef = useRef<HistoryPoint[]>([])
-  const historyIndexRef = useRef(0)
-
-  const chartDataRef = useRef<HistoryPoint[]>([])
-
   const [history, setHistory] = useState<HistoryPoint[]>([])
 
   const visualValueRef = useRef(whaleIntensity)
   const targetValueRef = useRef(whaleIntensity)
 
-  const rafRef = useRef<number | null>(null)
-  const lastRenderRef = useRef(0)
-
-  const [shockwave, setShockwave] = useState(false)
-  const [spikeGlow, setSpikeGlow] = useState(false)
+  const chartId = 'whaleIntensity_desktop'
 
   /* store → target */
-
   useEffect(() => {
     targetValueRef.current = whaleIntensity
   }, [whaleIntensity])
 
-  /* chartRealtimeBridge register */
+  /* ==============================
+     Chart Controller Register
+     ============================== */
 
   useEffect(() => {
 
-    chartRealtimeBridge.register(
-      'whaleIntensity_desktop',
-      (point: HistoryPoint) => {
-
-        const buffer = chartDataRef.current
-
-        if (buffer.length < BUFFER_SIZE) {
-          buffer.push(point)
-        } else {
-          buffer.shift()
-          buffer.push(point)
-        }
-
-        historyBufferRef.current = buffer
+    chartController.registerChart<HistoryPoint>(
+      chartId,
+      BUFFER_SIZE,
+      (data) => {
+        setHistory(data)
       }
     )
 
     return () => {
-      chartRealtimeBridge.unregister('whaleIntensity_desktop')
+      chartController.unregisterChart(chartId)
     }
 
   }, [])
 
-  /* interpolation loop */
+  /* ==============================
+     interpolation → chartBridge
+     ============================== */
 
   useEffect(() => {
+
+    let raf: number
 
     function loop() {
 
@@ -118,32 +104,16 @@ function VIPWhaleIntensityChart({
         isSpike: Math.abs(fmai) > 0.8,
       }
 
-      const buffer = historyBufferRef.current
+      chartController
+        .getBuffer<HistoryPoint>(chartId)
+        ?.push(point)
 
-      if (buffer.length < BUFFER_SIZE) {
-        buffer.push(point)
-      } else {
-        buffer[historyIndexRef.current] = point
-      }
-
-      historyIndexRef.current =
-        (historyIndexRef.current + 1) % BUFFER_SIZE
-
-      const now = performance.now()
-
-      if (now - lastRenderRef.current > RENDER_INTERVAL) {
-        setHistory([...buffer])
-        lastRenderRef.current = now
-      }
-
-      rafRef.current = requestAnimationFrame(loop)
+      raf = requestAnimationFrame(loop)
     }
 
-    rafRef.current = requestAnimationFrame(loop)
+    raf = requestAnimationFrame(loop)
 
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
+    return () => cancelAnimationFrame(raf)
 
   }, [fmai, whaleNet])
 
@@ -152,6 +122,9 @@ function VIPWhaleIntensityChart({
   const intensityValue = latest?.value ?? 0
   const whalePulse = latest?.isSpike ?? false
   const netValue = latest?.whaleNetRatio ?? 0
+
+  const [shockwave, setShockwave] = useState(false)
+  const [spikeGlow, setSpikeGlow] = useState(false)
 
   /* FX */
 
@@ -179,7 +152,6 @@ function VIPWhaleIntensityChart({
     let max = -Infinity
 
     for (const p of history) {
-      if (!p) continue
       if (p.value < min) min = p.value
       if (p.value > max) max = p.value
     }
@@ -195,13 +167,12 @@ function VIPWhaleIntensityChart({
 
   const currentValue = intensityValue / 100
 
-  const probability =
-    calculateInstitutionalProbability({
-      whaleRatio: currentValue,
-      netRatio: netValue,
-      oiDelta,
-      isSpike: whalePulse,
-    })
+  const probability = calculateInstitutionalProbability({
+    whaleRatio: currentValue,
+    netRatio: netValue,
+    oiDelta,
+    isSpike: whalePulse,
+  })
 
   const {
     longProbability,
@@ -283,33 +254,13 @@ function VIPWhaleIntensityChart({
         </div>
 
         <div className="w-full h-[176px]">
-
           <ResponsiveContainer width="100%" height="100%">
-
             <AreaChart data={history}>
-
-              <defs>
-                <linearGradient id="intensityGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ff0000" stopOpacity="0.95"/>
-                  <stop offset="40%" stopColor="#ff0000" stopOpacity="0.35"/>
-                  <stop offset="100%" stopColor="#ff0000" stopOpacity="0"/>
-                </linearGradient>
-              </defs>
 
               <XAxis dataKey="ts" hide={!showTimeAxis} />
               <YAxis domain={yDomain} hide />
 
               <Tooltip isAnimationActive={false} />
-
-              <Line
-                type="natural"
-                dataKey="value"
-                stroke="#ff0000"
-                strokeWidth={8}
-                dot={false}
-                opacity={0.15}
-                isAnimationActive={false}
-              />
 
               <Line
                 type="natural"
@@ -324,7 +275,7 @@ function VIPWhaleIntensityChart({
                 type="natural"
                 dataKey="value"
                 stroke="none"
-                fill="url(#intensityGradient)"
+                fill="rgba(255,0,0,0.3)"
                 isAnimationActive={false}
               />
 
@@ -341,10 +292,9 @@ function VIPWhaleIntensityChart({
               />
 
             </AreaChart>
-
           </ResponsiveContainer>
-
         </div>
+
       </motion.div>
 
       <VIPInstitutionalGuideCard
