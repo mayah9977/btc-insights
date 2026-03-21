@@ -22,6 +22,22 @@ type VIPMarketStreamOptions = {
   throttle?: number
 }
 
+/* =========================================================
+   🔥 normalize (완화)
+========================================================= */
+const normalizeRatio = (v?: number): number => {
+  if (v === undefined || v === null) return 0
+  if (!Number.isFinite(v)) return 0
+
+  // ✅ 완화 (100 → 1000)
+  if (Math.abs(v) > 1000) return 0
+
+  // % → ratio
+  if (Math.abs(v) > 1) return v / 100
+
+  return v
+}
+
 export function useVIPMarketStream(
   symbol: string,
   options?: VIPMarketStreamOptions,
@@ -44,6 +60,12 @@ export function useVIPMarketStream(
   })
 
   const prevVolumeRef = useRef(0)
+
+  /* 🔥 diff 체크 */
+  const prevRef = useRef({
+    ratio: 0,
+    whaleNet: 0,
+  })
 
   const shouldUpdate = (
     key: keyof typeof lastUpdateRef.current,
@@ -72,7 +94,7 @@ export function useVIPMarketStream(
 
         scheduleVIPMarketUpdate({
           ...(msg.price !== undefined && { price: msg.price }),
-          ...(msg.ts && { ts: msg.ts }),
+          ...(msg.ts !== undefined && { ts: msg.ts }),
         })
       },
     )
@@ -202,21 +224,21 @@ export function useVIPMarketStream(
         if (!shouldUpdate('whaleNet')) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
-        const whaleNet =
-          msg.whaleNetPressure !== undefined
-            ? msg.whaleNetPressure
-            : undefined
+        const whaleNet = normalizeRatio(msg.whaleNetPressure)
+        const whaleNetRatio = normalizeRatio(msg.whaleNetRatio)
 
-        const whaleNetRatio =
-          msg.whaleNetRatio !== undefined
-            ? msg.whaleNetRatio
-            : undefined
+        // ✅ threshold 완화
+        if (
+          Math.abs(whaleNet - prevRef.current.whaleNet) <
+          0.0001
+        )
+          return
+
+        prevRef.current.whaleNet = whaleNet
 
         scheduleVIPMarketUpdate({
-          ...(whaleNet !== undefined && { whaleNet }),
-          ...(whaleNetRatio !== undefined && {
-            whaleNetRatio,
-          }),
+          whaleNet,
+          whaleNetRatio,
         })
       },
     )
@@ -228,20 +250,26 @@ export function useVIPMarketStream(
         if (!shouldUpdate('whaleFlow')) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
-        const ratio =
-          msg.ratio !== undefined ? msg.ratio : undefined
+        const ratio = normalizeRatio(msg.ratio)
 
-        if (ratio !== undefined) {
-          scheduleVIPMarketUpdate({
-            whaleRatio: ratio,
-          })
-        }
+        // ✅ threshold 완화
+        if (
+          Math.abs(ratio - prevRef.current.ratio) <
+          0.0001
+        )
+          return
+
+        prevRef.current.ratio = ratio
+
+        scheduleVIPMarketUpdate({
+          whaleRatio: ratio,
+        })
 
         const point = {
           ts: Date.now(),
           ratio,
-          whaleVolume: msg.whaleVolume,
-          totalVolume: msg.totalVolume,
+          whaleVolume: msg.whaleVolume ?? 0,
+          totalVolume: msg.totalVolume ?? 0,
         }
 
         chartRealtimeBridge.update(
@@ -264,7 +292,7 @@ export function useVIPMarketStream(
 
         scheduleVIPMarketUpdate({
           ...(score !== undefined && { fmai: score }),
-          ...(ts && { ts }),
+          ...(ts !== undefined && { ts }),
         })
       },
     )
@@ -279,7 +307,7 @@ export function useVIPMarketStream(
           ...(strength !== undefined && {
             absorption: strength,
           }),
-          ...(ts && { ts }),
+          ...(ts !== undefined && { ts }),
         })
       },
     )
@@ -292,7 +320,7 @@ export function useVIPMarketStream(
 
         scheduleVIPMarketUpdate({
           ...(strength !== undefined && { sweep: strength }),
-          ...(ts && { ts }),
+          ...(ts !== undefined && { ts }),
         })
       },
     )
@@ -302,13 +330,17 @@ export function useVIPMarketStream(
       'MARKET_STATE',
       (msg: any) => {
         if (!shouldUpdate('marketState')) return
-        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
+        if (
+          msg.symbol &&
+          msg.symbol.toUpperCase() !== safeSymbol
+        )
+          return
 
         scheduleVIPMarketUpdate({
           actionGateState:
             msg.actionGateState ?? 'OBSERVE',
           ...(msg.macd && { macd: msg.macd }),
-          ...(msg.ts && { ts: msg.ts }),
+          ...(msg.ts !== undefined && { ts: msg.ts }),
         })
       },
     )
@@ -318,7 +350,11 @@ export function useVIPMarketStream(
       'FINAL_DECISION',
       (msg: any) => {
         if (!shouldUpdate('finalDecision')) return
-        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
+        if (
+          msg.symbol &&
+          msg.symbol.toUpperCase() !== safeSymbol
+        )
+          return
 
         scheduleVIPMarketUpdate({
           ...(msg.decision && { decision: msg.decision }),
@@ -326,7 +362,7 @@ export function useVIPMarketStream(
           ...(msg.confidence !== undefined && {
             confidence: msg.confidence,
           }),
-          ...(msg.ts && { ts: msg.ts }),
+          ...(msg.ts !== undefined && { ts: msg.ts }),
         })
       },
     )

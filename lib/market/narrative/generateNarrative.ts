@@ -36,6 +36,7 @@ export function generateNarrative(
   base: ActionGateSentence,
   signalType: BollingerSignalType,
 ): FinalNarrativeReport {
+
   /* =========================================================
      Snapshot
   ========================================================= */
@@ -69,12 +70,9 @@ export function generateNarrative(
   const strategyBase = sentenceCache[sentenceKey]
 
   /* =========================================================
-     Interpreter (🔥 제한 실행)
+     🔥 Interpreter (항상 실행)
   ========================================================= */
-  const shouldRunHeavy =
-    Math.abs(snapshot.oiDelta ?? 0) > 0.01 ||
-    Math.abs(snapshot.whaleNetRatio ?? 0) > 0.003 ||
-    Math.abs(snapshot.fundingRate ?? 0) > 0.00001
+  const shouldRunHeavy = true
 
   const interpreterResult = shouldRunHeavy
     ? runInterpreterEngine(snapshot)
