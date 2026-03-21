@@ -1,7 +1,7 @@
 /* =========================================================
    ChartController
    Event routing layer between realtime bridge and chart engine
-   ========================================================= */
+========================================================= */
 
 import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
 import { ChartBuffer, ChartPoint } from '@/lib/chart/chartBuffer'
@@ -15,13 +15,25 @@ type ChartEntry<T extends ChartPoint> = {
 }
 
 /* =========================================================
-   ChartController
-   ========================================================= */
+   🔥 타입 정의 추가 (핵심)
+========================================================= */
+export interface IChartController {
+  push: <T extends ChartPoint>(id: string, point: T) => void
+  registerChart: <T extends ChartPoint>(
+    id: string,
+    bufferSize: number,
+    renderer: ChartRenderer<T>
+  ) => void
+  unregisterChart: (id: string) => void
+  getBuffer: <T extends ChartPoint>(id: string) => ChartBuffer<T> | undefined
+}
 
-class ChartController {
+/* =========================================================
+   ChartController
+========================================================= */
+class ChartController implements IChartController {
 
   private static instance: ChartController
-
   private charts = new Map<string, ChartEntry<any>>()
 
   static getInstance() {
@@ -33,8 +45,7 @@ class ChartController {
 
   /* =========================================================
      Register chart
-     ========================================================= */
-
+  ========================================================= */
   registerChart<T extends ChartPoint>(
     id: string,
     bufferSize: number,
@@ -72,9 +83,15 @@ class ChartController {
   }
 
   /* =========================================================
-     Unregister chart
-     ========================================================= */
+     push
+  ========================================================= */
+  push<T extends ChartPoint>(id: string, point: T) {
+    chartRealtimeBridge.update(id, point)
+  }
 
+  /* =========================================================
+     Unregister chart
+  ========================================================= */
   unregisterChart(id: string) {
 
     if (!this.charts.has(id)) return
@@ -82,18 +99,20 @@ class ChartController {
     this.charts.delete(id)
 
     chartEngine.unregister(id)
-
     chartRealtimeBridge.unregister(id)
   }
 
   /* =========================================================
-     Get buffer (optional debug)
-     ========================================================= */
-
+     Get buffer
+  ========================================================= */
   getBuffer<T extends ChartPoint>(id: string): ChartBuffer<T> | undefined {
     return this.charts.get(id)?.buffer
   }
-
 }
 
-export const chartController = ChartController.getInstance()
+/* =========================================================
+   Export (타입 포함)
+========================================================= */
+export const chartController: IChartController =
+  ChartController.getInstance()
+  
