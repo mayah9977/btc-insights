@@ -21,7 +21,7 @@ export default function DevActionGatePage({
   return (
     <div style={{ padding: 16, display: 'grid', gap: 8 }}>
   <ActionGateStatus />
-  <ActionGateRenderer gate={gate} />
+  <ActionGateRenderer/>
 </div>
   )
 }
