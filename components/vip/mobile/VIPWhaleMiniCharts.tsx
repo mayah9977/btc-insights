@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
 import VIPSignalCard from './VIPSignalCard'
+import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 export default function VIPWhaleMiniCharts() {
 
@@ -11,13 +12,10 @@ export default function VIPWhaleMiniCharts() {
      Zustand Selectors
   ========================= */
 
-  const whaleIntensity = useVIPMarketStore(
-    (s) => s.whaleIntensity
-  )
+  const snapshot = getMarketSnapshot()
 
-  const whaleNet = useVIPMarketStore(
-    (s) => s.whaleNet
-  )
+  const whaleIntensity = snapshot.whaleIntensity ?? 0
+  const whaleNet = (snapshot.whaleNetRatio ?? 0) * 100
 
   const prevIntensity = useRef<number>(0)
   const prevFlow = useRef<number>(0)
@@ -96,13 +94,10 @@ export default function VIPWhaleMiniCharts() {
   ========================= */
 
   return (
-
     <div className="space-y-4">
 
       {/* Whale Intensity */}
-
       <VIPSignalCard trigger={intensityTrigger}>
-
         <div className="text-xs mx-4">
 
           <div className="flex justify-between text-zinc-400 mb-1">
@@ -111,23 +106,17 @@ export default function VIPWhaleMiniCharts() {
           </div>
 
           <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-
             <div
               className="h-full bg-yellow-400 transition-all duration-300"
               style={{ width: `${intensityPercent}%` }}
             />
-
           </div>
 
         </div>
-
       </VIPSignalCard>
 
-
       {/* Whale Flow */}
-
       <VIPSignalCard trigger={flowTrigger}>
-
         <div className="text-xs mx-4">
 
           <div className="flex justify-between text-zinc-400 mb-1">
@@ -143,19 +132,15 @@ export default function VIPWhaleMiniCharts() {
           </div>
 
           <div className="h-2 bg-zinc-800 rounded overflow-hidden">
-
             <div
               className={`h-full ${flowColor} transition-all duration-300`}
               style={{ width: `${flowPercent}%` }}
             />
-
           </div>
 
         </div>
-
       </VIPSignalCard>
 
     </div>
-
   )
 }

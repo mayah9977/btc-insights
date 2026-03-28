@@ -1,6 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import { useMemo } from 'react'
+import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPRiskEngineBannerMobile from './VIPRiskEngineBannerMobile'
@@ -49,29 +51,39 @@ export default function VIPMobilePage(props: Props) {
   useVIPMarketStream(symbol, { throttle: 1500 })
 
   /* ===============================
-     Zustand selectors
+     Snapshot 기반 데이터
   =============================== */
 
-  const whaleRatio = useVIPMarketStore((s) => s.whaleRatio)
-  const whaleNet = useVIPMarketStore((s) => s.whaleNet)
-  const whaleIntensity = useVIPMarketStore((s) => s.whaleIntensity)
+  const snapshot = getMarketSnapshot()
+
+  const mobileData = useMemo(() => {
+    const safeVolume = Math.max(snapshot.volume ?? 1, 1)
+
+    return {
+      whaleRatio: Number((snapshot.whaleRatio ?? 0).toFixed(2)),
+      whaleNet: Number((snapshot.whaleNetRatio ?? 0) * 100),
+      whaleIntensity: Number(
+        Math.min(Math.max(snapshot.whaleIntensity ?? 0, 0), 100).toFixed(1)
+      ),
+    }
+  }, [snapshot.ts])
 
   /* ===============================
      Derived values
   =============================== */
 
-  const long = Math.max(0, whaleNet * 100)
-  const short = Math.max(0, -whaleNet * 100)
+  const long = Math.max(0, mobileData.whaleNet)
+  const short = Math.max(0, -mobileData.whaleNet)
 
   const dominant =
-    whaleNet > 0.05
+    mobileData.whaleNet > 5
       ? 'LONG'
-      : whaleNet < -0.05
+      : mobileData.whaleNet < -5
       ? 'SHORT'
       : 'NONE'
 
   const confidence =
-    Math.min(Math.abs(whaleNet) * 100, 100)
+    Math.min(Math.abs(mobileData.whaleNet), 100)
 
   /* ===============================
      Render
@@ -97,17 +109,23 @@ export default function VIPMobilePage(props: Props) {
 
       {/* Whale trade guide */}
       <VIPWhaleTradeGuideCardMobile
-        ratio={whaleRatio}
-        net={whaleNet}
+        ratio={mobileData.whaleRatio}
+        net={mobileData.whaleNet}
       />
 
       {/* Institutional flow */}
       <VIPInstitutionalGuideCardMobile
-        long={long}
-        short={short}
-        confidence={confidence}
-        dominant={dominant}
-        intensity={whaleIntensity}
+        long={Math.max(0, mobileData.whaleNet)}
+        short={Math.max(0, -mobileData.whaleNet)}
+        confidence={Math.min(Math.abs(mobileData.whaleNet), 100)}
+        dominant={
+          mobileData.whaleNet > 5
+            ? 'LONG'
+            : mobileData.whaleNet < -5
+            ? 'SHORT'
+            : 'NONE'
+        }
+        intensity={mobileData.whaleIntensity}
       />
 
       {/* Market Context */}

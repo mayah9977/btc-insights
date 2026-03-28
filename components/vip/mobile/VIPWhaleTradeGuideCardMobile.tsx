@@ -55,14 +55,15 @@ export default function VIPWhaleTradeGuideCardMobile({
       ? 'text-blue-400'
       : 'text-gray-400'
 
+  const safeNet =
+    !isFinite(net) ? 0 : Math.max(Math.min(net, 100), -100)
+
   /* =========================
      Render
   ========================= */
 
   return (
-
     <VIPSignalCard trigger={trigger}>
-
       <div
         className="
         mx-4
@@ -93,12 +94,10 @@ export default function VIPWhaleTradeGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-500">
-          Net Flow(큰 자금이 매수 우위인지 매도 우위인지 보여주는 값) {(net * 100).toFixed(1)}%
+          Net Flow(큰 자금이 매수 우위인지 매도 우위인지 보여주는 값) {safeNet.toFixed(1)}%
         </div>
 
       </div>
-
     </VIPSignalCard>
-
   )
 }
