@@ -45,28 +45,39 @@ export default function VIPMobilePage(props: Props) {
 
   /* ===============================
      Mobile optimized SSE
-     (속도 개선: 4000 → 1500)
   =============================== */
 
   useVIPMarketStream(symbol, { throttle: 1500 })
 
   /* ===============================
+     🔥 React 연결 (핵심)
+  =============================== */
+
+  const marketTick = useVIPMarketStore((s) => s.ts)
+
+  /* ===============================
      Snapshot 기반 데이터
   =============================== */
 
-  const snapshot = getMarketSnapshot()
-
   const mobileData = useMemo(() => {
+    const snapshot = getMarketSnapshot()
+
     const safeVolume = Math.max(snapshot.volume ?? 1, 1)
 
     return {
       whaleRatio: Number((snapshot.whaleRatio ?? 0).toFixed(2)),
+
+      // 🔥 ratio → percent 변환
       whaleNet: Number((snapshot.whaleNetRatio ?? 0) * 100),
+
       whaleIntensity: Number(
-        Math.min(Math.max(snapshot.whaleIntensity ?? 0, 0), 100).toFixed(1)
+        Math.min(
+          Math.max(snapshot.whaleIntensity ?? 0, 0),
+          100
+        ).toFixed(1)
       ),
     }
-  }, [snapshot.ts])
+  }, [marketTick])
 
   /* ===============================
      Derived values
@@ -115,16 +126,10 @@ export default function VIPMobilePage(props: Props) {
 
       {/* Institutional flow */}
       <VIPInstitutionalGuideCardMobile
-        long={Math.max(0, mobileData.whaleNet)}
-        short={Math.max(0, -mobileData.whaleNet)}
-        confidence={Math.min(Math.abs(mobileData.whaleNet), 100)}
-        dominant={
-          mobileData.whaleNet > 5
-            ? 'LONG'
-            : mobileData.whaleNet < -5
-            ? 'SHORT'
-            : 'NONE'
-        }
+        long={long}
+        short={short}
+        confidence={confidence}
+        dominant={dominant}
         intensity={mobileData.whaleIntensity}
       />
 

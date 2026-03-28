@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
 import VIPSignalCard from './VIPSignalCard'
@@ -9,10 +9,18 @@ import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 export default function VIPWhaleMiniCharts() {
 
   /* =========================
-     Zustand Selectors
+     🔥 React 연결 (핵심)
   ========================= */
 
-  const snapshot = getMarketSnapshot()
+  const marketTick = useVIPMarketStore((s) => s.ts)
+
+  const snapshot = useMemo(() => {
+    return getMarketSnapshot()
+  }, [marketTick])
+
+  /* =========================
+     Snapshot Values
+  ========================= */
 
   const whaleIntensity = snapshot.whaleIntensity ?? 0
   const whaleNet = (snapshot.whaleNetRatio ?? 0) * 100
@@ -28,10 +36,10 @@ export default function VIPWhaleMiniCharts() {
   ========================= */
 
   const intensityPercent =
-    Math.min(Math.max(whaleIntensity ?? 0, 0), 100)
+    Math.min(Math.max(whaleIntensity, 0), 100)
 
   const flowPercent =
-    Math.min(Math.abs(whaleNet ?? 0) * 100, 100)
+    Math.min(Math.abs(whaleNet), 100)
 
   const flowColor =
     whaleNet > 0
@@ -77,8 +85,8 @@ export default function VIPWhaleMiniCharts() {
   useEffect(() => {
 
     if (
-      Math.abs(prevFlow.current) < 0.4 &&
-      Math.abs(whaleNet) >= 0.4
+      Math.abs(prevFlow.current) < 40 &&
+      Math.abs(whaleNet) >= 40
     ) {
       vipSound.play('signal')
       setFlowTrigger(Date.now())
