@@ -154,10 +154,10 @@ export const useVIPMarketStore =
                 value === 1 &&
                 state.volumeRatio !== 1)
 
-            if (!isInvalidZero) {
-              ;(next as any)[k] = value
-              changed = true
-            }
+            if (!isInvalidZero && state[k] !== value) {
+  ;(next as any)[k] = value
+  changed = true
+}
           }
         }
 

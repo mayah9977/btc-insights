@@ -7,7 +7,6 @@ import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenc
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
-import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 import { generateNarrativeFromSnapshot } from '@/lib/market/narrative/generateNarrative'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { buildMetaKey } from '@/lib/market/narrative/metaKeyBuilder'
@@ -55,13 +54,12 @@ export default function ActionGateRendererMobile({
 
   const sentence = useVIPMarketStore((s) => s.narrative)
   const setNarrative = useVIPMarketStore((s) => s.setNarrative)
-  const marketTick = useVIPMarketStore((s) => s.ts)
   const stableKey = useVIPMarketStore((s) => s.lastMetaKey)
 
   const prevMetaKeyRef = useRef<string>('')
 
   /* ======================================================
-     🔥 useEffect 기반 엔진 트리거
+     🔥 useEffect 기반 엔진 트리거 (ts 제거됨)
   ====================================================== */
   useEffect(() => {
     if (!signalType) return
@@ -97,7 +95,7 @@ export default function ActionGateRendererMobile({
     } catch (err) {
       console.error('Narrative Flow Error:', err)
     }
-  }, [marketTick, signalType])
+  }, [signalType]) // ✅ marketTick 제거
 
   /* =========================
      Animation Hooks (유지)
@@ -109,19 +107,19 @@ export default function ActionGateRendererMobile({
      Typewriter 최적화
   ========================= */
   const typedSummary = useTypewriter(
-  sentence?.summary ?? '',
-  10
-)
+    sentence?.summary ?? '',
+    10
+  )
 
-const typedDescription = useTypewriter(
-  sentence?.description ?? '',
-  8
-)
+  const typedDescription = useTypewriter(
+    sentence?.description ?? '',
+    8
+  )
 
-const typedTendency = useTypewriter(
-  sentence?.tendency ?? '',
-  12
-)
+  const typedTendency = useTypewriter(
+    sentence?.tendency ?? '',
+    12
+  )
 
   return (
     <div className="space-y-3">

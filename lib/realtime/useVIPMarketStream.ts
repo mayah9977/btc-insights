@@ -72,7 +72,6 @@ export function useVIPMarketStream(
 
         scheduleVIPMarketUpdate({
           ...(msg.price !== undefined && { price: msg.price }),
-          ...(msg.ts && { ts: msg.ts }),
         })
       },
     )
@@ -259,12 +258,11 @@ export function useVIPMarketStream(
     /* ========================= FMAI ========================= */
     const unsubFMAI = subscribeVIPChannel(
       safeSymbol,
-      (score, direction, ts) => {
+      (score) => {
         if (!shouldUpdate('fmai')) return
 
         scheduleVIPMarketUpdate({
           ...(score !== undefined && { fmai: score }),
-          ...(ts && { ts }),
         })
       },
     )
@@ -272,14 +270,13 @@ export function useVIPMarketStream(
     /* ========================= ABSORPTION ========================= */
     const unsubAbsorption = subscribeWhaleAbsorption(
       safeSymbol,
-      (direction, strength, confidence, ts) => {
+      (_, strength) => {
         if (!shouldUpdate('absorption')) return
 
         scheduleVIPMarketUpdate({
           ...(strength !== undefined && {
             absorption: strength,
           }),
-          ...(ts && { ts }),
         })
       },
     )
@@ -287,12 +284,11 @@ export function useVIPMarketStream(
     /* ========================= SWEEP ========================= */
     const unsubSweep = subscribeLiquiditySweep(
       safeSymbol,
-      (direction, strength, confidence, ts) => {
+      (_, strength) => {
         if (!shouldUpdate('sweep')) return
 
         scheduleVIPMarketUpdate({
           ...(strength !== undefined && { sweep: strength }),
-          ...(ts && { ts }),
         })
       },
     )
@@ -308,7 +304,6 @@ export function useVIPMarketStream(
           actionGateState:
             msg.actionGateState ?? 'OBSERVE',
           ...(msg.macd && { macd: msg.macd }),
-          ...(msg.ts && { ts: msg.ts }),
         })
       },
     )
@@ -326,7 +321,6 @@ export function useVIPMarketStream(
           ...(msg.confidence !== undefined && {
             confidence: msg.confidence,
           }),
-          ...(msg.ts && { ts: msg.ts }),
         })
       },
     )
