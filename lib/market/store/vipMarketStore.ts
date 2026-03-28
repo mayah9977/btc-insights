@@ -63,6 +63,11 @@ type VIPMarketState = {
   lastMetaKey: string // ✅ modified
 
   /* =========================
+     Decision Stabilization
+  ========================= */
+  lastDecisionTs: number
+
+  /* =========================
      Store Update
   ========================= */
   update: (data: Partial<VIPMarketState>) => void
@@ -128,12 +133,18 @@ export const useVIPMarketStore =
     lastMetaKey: '', // ✅ modified
 
     /* =========================
+       Decision Stabilization
+    ========================= */
+    lastDecisionTs: 0,
+
+    /* =========================
        Update Logic
     ========================= */
     update: (data) =>
       set((state) => {
         let changed = false
         const next: Partial<VIPMarketState> = {}
+        const now = Date.now()
 
         for (const key in data) {
           const k = key as keyof VIPMarketState
@@ -145,19 +156,27 @@ export const useVIPMarketStore =
               (k === 'oiDelta' &&
                 value === 0 &&
                 state.oiDelta !== 0) ||
-
               (k === 'whaleNetRatio' &&
                 value === 0 &&
                 state.whaleNetRatio !== 0) ||
-
               (k === 'volumeRatio' &&
                 value === 1 &&
                 state.volumeRatio !== 1)
 
             if (!isInvalidZero && state[k] !== value) {
-  ;(next as any)[k] = value
-  changed = true
-}
+              if (k === 'decision') {
+                if (now - state.lastDecisionTs < 300) {
+                  continue
+                }
+                ;(next as any)[k] = value
+                next.lastDecisionTs = now
+                changed = true
+                continue
+              }
+
+              ;(next as any)[k] = value
+              changed = true
+            }
           }
         }
 
@@ -215,6 +234,8 @@ let lastFlush = 0
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
+  //console.log('[SCHEDULE CALL]', data) // 👈 추가
+
   pending = { ...pending, ...data }
 
   if (scheduled) return

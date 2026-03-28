@@ -50,33 +50,38 @@ export const useMasterMarketStore = create<MasterMarketStore>((set) => ({
   ========================= */
 
   update: (input) =>
-    set((state) => {
+  set((state) => {
 
-      let changed = false
-      const next: Partial<MasterMarketState> = {}
+    let changed = false
+    const next: Partial<MasterMarketState> = {}
 
-      Object.entries(input).forEach(([key, value]) => {
+    Object.entries(input).forEach(([key, value]) => {
 
-        if (value === undefined) return
+      if (value === undefined) return
 
-        const k = key as keyof MasterMarketState
+      const k = key as keyof MasterMarketState
 
-        if (state[k] !== value) {
-          ;(next as any)[k] = value
-          changed = true
-        }
+      if (state[k] !== value) {
+        console.log('[STORE CHANGE]', k, state[k], '→', value)
 
-      })
-
-      if (!changed) return state
-
-      return {
-        ...state,
-        ...next,
-        updatedAt: Date.now(),
+        ;(next as any)[k] = value
+        changed = true
       }
 
-    }),
+    })
+
+    if (!changed) return state
+
+    // 🔥 추가된 로그 (핵심)
+    console.log('[STORE UPDATE TRIGGERED]', next)
+
+    return {
+      ...state,
+      ...next,
+      updatedAt: Date.now(),
+    }
+
+  }),
 
   /* =========================
      Reset
