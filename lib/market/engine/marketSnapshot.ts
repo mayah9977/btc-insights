@@ -78,7 +78,7 @@ function buildSnapshot(): MarketSnapshot {
 
     actionGateState: market.actionGateState,
 
-    ts: market.ts,
+    ts: Math.floor(Date.now() / 3000),
   })
 }
 
@@ -104,6 +104,7 @@ export function getMarketSnapshot(): MarketSnapshot {
   }
 
   lastSnapshot = next
+
   return next
 }
 
@@ -112,4 +113,5 @@ export function getMarketSnapshot(): MarketSnapshot {
 export function resetMarketSnapshotCache() {
   lastSnapshot = null
   prevPrice = 0
+
 }

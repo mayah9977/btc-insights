@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { FinalNarrativeReport } from '@/lib/market/narrative/types' // ✅ added
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
@@ -56,13 +57,25 @@ type VIPMarketState = {
   ts: number
 
   /* =========================
+     Narrative (NEW)
+  ========================= */
+  narrative: FinalNarrativeReport | null // ✅ modified
+  lastMetaKey: string // ✅ modified
+
+  /* =========================
      Store Update
   ========================= */
   update: (data: Partial<VIPMarketState>) => void
+
+  setNarrative: ( // ✅ modified
+    signalType: string,
+    newNarrative: FinalNarrativeReport,
+    metaKey: string
+  ) => void
 }
 
 export const useVIPMarketStore =
-  create<VIPMarketState>((set) => ({
+  create<VIPMarketState>((set, get) => ({ // ✅ modified
     /* =========================
        Core Market
     ========================= */
@@ -109,6 +122,12 @@ export const useVIPMarketStore =
     ts: 0,
 
     /* =========================
+       Narrative (NEW)
+    ========================= */
+    narrative: null, // ✅ modified
+    lastMetaKey: '', // ✅ modified
+
+    /* =========================
        Update Logic
     ========================= */
     update: (data) =>
@@ -150,6 +169,31 @@ export const useVIPMarketStore =
             }
           : state
       }),
+
+    /* =========================
+       Narrative Setter
+    ========================= */
+    setNarrative: ( // ✅ modified
+      signalType,
+      newNarrative,
+      metaKey
+    ) => {
+      const current = get().narrative
+
+      if (
+        current &&
+        current.tendency === newNarrative.tendency &&
+        current.summary === newNarrative.summary &&
+        current.risk === newNarrative.risk
+      ) {
+        return
+      }
+
+      set({
+        narrative: newNarrative,
+        lastMetaKey: metaKey,
+      })
+    },
   }))
 
 /* =========================================================

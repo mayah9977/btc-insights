@@ -19,6 +19,7 @@ import { buildSignal } from '@/lib/market/signalEngine'
 
 /* 🔥 핵심 */
 import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 
 /* =========================================================
    Sentence Cache
@@ -174,4 +175,29 @@ export function generateNarrative(
   lastResult = report
 
   return report
+}
+
+export function generateNarrativeFromSnapshot(
+  snapshot: any,
+  signalType: BollingerSignalType
+) {
+  const base =
+    BOLLINGER_SENTENCE_MAP[signalType] ||
+    BOLLINGER_SENTENCE_MAP[BollingerSignalType.INSIDE_CENTER]
+
+  return composeFinalNarrativeReport({
+    summary: base.summary,
+    tendency: base.tendency,
+    baseDescription: base.description[0],
+
+    sections: {
+      cause: [],
+      situation: [],
+      risk: [],
+      strategy: [],
+    },
+
+    snapshot,
+    signal: { riskLevel: 'Safe' },
+  })
 }

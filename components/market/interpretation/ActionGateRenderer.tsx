@@ -14,12 +14,17 @@ import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
 /* Narrative Engine */
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
+import { generateNarrativeFromSnapshot } from '@/lib/market/narrative/generateNarrative'
 
 /* Store */
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 /* Hero */
 import { ActionGateDescriptionHero } from './ActionGateDescriptionHero'
+
+import { buildMetaKey } from '@/lib/market/narrative/metaKeyBuilder'
+import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import { useEffect, useRef } from 'react'
 
 interface ActionGateRendererProps {
   signalType?: BollingerSignalType
@@ -34,6 +39,8 @@ export const ActionGateRenderer: React.FC<
 
   const gate = useVIPMarketStore((s) => s.actionGateState)
 
+  const sentence = useVIPMarketStore((s) => s.narrative)
+  const setNarrative = useVIPMarketStore((s) => s.setNarrative)
   const marketTick = useVIPMarketStore((s) => s.ts)
 
   const isReady = useVIPMarketStore((s) => {
@@ -45,6 +52,48 @@ export const ActionGateRenderer: React.FC<
         s.whaleNetRatio !== 0)
     )
   })
+
+  const prevMetaKeyRef = useRef<string>('')
+
+  /* ======================================================
+     🔥 useEffect 기반 엔진 트리거
+  ====================================================== */
+
+  useEffect(() => {
+    if (!signalType) return
+
+    try {
+      const snapshot = getMarketSnapshot()
+
+      if (
+        !snapshot ||
+        snapshot.ts === 0 ||
+        (
+          snapshot.oiDelta === 0 &&
+          snapshot.volumeRatio === 1 &&
+          snapshot.fundingRate === 0 &&
+          snapshot.whaleNetRatio === 0
+        )
+      ) {
+        return
+      }
+
+      const metaKey = buildMetaKey(snapshot)
+
+      if (metaKey === prevMetaKeyRef.current) return
+
+      prevMetaKeyRef.current = metaKey
+
+      const newNarrative = generateNarrativeFromSnapshot(
+        snapshot,
+        signalType
+      )
+
+      setNarrative(signalType, newNarrative, metaKey)
+    } catch (err) {
+      console.error('Narrative Flow Error:', err)
+    }
+  }, [marketTick, signalType])
 
   /* ======================================================
      Container tone
@@ -62,17 +111,6 @@ export const ActionGateRenderer: React.FC<
       : gate === 'CAUTION'
       ? 'bg-amber-400/40'
       : 'bg-slate-400/30'
-
-  /* ======================================================
-     🔥 즉시 계산 (useMemo 제거)
-  ====================================================== */
-  const sentence =
-    signalType && isReady
-      ? generateNarrative(
-          BOLLINGER_SENTENCE_MAP[signalType],
-          signalType,
-        )
-      : null
 
   /* ======================================================
      Background animation
