@@ -173,13 +173,17 @@ export const useVIPMarketStore =
     /* =========================
        Narrative Setter
     ========================= */
-    setNarrative: ( // ✅ modified
-      signalType,
-      newNarrative,
-      metaKey
+    setNarrative: (
+      signalType: string,
+      newNarrative: FinalNarrativeReport,
+      metaKey: string
     ) => {
       const current = get().narrative
 
+      // 🔥 1차 차단: metaKey 동일 → 완전 스킵
+      if (get().lastMetaKey === metaKey) return
+
+      // 🔥 2차 차단: 의미 동일 → 스킵
       if (
         current &&
         current.tendency === newNarrative.tendency &&

@@ -1,16 +1,48 @@
 export function buildMetaKey(snapshot: any): string {
-  // 🔥 복합 변동성 기준 (실전용)
-  const volatility =
-    Math.abs(snapshot?.oiDelta ?? 0) +
-    Math.abs(snapshot?.whaleNetRatio ?? 0);
+  const oiDelta = snapshot?.oiDelta ?? 0
+  const whaleNetRatio = snapshot?.whaleNetRatio ?? 0
+  const fundingRate = snapshot?.fundingRate ?? 0
+  const volumeRatio = snapshot?.volumeRatio ?? 1
 
-  // 🔥 Adaptive Threshold
-  const factor = volatility > 0.5 ? 5 : 10;
+  /* =========================
+     1. Trend (OI 기반)
+  ========================= */
+  const trend =
+    oiDelta > 0.02
+      ? 'OI_UP'
+      : oiDelta < -0.02
+      ? 'OI_DOWN'
+      : 'OI_FLAT'
 
-  return [
-    Math.round((snapshot?.oiDelta ?? 0) * factor),
-    Math.round((snapshot?.volumeRatio ?? 0) * 10),
-    Math.round((snapshot?.fundingRate ?? 0) * 10000),
-    Math.round((snapshot?.whaleNetRatio ?? 0) * factor),
-  ].join('|');
+  /* =========================
+     2. Whale Pressure
+  ========================= */
+  const whale =
+    whaleNetRatio > 0.005
+      ? 'WHALE_BUY'
+      : whaleNetRatio < -0.005
+      ? 'WHALE_SELL'
+      : 'WHALE_NEUTRAL'
+
+  /* =========================
+     3. Funding Bias
+  ========================= */
+  const funding =
+    fundingRate > 0.00005
+      ? 'LONG_HEAVY'
+      : fundingRate < -0.00005
+      ? 'SHORT_HEAVY'
+      : 'NEUTRAL'
+
+  /* =========================
+     4. Volume Regime
+  ========================= */
+  const volume =
+    volumeRatio > 1.5
+      ? 'HIGH_VOL'
+      : volumeRatio < 0.8
+      ? 'LOW_VOL'
+      : 'NORMAL_VOL'
+
+  return [trend, whale, funding, volume].join('|')
 }

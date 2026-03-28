@@ -13,7 +13,6 @@ import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenc
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
 /* Narrative Engine */
-import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 import { generateNarrativeFromSnapshot } from '@/lib/market/narrative/generateNarrative'
 
 /* Store */
@@ -38,7 +37,6 @@ export const ActionGateRenderer: React.FC<
   ====================================================== */
 
   const gate = useVIPMarketStore((s) => s.actionGateState)
-
   const sentence = useVIPMarketStore((s) => s.narrative)
   const setNarrative = useVIPMarketStore((s) => s.setNarrative)
   const marketTick = useVIPMarketStore((s) => s.ts)
