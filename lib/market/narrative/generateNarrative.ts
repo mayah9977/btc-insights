@@ -201,7 +201,7 @@ export function generateNarrativeFromSnapshot(
     signal: {
   direction: 'neutral',
   strength: 0,
-  dominant: 'NONE',
+  dominant: 'none',
   riskLevel: 'low',
   tags: [],
 },
