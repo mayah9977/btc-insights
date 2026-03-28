@@ -200,7 +200,7 @@ export function generateNarrativeFromSnapshot(
     snapshot,
     signal: {
   direction: 'neutral',
-  strength: 'weak',
+  strength: 0,
   dominant: 'NONE',
   riskLevel: 'low',
   tags: [],
