@@ -198,6 +198,6 @@ export function generateNarrativeFromSnapshot(
     },
 
     snapshot,
-    signal: { riskLevel: 'Safe' },
+    signal: { riskLevel: 'low' },
   })
 }
