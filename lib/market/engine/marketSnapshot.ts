@@ -36,12 +36,10 @@ export interface MarketSnapshot {
 }
 
 /* ========================================================= */
-
 let lastSnapshot: MarketSnapshot | null = null
 let prevPrice = 0
 
 /* ========================================================= */
-
 function buildSnapshot(): MarketSnapshot {
   const market = useVIPMarketStore.getState()
 
@@ -83,35 +81,14 @@ function buildSnapshot(): MarketSnapshot {
 }
 
 /* =========================================================
- 🔥 Snapshot Getter (초기 0 캐시 방지)
+ 🔥 Snapshot Getter (cache removed)
 ========================================================= */
-
 export function getMarketSnapshot(): MarketSnapshot {
-  const next = buildSnapshot()
-
-  /* 🔥 핵심 FIX 1: ts 0이면 캐시 금지 */
-  if (next.ts === 0) {
-    return next
-  }
-
-  /* 🔥 핵심 FIX 2: 초기 0 snapshot 캐시 방지 */
-  if (
-    lastSnapshot &&
-    lastSnapshot.ts !== 0 &&
-    next.ts === lastSnapshot.ts
-  ) {
-    return lastSnapshot
-  }
-
-  lastSnapshot = next
-
-  return next
+  return buildSnapshot()
 }
 
 /* ========================================================= */
-
 export function resetMarketSnapshotCache() {
   lastSnapshot = null
   prevPrice = 0
-
 }

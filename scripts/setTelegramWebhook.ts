@@ -1,7 +1,6 @@
 import 'dotenv/config'
 
 // Node 18 미만 대비 (tsx/pm2 환경 안전)
-import fetch from 'node-fetch'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL
