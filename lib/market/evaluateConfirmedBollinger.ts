@@ -117,7 +117,6 @@ export function evaluateConfirmedBollinger(
    * 3️⃣ Inside 영역
    * ========================================================== */
   if (closeInside) {
-
     /* ----------------------------------------------------------
      * 3-1️⃣ Upper RETURN
      * ---------------------------------------------------------- */
@@ -162,10 +161,11 @@ export function evaluateConfirmedBollinger(
      * 중앙 30% 구간만 CENTER 허용
      * 그 외는 Upper/Lower 쪽으로 흡수
      * ---------------------------------------------------------- */
-
     const bandWidth = upperBand - lowerBand
+
     const positionRatio =
-      (close - lowerBand) / Math.max(bandWidth, 0.0000001)
+      (close - lowerBand) /
+      Math.max(bandWidth, 0.0000001)
 
     // 중앙 30% 구간 (0.35 ~ 0.65)
     if (positionRatio >= 0.35 && positionRatio <= 0.65) {
@@ -197,7 +197,6 @@ export function evaluateConfirmedBollinger(
    * ========================================================== */
   return {
     enabled: true,
-    signalType:
-      BollingerSignalType.INSIDE_CENTER,
+    signalType: BollingerSignalType.INSIDE_CENTER,
   }
 }

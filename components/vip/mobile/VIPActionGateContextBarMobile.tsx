@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React from 'react'
 
 import ActionGateStatusMobile from './ActionGateStatusMobile'
 import ActionGateRendererMobile from './ActionGateRendererMobile'
@@ -8,21 +8,23 @@ import ActionGateRendererMobile from './ActionGateRendererMobile'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
 
-import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
-import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
-
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 interface Props {
   symbol: string
+  signalType?: BollingerSignalType
+  sentence: FinalNarrativeReport | null
 }
 
 export default function VIPActionGateContextBarMobile({
-  symbol
+  symbol,
+  signalType,
+  sentence,
 }: Props) {
 
   /* =========================
-     Gate State
+     Gate State (read only OK)
   ========================= */
 
   const vipGate = useVIPMarketStore(
@@ -39,24 +41,9 @@ export default function VIPActionGateContextBarMobile({
     'OBSERVE'
 
   /* =========================
-     Bollinger Signal
+     🚫 NO HOOK HERE
+     (useRealtimeBollingerSignal 제거됨)
   ========================= */
-
-  const confirmed = useRealtimeBollingerSignal()
-  const live = useLiveBollingerCommentary()
-
-  const effectiveSignal = useMemo(() => {
-
-    if (
-      confirmed?.signalType ===
-      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
-    ) {
-      return confirmed
-    }
-
-    return confirmed ?? live
-
-  }, [confirmed, live])
 
   /* =========================
      Render
@@ -71,7 +58,8 @@ export default function VIPActionGateContextBarMobile({
 
       <ActionGateRendererMobile
         gate={gate as any}
-        signalType={effectiveSignal?.signalType}
+        signalType={signalType}
+        sentence={sentence}
       />
 
     </div>

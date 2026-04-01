@@ -38,7 +38,7 @@ export const BOLLINGER_SENTENCE_MAP: Record<
   [BollingerSignalType.INSIDE_UPPER_TOUCH]: {
     summary: 'Finalized Data Analysis  ( 확정된 분석 )',
     description: [
-      '고래의 분할 매도가 시작될수있으므로, 포지션을 줄이는것을 추천합니다.',
+      '단기이익실현의 매물이 나올수 있으니, 포지션을 줄이는것을 추천합니다.',
     ],
     tendency:
       'Keyword : 낙관 추격 FOMO 경계 (Optimism chase Beware of FOMO)',

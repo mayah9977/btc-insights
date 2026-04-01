@@ -98,7 +98,6 @@ export function evaluateRealtimeBollinger(
    * 3️⃣ Inside 영역
    * ========================================================== */
   if (closeInside) {
-
     /* ----------------------------------------------------------
      * 3-1️⃣ Upper RETURN
      * ---------------------------------------------------------- */
@@ -174,10 +173,10 @@ export function evaluateRealtimeBollinger(
      * 3-7️⃣ 🔥 INSIDE_CENTER 수학적 고정
      * 중앙 30% 구간만 CENTER 허용
      * ---------------------------------------------------------- */
-
     const bandWidth = upperBand - lowerBand
     const positionRatio =
-      (close - lowerBand) / Math.max(bandWidth, 0.0000001)
+      (close - lowerBand) /
+      Math.max(bandWidth, 0.0000001)
 
     if (positionRatio >= 0.35 && positionRatio <= 0.65) {
       return {
@@ -208,7 +207,6 @@ export function evaluateRealtimeBollinger(
    * ========================================================== */
   return {
     enabled: true,
-    signalType:
-      BollingerSignalType.INSIDE_CENTER,
+    signalType: BollingerSignalType.INSIDE_CENTER,
   }
-}
+} 

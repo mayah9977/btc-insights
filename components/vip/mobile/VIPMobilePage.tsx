@@ -8,14 +8,18 @@ import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPRiskEngineBannerMobile from './VIPRiskEngineBannerMobile'
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
-import MobileBollingerContext from './MobileBollingerContext'
+import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
 
-/* ===============================
-   Mobile dynamic components
-=============================== */
+import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
+import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
+
+import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
+import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
+import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 const VIPWhaleMiniCharts = dynamic(
   () => import('./VIPWhaleMiniCharts'),
@@ -40,36 +44,66 @@ type Props = {
 }
 
 export default function VIPMobilePage(props: Props) {
-
   const symbol = 'BTCUSDT'
 
   /* ===============================
-     Mobile optimized SSE
+     SSE (1곳만 유지)
   =============================== */
-
   useVIPMarketStream(symbol, { throttle: 1500 })
-
-  /* ===============================
-     🔥 React 연결 (핵심)
-  =============================== */
 
   const marketTick = useVIPMarketStore((s) => s.ts)
 
   /* ===============================
+     준비 상태
+  =============================== */
+  const isReady = useVIPMarketStore((s) => {
+    return (
+      s.ts > 0 &&
+      (s.oiDelta !== 0 ||
+        s.volumeRatio !== 1 ||
+        s.fundingRate !== 0 ||
+        s.whaleNetRatio !== 0)
+    )
+  })
+
+  /* ===============================
+     Bollinger Hook (1곳만)
+  =============================== */
+  const confirmed = useRealtimeBollingerSignal()
+  const live = useLiveBollingerCommentary()
+
+  const signalType = useMemo(() => {
+    if (
+      confirmed?.signalType ===
+      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
+    ) {
+      return confirmed.signalType
+    }
+
+    return confirmed?.signalType ?? live?.signalType
+  }, [confirmed?.signalType, live?.signalType])
+
+  /* ===============================
+     Narrative 생성 (1곳만)
+  =============================== */
+  const sentence = useMemo<FinalNarrativeReport | null>(() => {
+    if (!signalType || !isReady) return null
+
+    return generateNarrative(
+      BOLLINGER_SENTENCE_MAP[signalType],
+      signalType
+    )
+  }, [signalType, isReady])
+
+  /* ===============================
      Snapshot 기반 데이터
   =============================== */
-
   const mobileData = useMemo(() => {
     const snapshot = getMarketSnapshot()
 
-    const safeVolume = Math.max(snapshot.volume ?? 1, 1)
-
     return {
       whaleRatio: Number((snapshot.whaleRatio ?? 0).toFixed(2)),
-
-      // 🔥 ratio → percent 변환
       whaleNet: Number((snapshot.whaleNetRatio ?? 0) * 100),
-
       whaleIntensity: Number(
         Math.min(
           Math.max(snapshot.whaleIntensity ?? 0, 0),
@@ -82,7 +116,6 @@ export default function VIPMobilePage(props: Props) {
   /* ===============================
      Derived values
   =============================== */
-
   const long = Math.max(0, mobileData.whaleNet)
   const short = Math.max(0, -mobileData.whaleNet)
 
@@ -93,38 +126,36 @@ export default function VIPMobilePage(props: Props) {
       ? 'SHORT'
       : 'NONE'
 
-  const confidence =
-    Math.min(Math.abs(mobileData.whaleNet), 100)
+  const confidence = Math.min(
+    Math.abs(mobileData.whaleNet),
+    100
+  )
 
   /* ===============================
      Render
   =============================== */
-
   return (
     <main className="space-y-6 pb-20">
 
-      {/* KPI */}
-      <VIPTopKPIBar avoidedExtremeCount={0} />
+       <VIPTopKPIBar avoidedExtremeCount={0} />
 
-      {/* RiskEngineBanner */}
       <VIPRiskEngineBannerMobile />
 
-      {/* Bollinger Context */}
-      <MobileBollingerContext />
+      <VIPActionGateContextBarMobile
+        symbol={symbol}
+        signalType={signalType}
+        sentence={sentence}
+      />
 
-      {/* Live market strip */}
       <VIPLiveStatusStripMobile symbol={symbol} />
 
-      {/* Whale charts */}
       <VIPWhaleMiniCharts />
 
-      {/* Whale trade guide */}
       <VIPWhaleTradeGuideCardMobile
         ratio={mobileData.whaleRatio}
         net={mobileData.whaleNet}
       />
 
-      {/* Institutional flow */}
       <VIPInstitutionalGuideCardMobile
         long={long}
         short={short}
@@ -133,9 +164,7 @@ export default function VIPMobilePage(props: Props) {
         intensity={mobileData.whaleIntensity}
       />
 
-      {/* Market Context */}
       <VIPOverviewDashboardMobile />
-
     </main>
   )
 }

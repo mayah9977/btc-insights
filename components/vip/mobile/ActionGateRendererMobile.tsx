@@ -1,16 +1,11 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React from 'react'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
-import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
+import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
-
-import { generateNarrativeFromSnapshot } from '@/lib/market/narrative/generateNarrative'
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-import { buildMetaKey } from '@/lib/market/narrative/metaKeyBuilder'
-import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -20,14 +15,15 @@ export type ActionGateState =
 interface Props {
   gate: ActionGateState
   signalType?: BollingerSignalType
+  sentence: FinalNarrativeReport | null
 }
 
 export default function ActionGateRendererMobile({
   gate,
   signalType,
+  sentence,
 }: Props) {
-  const title =
-    'AI is observing the market.'
+  const title = 'AI is observing the market.'
 
   const description =
     '현재 실시간데이터(고래움직임/체결량/온체인데이터/ Open Interest/Funding rate 등)를 기반으로 시장상황을 관찰중에 있습니다.'
@@ -39,72 +35,14 @@ export default function ActionGateRendererMobile({
       ? 'bg-yellow-900/20 border-yellow-600/30'
       : 'bg-red-900/20 border-red-600/30'
 
-  /* ======================================================
-     🔥 Store 기반 준비 상태
-  ====================================================== */
-  const isReady = useVIPMarketStore((s) => {
-    return (
-      s.ts > 0 &&
-      (s.oiDelta !== 0 ||
-        s.volumeRatio !== 1 ||
-        s.fundingRate !== 0 ||
-        s.whaleNetRatio !== 0)
-    )
-  })
-
-  const sentence = useVIPMarketStore((s) => s.narrative)
-  const setNarrative = useVIPMarketStore((s) => s.setNarrative)
-  const stableKey = useVIPMarketStore((s) => s.lastMetaKey)
-
-  const prevMetaKeyRef = useRef<string>('')
-
-  /* ======================================================
-     🔥 useEffect 기반 엔진 트리거 (ts 제거됨)
-  ====================================================== */
-  useEffect(() => {
-    if (!signalType) return
-
-    const snapshot = getMarketSnapshot()
-
-    if (
-      !snapshot ||
-      snapshot.ts === 0 ||
-      (
-        snapshot.oiDelta === 0 &&
-        snapshot.volumeRatio === 1 &&
-        snapshot.fundingRate === 0 &&
-        snapshot.whaleNetRatio === 0
-      )
-    ) {
-      return
-    }
-
-    const metaKey = buildMetaKey(snapshot)
-
-    if (metaKey === prevMetaKeyRef.current) return
-
-    prevMetaKeyRef.current = metaKey
-
-    try {
-      const newNarrative = generateNarrativeFromSnapshot(
-        snapshot,
-        signalType
-      )
-
-      setNarrative(signalType, newNarrative, metaKey)
-    } catch (err) {
-      console.error('Narrative Flow Error:', err)
-    }
-  }, [signalType]) // ✅ marketTick 제거
-
   /* =========================
-     Animation Hooks (유지)
+     Animation (유지)
   ========================= */
   const { flash, pulse, transition } =
     usePremiumSignalAnimation(signalType)
 
   /* =========================
-     Typewriter 최적화
+     Typewriter
   ========================= */
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
@@ -143,24 +81,11 @@ export default function ActionGateRendererMobile({
         </div>
       </div>
 
-      {/* Bollinger Interpretation */}
+      {/* Narrative */}
       {sentence && (
         <div className="relative">
-          {/* Flash */}
           {flash && (
-            <div
-              className="
-              absolute
-              inset-0
-              bg-gradient-to-r
-              from-transparent
-              via-yellow-500/20
-              to-transparent
-              animate-pulse
-              rounded-xl
-              pointer-events-none
-              "
-            />
+            <div className="absolute inset-0 bg-yellow-500/20 animate-pulse rounded-xl pointer-events-none" />
           )}
 
           <div

@@ -17,18 +17,6 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   const state = useVIPMarketStore(
     (s) => s.actionGateState
   ) as ActionGateState
-
-  /* =========================
-     DEBUG
-  ========================= */
-
-  useEffect(() => {
-    console.log('[ActionGateStatus] render', {
-      symbol,
-      state,
-    })
-  }, [state, symbol])
-
   /* =========================
      상태 색상
   ========================= */

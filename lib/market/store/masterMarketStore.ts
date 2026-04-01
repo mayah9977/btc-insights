@@ -62,8 +62,6 @@ export const useMasterMarketStore = create<MasterMarketStore>((set) => ({
       const k = key as keyof MasterMarketState
 
       if (state[k] !== value) {
-        console.log('[STORE CHANGE]', k, state[k], '→', value)
-
         ;(next as any)[k] = value
         changed = true
       }
@@ -71,9 +69,6 @@ export const useMasterMarketStore = create<MasterMarketStore>((set) => ({
     })
 
     if (!changed) return state
-
-    // 🔥 추가된 로그 (핵심)
-    console.log('[STORE UPDATE TRIGGERED]', next)
 
     return {
       ...state,

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 
 import VIPMobilePage from '@/components/vip/mobile/VIPMobilePage'
+import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
 
 type Props = {
   userId: string
@@ -22,6 +23,7 @@ const VIPDesktopPage = dynamic<Props>(
 )
 
 export default function VIPClientPage(props: Props) {
+  useVIPMarketStream('BTCUSDT')
 
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
 

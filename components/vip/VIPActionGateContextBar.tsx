@@ -1,87 +1,57 @@
 'use client'
 
-import React, { useMemo } from 'react'
-
+import React, { useEffect, useState } from 'react'
 import { ActionGateStatus } from '@/components/system/ActionGateStatus'
 import { ActionGateRenderer } from '@/components/market/interpretation'
-
 import { useMasterMarketStore } from '@/lib/market/store/masterMarketStore'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-
-import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
-import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
-import { useMasterMarketStream } from '@/lib/realtime/useMasterMarketStream'
-
-interface VIPActionGateContextBarProps {
+interface Props {
   symbol: string
+  signalType?: BollingerSignalType
+  sentence: FinalNarrativeReport | null
 }
 
-export const VIPActionGateContextBar: React.FC<
-  VIPActionGateContextBarProps
-> = ({ symbol }) => {
+export const VIPActionGateContextBar: React.FC<Props> = ({
+  symbol,
+  signalType,
+  sentence,
+}) => {
+  const [actionGate, setActionGate] = useState('OBSERVE')
+  const [vipGate, setVipGate] = useState('OBSERVE')
+  const [stableSignal, setStableSignal] =
+    useState(signalType)
 
-  /* =========================
-     Stream Subscribe (FIXED)
-  ========================= */
+  useEffect(() => {
+    const unsub1 = useMasterMarketStore.subscribe((s) =>
+      setActionGate(s.actionGate)
+    )
+    const unsub2 = useVIPMarketStore.subscribe((s) =>
+      setVipGate(s.actionGateState)
+    )
 
-  useMasterMarketStream(symbol)
-
-  /* =========================
-     Zustand Selectors
-  ========================= */
-
-  const actionGate = useMasterMarketStore(
-    (s) => s.actionGate
-  )
-
-  const vipGate = useVIPMarketStore(
-    (s) => s.actionGateState
-  )
-
-  /* =========================
-     Bollinger Signals
-  ========================= */
-
-  const confirmed = useRealtimeBollingerSignal()
-  const live = useLiveBollingerCommentary()
-
-  const effectiveSignal = useMemo(() => {
-
-    if (
-      confirmed?.signalType ===
-      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
-    ) {
-      return confirmed
+    return () => {
+      unsub1()
+      unsub2()
     }
+  }, [])
 
-    return confirmed ?? live
+  useEffect(() => {
+    if (signalType === stableSignal) return
+    setStableSignal(signalType)
+  }, [signalType])
 
-  }, [confirmed, live])
-
-  /* =========================
-     Gate Resolve
-  ========================= */
-
-  const gate =
-    (vipGate ??
-      actionGate ??
-      'OBSERVE') as any
-
-  /* =========================
-     Render
-  ========================= */
+  const gate = (vipGate ?? actionGate ?? 'OBSERVE') as any
 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-
       <ActionGateStatus symbol={symbol} />
 
       <ActionGateRenderer
-        signalType={effectiveSignal?.signalType}
+        signalType={stableSignal}
       />
-
     </div>
   )
 }

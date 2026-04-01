@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic'
+import { useMemo } from 'react'
 
 import VIPKpiBoundary from '@/components/vip/boundary/VIPKpiBoundary'
 import VIPLiveStatusStripBoundary from '@/components/vip/boundary/VIPLiveStatusStripBoundary'
@@ -6,6 +7,12 @@ import VIPWhaleWarningBoundary from '@/components/vip/boundary/VIPWhaleWarningBo
 
 import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
 import { RawObservationBar } from '@/components/market/observation/RawObservationBar'
+
+import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
+import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
+import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
+import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
+import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 
 /* =========================================================
    Lazy Loaded Components (Heavy)
@@ -75,6 +82,27 @@ export default function VIPDesktopPage({
   monthlySummary,
   vip3Metrics,
 }: Props) {
+  const confirmed = useRealtimeBollingerSignal()
+  const live = useLiveBollingerCommentary()
+
+  const signalType = useMemo(() => {
+    if (
+      confirmed?.signalType ===
+      BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
+    ) {
+      return confirmed?.signalType
+    }
+    return confirmed?.signalType ?? live?.signalType
+  }, [confirmed?.signalType, live?.signalType])
+
+  const sentence = useMemo(() => {
+    if (!signalType) return null
+    return generateNarrative(
+      BOLLINGER_SENTENCE_MAP[signalType],
+      signalType
+    )
+  }, [signalType])
+
   return (
     <>
       {/* =========================
@@ -83,7 +111,11 @@ export default function VIPDesktopPage({
 
       <VIPKpiBoundary />
 
-      <VIPActionGateContextBar symbol="BTCUSDT" />
+      <VIPActionGateContextBar
+        symbol="BTCUSDT"
+        signalType={signalType}
+        sentence={sentence}
+      />
 
       <RawObservationBar symbol="BTCUSDT" />
 
@@ -96,7 +128,6 @@ export default function VIPDesktopPage({
       ========================= */}
 
       <main className="space-y-10">
-
         {/* =========================
             Charts (Lazy)
         ========================= */}
@@ -115,7 +146,6 @@ export default function VIPDesktopPage({
           <VIPCompareTable />
           <VIPOverviewDashboard />
         </section>
-
       </main>
     </>
   )
