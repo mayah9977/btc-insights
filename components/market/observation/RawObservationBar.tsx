@@ -144,4 +144,4 @@ export const RawObservationBar = React.memo(function RawObservationBar({
       </div>
     </motion.div>
   )
-})
+})   

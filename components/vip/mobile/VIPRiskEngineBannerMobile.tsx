@@ -85,16 +85,14 @@ export default function VIPRiskEngineBannerMobile() {
       .slice(1)
 
   return (
-    <div className="px-4 mt-2">
+    <div className="mt-2">
       <div className="relative rounded-xl overflow-hidden border border-white/10">
-
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
         />
 
         <div className="relative z-10 px-4 py-3 backdrop-blur bg-black/40">
-
           <div
             className="text-sm font-bold"
             style={{
@@ -111,7 +109,6 @@ export default function VIPRiskEngineBannerMobile() {
           <div className="text-[11px] font-mono text-white/70">
             RGB({rgb.r}, {rgb.g}, {rgb.b}) | {hex}
           </div>
-
         </div>
       </div>
     </div>

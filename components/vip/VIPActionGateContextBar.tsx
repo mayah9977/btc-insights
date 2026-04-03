@@ -50,8 +50,9 @@ export const VIPActionGateContextBar: React.FC<Props> = ({
       <ActionGateStatus symbol={symbol} />
 
       <ActionGateRenderer
-        signalType={stableSignal}
-      />
+  signalType={stableSignal}
+  sentence={sentence}
+/>
     </div>
   )
 }

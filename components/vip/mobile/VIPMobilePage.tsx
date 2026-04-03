@@ -137,7 +137,7 @@ export default function VIPMobilePage(props: Props) {
   return (
     <main className="space-y-6 pb-20">
 
-       <VIPTopKPIBar avoidedExtremeCount={0} />
+      <VIPTopKPIBar avoidedExtremeCount={0} />
 
       <VIPRiskEngineBannerMobile />
 
@@ -167,4 +167,4 @@ export default function VIPMobilePage(props: Props) {
       <VIPOverviewDashboardMobile />
     </main>
   )
-}
+}   

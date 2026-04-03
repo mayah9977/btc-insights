@@ -80,7 +80,7 @@ export function buildCause(params: {
   if (snapshot.whaleNetRatio > 0) {
     stateParts.push(`Whale 매집(${safeNum(snapshot.whaleNetRatio, 3)})`)
   } else if (snapshot.whaleNetRatio < 0) {
-    stateParts.push(`Whale 분배(${safeNum(snapshot.whaleNetRatio, 3)})`)
+    stateParts.push(`Whale 분할매도(${safeNum(snapshot.whaleNetRatio, 3)})`)
   } else {
     stateParts.push(`Whale 중립(0.000)`)
   }

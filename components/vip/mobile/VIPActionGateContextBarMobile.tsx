@@ -22,11 +22,6 @@ export default function VIPActionGateContextBarMobile({
   signalType,
   sentence,
 }: Props) {
-
-  /* =========================
-     Gate State (read only OK)
-  ========================= */
-
   const vipGate = useVIPMarketStore(
     (s) => s.actionGateState
   )
@@ -40,18 +35,8 @@ export default function VIPActionGateContextBarMobile({
     masterGate ??
     'OBSERVE'
 
-  /* =========================
-     🚫 NO HOOK HERE
-     (useRealtimeBollingerSignal 제거됨)
-  ========================= */
-
-  /* =========================
-     Render
-  ========================= */
-
   return (
-    <div className="space-y-3 px-4">
-
+    <div className="space-y-3">
       <ActionGateStatusMobile
         symbol={symbol}
       />
@@ -61,7 +46,6 @@ export default function VIPActionGateContextBarMobile({
         signalType={signalType}
         sentence={sentence}
       />
-
     </div>
   )
 }

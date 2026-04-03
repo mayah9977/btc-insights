@@ -91,4 +91,4 @@ export function getMarketSnapshot(): MarketSnapshot {
 export function resetMarketSnapshotCache() {
   lastSnapshot = null
   prevPrice = 0
-}
+}    

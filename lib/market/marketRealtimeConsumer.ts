@@ -211,7 +211,7 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
 
         const recentCloses = getRecentPrices(symbol, 100)
 
-        if (recentCloses.length >= 35) {
+        if (recentCloses.length >= 35) {   
           const macdResult = calculateMACD(recentCloses)
           if (macdResult) setLastMACD(symbol, macdResult)
         }

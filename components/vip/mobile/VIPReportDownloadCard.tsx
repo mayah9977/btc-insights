@@ -38,7 +38,7 @@ export default function VIPReportDownloadCard() {
         </span>
 
         <span>
-          Download today's VIP report
+          Download 오늘의뉴스
         </span>
 
       </button>

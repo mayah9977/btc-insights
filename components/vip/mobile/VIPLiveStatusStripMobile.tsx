@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useRef } from 'react'
 import { useRealtimeMarketComposite } from '@/lib/realtime/useRealtimeMarketComposite'
 
 interface Props {
@@ -8,14 +8,24 @@ interface Props {
 }
 
 export default function VIPLiveStatusStripMobile({
-  symbol
+  symbol,
 }: Props) {
-
   const {
     oi,
     volume,
     whaleIntensity
   } = useRealtimeMarketComposite(symbol)
+
+  const prevVolumeRef = useRef<number | null>(null)
+
+  if (volume && volume !== 0) {
+    prevVolumeRef.current = volume
+  }
+
+  const displayVolume =
+    volume && volume !== 0
+      ? volume
+      : prevVolumeRef.current
 
   return (
     <div
@@ -41,7 +51,9 @@ export default function VIPLiveStatusStripMobile({
       <div className="flex flex-col">
         <span className="text-gray-400">VOL</span>
         <span className="text-green-400 font-semibold">
-          {volume?.toLocaleString() ?? '--'}
+          {displayVolume != null
+            ? displayVolume.toLocaleString()
+            : '--'}
         </span>
       </div>
 

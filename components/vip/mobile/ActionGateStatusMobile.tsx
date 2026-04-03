@@ -76,4 +76,4 @@ export default function ActionGateStatusMobile({
       </div>
     </div>
   )
-}
+} 
