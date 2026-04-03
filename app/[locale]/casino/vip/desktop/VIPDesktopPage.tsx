@@ -1,3 +1,5 @@
+'use client'
+
 import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 
@@ -5,7 +7,7 @@ import VIPKpiBoundary from '@/components/vip/boundary/VIPKpiBoundary'
 import VIPLiveStatusStripBoundary from '@/components/vip/boundary/VIPLiveStatusStripBoundary'
 import VIPWhaleWarningBoundary from '@/components/vip/boundary/VIPWhaleWarningBoundary'
 
-import { VIPActionGateContextBar } from '@/components/vip/VIPActionGateContextBar'
+import VIPActionGateContextBar from '@/components/vip/VIPActionGateContextBar'
 import { RawObservationBar } from '@/components/market/observation/RawObservationBar'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
@@ -14,42 +16,27 @@ import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 
-/* =========================================================
-   Lazy Loaded Components (Heavy)
-========================================================= */
-
 const VIPWhaleIntensityChartBoundary = dynamic(
   () => import('@/components/vip/boundary/VIPWhaleIntensityChartBoundary'),
-  {
-    ssr: false,
-    loading: () => <div className="h-[320px]" />,
-  }
+  { ssr: false, loading: () => <div className="h-[320px]" /> }
 )
 
 const VIPWhaleTradeFlowChartBoundary = dynamic(
   () => import('@/components/vip/boundary/VIPWhaleTradeFlowChartBoundary'),
-  {
-    ssr: false,
-    loading: () => <div className="h-[320px]" />,
-  }
+  { ssr: false, loading: () => <div className="h-[320px]" /> }
 )
 
 const VIPMetricsBoundary = dynamic(
   () => import('@/components/vip/boundary/VIPMetricsBoundary'),
-  {
-    ssr: false,
-    loading: () => <div className="h-[200px]" />,
-  }
+  { ssr: false, loading: () => <div className="h-[200px]" /> }
 )
 
 const VIPCompareTable = dynamic(
   () => import('@/components/vip/VIPCompareTable'),
-  {
-    ssr: false,
-    loading: () => <div className="h-[200px]" />,
-  }
+  { ssr: false, loading: () => <div className="h-[200px]" /> }
 )
 
+/* ✅ FIX: named export 대응 */
 const VIPOverviewDashboard = dynamic(
   () =>
     import('@/components/vip/VIPOverviewDashboard').then(
@@ -61,20 +48,12 @@ const VIPOverviewDashboard = dynamic(
   }
 )
 
-/* =========================================================
-   Props
-========================================================= */
-
 type Props = {
   userId: string
   weeklySummary: any
   monthlySummary: any
   vip3Metrics: any
 }
-
-/* =========================================================
-   VIP Desktop Page
-========================================================= */
 
 export default function VIPDesktopPage({
   userId,
@@ -105,10 +84,6 @@ export default function VIPDesktopPage({
 
   return (
     <>
-      {/* =========================
-          Realtime Header
-      ========================= */}
-
       <VIPKpiBoundary />
 
       <VIPActionGateContextBar
@@ -120,26 +95,13 @@ export default function VIPDesktopPage({
       <RawObservationBar symbol="BTCUSDT" />
 
       <VIPLiveStatusStripBoundary />
-
       <VIPWhaleWarningBoundary />
 
-      {/* =========================
-          Main Content
-      ========================= */}
-
       <main className="space-y-10">
-        {/* =========================
-            Charts (Lazy)
-        ========================= */}
-
         <section className="space-y-10">
           <VIPWhaleIntensityChartBoundary />
           <VIPWhaleTradeFlowChartBoundary />
         </section>
-
-        {/* =========================
-            Analysis
-        ========================= */}
 
         <section className="space-y-10">
           <VIPMetricsBoundary vip3Metrics={vip3Metrics} />
