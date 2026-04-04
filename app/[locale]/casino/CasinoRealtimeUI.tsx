@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AdvancedRealtimeHeader } from '@/components/realtime/AdvancedRealtimeHeader'
+// REMOVE: import { AdvancedRealtimeHeader } from '@/components/realtime/AdvancedRealtimeHeader'
 import { MobileRealtimeHUD } from '@/components/realtime/MobileRealtimeHUD'
 import { VIP3GlowWrapper } from '@/components/realtime/VIP3GlowWrapper'
 import { VIP3MiniStats } from '@/components/realtime/VIP3MiniStats'
@@ -39,7 +39,7 @@ export function CasinoRealtimeUI() {
           Realtime Header
       ================================ */}
       <VIP3GlowWrapper active={vipLevel === 'VIP3'}>
-        <AdvancedRealtimeHeader sseStatus={sseStatus} />
+        {/* REMOVE: <AdvancedRealtimeHeader sseStatus={sseStatus} /> */}
 
         {vipLevel === 'VIP3' && (
           <VIP3MiniStats

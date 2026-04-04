@@ -33,7 +33,7 @@ function VIPTopKPIBar({
 
         <div className="md:hidden py-2 text-sm text-neutral-300 space-y-2">
 
-          <div className="px-4">
+          <div> {/* FIX: removed px-4 to match full width with other cards */}
             {/* Combined Card */}
             <div className="w-full rounded-xl border border-neutral-800 bg-neutral-900">
               <div className="px-4 py-3 space-y-3">

@@ -31,4 +31,4 @@ export function AdvancedRealtimeHeader({
       <StreamQualityBadge />
     </motion.div>
   )
-}
+} 
