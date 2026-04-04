@@ -9,8 +9,8 @@ const BtcLiveChart = dynamic(
 
 export default function BtcChartSection() {
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <section>
       <BtcLiveChart riskLevel="LOW" />
-    </div>
+    </section>
   )
 }

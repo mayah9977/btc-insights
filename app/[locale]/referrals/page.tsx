@@ -5,15 +5,8 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { Playfair_Display, Inter } from 'next/font/google'
 
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: ['600', '700'],
-})
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-})
+const playfair = Playfair_Display({ subsets: ['latin'], weight: ['600', '700'] })
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] })
 
 const exchanges = [
   {
@@ -53,57 +46,62 @@ export default function ReferralsPage() {
   }, [])
 
   return (
-    <div className={clsx(inter.className, 'space-y-12')}>
-      {/* Header */}
-      <header className="space-y-3">
-        <h1
-          className={clsx(
-            playfair.className,
-            'text-4xl md:text-5xl font-semibold tracking-tight text-slate-100'
-          )}
-        >
-          Professional Trading Infrastructure
-        </h1>
-        <p className="text-base md:text-lg text-slate-400 max-w-2xl">
-          실제 트레이더 기준으로 검증된 거래 환경 목록입니다.
-        </p>
-      </header>
-
-      {/* Exchange Cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {exchanges.map((ex) => (
-          <Link
-            key={ex.name}
-            href={ex.href}
-            onClick={handleClick}
-            className={clsx(
-              'group relative overflow-hidden rounded-xl',
-              'bg-vipCard border',
-              ex.border,
-              'px-6 py-6',
-              'transition-all duration-200',
-              'hover:-translate-y-[2px] hover:border-opacity-70'
-            )}
-          >
-            {/* Accent Line */}
-            <div
+    <main className="py-20"> {/* FIX: layout 역할을 page로 이동 */}
+      <div className="max-w-6xl mx-auto px-6 space-y-16">
+        <div className={clsx(inter.className, 'space-y-12')}>
+          
+          <header className="space-y-3">
+            <h1
               className={clsx(
-                'absolute top-0 left-0 h-[2px] w-full',
-                `bg-gradient-to-r ${ex.accent}`
+                playfair.className,
+                'text-4xl md:text-5xl font-semibold tracking-tight text-slate-100'
               )}
-            />
+            >
+              Professional Trading Infrastructure
+            </h1>
 
-            <div className="relative z-10 space-y-1.5">
-              <h2 className="text-base font-semibold text-slate-100 tracking-wide">
-                {ex.name}
-              </h2>
-              <p className="text-sm text-slate-400 leading-relaxed">
-                {ex.desc}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </section>
-    </div>
+            <p className="text-base md:text-lg text-slate-400 max-w-2xl">
+              실제 트레이더 기준으로 검증된 거래 환경 목록입니다.
+            </p>
+          </header>
+
+          <section className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {exchanges.map((ex) => (
+              <Link
+                key={ex.name}
+                href={ex.href}
+                onClick={handleClick}
+                className={clsx(
+                  'group relative overflow-hidden rounded-xl',
+                  'bg-vipCard border',
+                  ex.border,
+                  'px-6 py-6',
+                  'transition-all duration-200',
+                  'hover:-translate-y-[2px] hover:border-opacity-70'
+                )}
+              >
+                <div
+                  className={clsx(
+                    'absolute top-0 left-0 h-[2px] w-full',
+                    `bg-gradient-to-r ${ex.accent}`
+                  )}
+                />
+
+                <div className="relative z-10 space-y-1.5">
+                  <h2 className="text-base font-semibold text-slate-100 tracking-wide">
+                    {ex.name}
+                  </h2>
+
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    {ex.desc}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </section>
+
+        </div>
+      </div>
+    </main>
   )
 }

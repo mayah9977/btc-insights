@@ -1,3 +1,5 @@
+// app/[locale]/referrals/layout.tsx
+
 import type { ReactNode } from 'react'
 
 export default function ReferralLayout({
@@ -5,11 +7,5 @@ export default function ReferralLayout({
 }: {
   children: ReactNode
 }) {
-  return (
-    <main className="py-20">
-      <div className="max-w-6xl mx-auto px-6 space-y-16">
-        {children}
-      </div>
-    </main>
-  )
+  return <>{children}</> // DEACTIVATED
 }

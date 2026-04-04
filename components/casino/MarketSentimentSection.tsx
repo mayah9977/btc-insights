@@ -4,7 +4,7 @@ import MarketSentimentPanel from '@/components/market/sentiment/MarketSentimentP
 
 export default function MarketSentimentSection() {
   return (
-    <section className="max-w-6xl mx-auto px-4">
+    <section>
       <MarketSentimentPanel symbol="BTCUSDT" />
     </section>
   )
