@@ -1,10 +1,11 @@
 'use client'
+
 import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { useVipOverviewStore } from '@/lib/vip/overviewStore'
-import HeroCTA from './HeroCTA'
+import HeroCTA from '@/components/casino/cta/HeroCTA'
 
-export default function HeroSection({
+export default function HeroDesktop({
   isLoggedIn,
   isVIP,
 }: {
@@ -13,10 +14,6 @@ export default function HeroSection({
 }) {
   const { riskLevel } = useVipOverviewStore()
   const [dwell, setDwell] = useState(0)
-
-  /* =========================
-     HUD Canvas + RGB Reader
-  ========================= */
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -101,11 +98,9 @@ export default function HeroSection({
     return () => clearInterval(id)
   }, [])
 
-  const heroTitle =
-    'AI 실시간 데이터 기반 확률적 위험 감지 모델'
-
+  const heroTitle = 'AI 기반 구조적 리스크 감지 시스템'
   const heroDesc =
-    '본 시스템은 매수/매도 신호가 아닌 데이터를 기반으로 위험구간을 알려 사용자의 손실을 줄이는것을 목적으로 설계되었습니다.'
+    '실시간 데이터 흐름을 기반으로 시장의 위험 구간을 탐지합니다.\n신호가 아닌 구조를 분석하여 불필요한 손실을 줄이는 것을 목표로 합니다.'
 
   const toneMap = {
     LOW: 'from-emerald-500/10',
@@ -115,6 +110,7 @@ export default function HeroSection({
   }
 
   const gradientTone = toneMap[riskLevel]
+
   const brightness =
     riskLevel === 'HIGH' || riskLevel === 'EXTREME'
       ? 'brightness-110'
@@ -122,7 +118,7 @@ export default function HeroSection({
 
   const extremePulse =
     riskLevel === 'EXTREME'
-      ? { scale: [1, 1.02, 1] }
+      ? { scale: [1, 1.01, 1] }
       : {}
 
   const showVignette = dwell >= 45
@@ -138,69 +134,83 @@ export default function HeroSection({
       className={`
         relative overflow-hidden
         rounded-3xl border border-vipBorder
-        bg-vipCard p-6 md:p-12
-        shadow-[0_40px_120px_rgba(0,0,0,0.8)]
+        bg-vipCard
+        px-10 py-12
+        shadow-[0_40px_120px_rgba(0,0,0,0.85)]
         bg-gradient-to-br ${gradientTone}
         ${brightness}
         transition-all duration-700
-        space-y-10
       `}
     >
+      {/* grid overlay */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.05]
         bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),
         linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)]
-        bg-[size:40px_40px]" />
+        bg-[size:40px_40px]"
+      />
 
       {showVignette && (
         <div className="pointer-events-none absolute inset-0
           bg-[radial-gradient(circle,transparent_60%,rgba(0,0,0,0.6))]
-          opacity-60 transition-opacity duration-1000" />
+          opacity-60 transition-opacity duration-1000"
+        />
       )}
 
-      {isLoggedIn && (
-        <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-lg">
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full"
+      <div className="relative grid md:grid-cols-2 gap-10 items-center">
+
+        {/* LEFT */}
+        <div className="space-y-6">
+          <div className="text-xs tracking-widest text-zinc-400 uppercase">
+            AI Risk Engine
+          </div>
+
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight">
+            {heroTitle}
+          </h1>
+
+          <p className="text-zinc-400 text-lg leading-relaxed whitespace-pre-line max-w-xl">
+            {heroDesc}
+          </p>
+
+          <HeroCTA
+            isLoggedIn={isLoggedIn}
+            isVIP={isVIP}
+            autoScale={riskLevel === 'EXTREME'}
           />
+        </div>
 
-          <div className="relative z-10 px-6 py-5 backdrop-blur-md bg-black/30 flex flex-col gap-2">
-            <div
-              className="text-xl font-bold tracking-wide"
-              style={{
-                color: `rgb(${rgb.r},${rgb.g},${rgb.b})`,
-                textShadow: `
-                  0 0 6px rgb(${rgb.r},${rgb.g},${rgb.b}),
-                  0 0 12px rgb(${rgb.r},${rgb.g},${rgb.b}),
-                  0 0 24px rgb(${rgb.r},${rgb.g},${rgb.b})
-                `,
-              }}
-            >
-              Structural Risk Engine actively analyzing real-time market dynamics...
-            </div>
+        {/* RIGHT */}
+        {isLoggedIn && (
+          <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-xl h-[240px] md:h-[280px]">
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full"
+            />
 
-            <div className="text-xs font-mono text-white/80">
-              RGB({rgb.r}, {rgb.g}, {rgb.b}) | {hex}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+            <div className="relative z-10 h-full flex flex-col justify-center px-6 gap-2">
+              <div
+                className="text-lg font-bold tracking-wide"
+                style={{
+                  color: `rgb(${rgb.r},${rgb.g},${rgb.b})`,
+                  textShadow: `
+                    0 0 6px rgb(${rgb.r},${rgb.g},${rgb.b}),
+                    0 0 12px rgb(${rgb.r},${rgb.g},${rgb.b}),
+                    0 0 24px rgb(${rgb.r},${rgb.g},${rgb.b})
+                  `,
+                }}
+              >
+                Structural Risk Engine analyzing market...
+              </div>
+
+              <div className="text-xs font-mono text-white/80">
+                RGB({rgb.r}, {rgb.g}, {rgb.b}) | {hex}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      <div className="relative space-y-5">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-white">
-          {heroTitle}
-        </h1>
-
-        <p className="text-zinc-400 text-lg max-w-2xl">
-          {heroDesc}
-        </p>
+        )}
       </div>
-
-      <HeroCTA
-        isLoggedIn={isLoggedIn}
-        isVIP={isVIP}
-        autoScale={riskLevel === 'EXTREME'}
-      />
     </motion.section>
   )
 }

@@ -6,7 +6,7 @@ import { VIP3GlowWrapper } from '@/components/realtime/VIP3GlowWrapper'
 import LockedRiskInfo from '@/components/dashboard/casino/LockedRiskInfo'
 import VIPEnterCTA from '@/components/dashboard/casino/VIPEnterCTA'
 
-import HeroSection from './HeroSection'
+import HeroSection from '@/components/casino/hero/HeroSection'
 
 import FortuneSection from '@/components/casino/FortuneSection'
 import MarketSentimentSection from '@/components/casino/MarketSentimentSection'
