@@ -16,10 +16,8 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
 
-    /* 🔥 추가 (핵심 해결) */
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
 
-    /* 유지 (Next alias용) */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
