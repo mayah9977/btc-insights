@@ -3,13 +3,12 @@ import {
   markAlertTriggered,
   updateAlert,
 } from './alertStore.server'
-
 import type { PriceAlert } from './alertTypes'
-
 import { sendAlertNotification } from './alertNotifier'
 import { addAlertHistory } from './alertHistoryStore'
 import { redis } from '../redis'
 import { pushAlertTriggered } from '@/lib/push/pushOnAlert'
+import { handleIndicatorTick } from './indicatorEngine'
 
 /* =========================
  * Types
@@ -157,16 +156,30 @@ export async function handlePriceTick(tick: PriceTick) {
       /* =========================
        * 🔥 Redis → SSE
        * ========================= */
+      const realtimePayload = {
+        type: 'ALERT_TRIGGERED',
+        alertId: alert.id,
+        userId: alert.userId,
+        symbol: alert.symbol,
+        price,
+        ts,
+      }
+
+      console.log('[ENGINE][REDIS][MARKET]', realtimePayload)
+
       await redis.publish(
         'realtime:market',
-        JSON.stringify({
-          type: 'ALERT_TRIGGERED',
-          alertId: alert.id,
-          userId: alert.userId,
-          symbol: alert.symbol,
-          price,
-          ts,
-        }),
+        JSON.stringify(realtimePayload),
+      )
+
+      /* =========================
+       * 🔥 Redis → Alerts SSE
+       * ========================= */
+      console.log('[ENGINE][REDIS][ALERTS]', realtimePayload)
+
+      await redis.publish(
+        'realtime:alerts',
+        JSON.stringify(realtimePayload),
       )
 
       /* =========================
@@ -183,6 +196,7 @@ export async function handlePriceTick(tick: PriceTick) {
   } catch (e) {
     console.error('[ALERT_ENGINE]', e)
   } finally {
+    await handleIndicatorTick(symbol, price)
     processing.delete(symbol)
   }
 }

@@ -1,13 +1,10 @@
+// /app/[locale]/alerts/providers/alertsStore.zustand.ts
 'use client'
 
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { PriceAlert } from '@/lib/alerts/alertStore.types'
 import type { NotificationSettings } from '@/lib/notification/notificationSettings'
-
-/* =========================
- * Types
- * ========================= */
 
 export type RealtimeEvent = {
   type: 'ALERT_TRIGGERED'
@@ -17,51 +14,49 @@ export type RealtimeEvent = {
   ts: number
 }
 
+export type IndicatorEvent = {
+  type: 'INDICATOR_SIGNAL'
+  indicator: string
+  signal: string
+  symbol: string
+  timeframe: string
+  value: number
+  ts: number
+}
+
 type AlertsState = {
-  /* =========================
-   * Data
-   * ========================= */
   alertsById: Record<string, PriceAlert>
   orderedIds: string[]
+  indicatorSignals: IndicatorEvent[]
 
-  /* =========================
-   * Settings
-   * ========================= */
+  indicatorEnabled: {
+    RSI: boolean
+    MACD: boolean
+    EMA: boolean
+  }
+  setIndicatorEnabled: (v: {
+    RSI: boolean
+    MACD: boolean
+    EMA: boolean
+  }) => void
+
   notificationSettings?: NotificationSettings
   setNotificationSettings: (s: NotificationSettings) => void
 
-  /* =========================
-   * Selectors (RAW ONLY)
-   * ========================= */
   getAll: () => PriceAlert[]
 
-  /* =========================
-   * Actions
-   * ========================= */
   bootstrap: () => Promise<void>
   addAlert: (alert: PriceAlert) => void
   upsertAlert: (alert: PriceAlert) => void
   removeAlert: (id: string) => void
 
-  /** 🔥 SSE 반영 (status 기반) */
   applyTriggered: (payload: RealtimeEvent) => void
 }
 
-/* =========================
- * SSE listener singleton
- * ========================= */
-
 let sseBound = false
-
-/* =========================
- * Store
- * ========================= */
 
 export const useAlertsStore = create<AlertsState>()(
   subscribeWithSelector((set, get) => {
-    /* =========================
-     * SSE → Store 연결 (ONCE)
-     * ========================= */
     if (typeof window !== 'undefined' && !sseBound) {
       sseBound = true
 
@@ -70,8 +65,15 @@ export const useAlertsStore = create<AlertsState>()(
         if (settings?.sseEnabled === false) return
 
         const data = e.detail
+
         if (data?.type === 'ALERT_TRIGGERED') {
           get().applyTriggered(data)
+        }
+
+        if (data?.type === 'INDICATOR_SIGNAL') {
+          set(state => ({
+            indicatorSignals: [data, ...state.indicatorSignals].slice(0, 50),
+          }))
         }
       })
     }
@@ -79,27 +81,36 @@ export const useAlertsStore = create<AlertsState>()(
     return {
       alertsById: {},
       orderedIds: [],
+      indicatorSignals: [],
+      indicatorEnabled: {
+        RSI: true,
+        MACD: true,
+        EMA: true,
+      },
+
+      setIndicatorEnabled: v => set({ indicatorEnabled: v }),
+
       notificationSettings: undefined,
 
-      /* =========================
-       * Settings
-       * ========================= */
       setNotificationSettings: s =>
         set({ notificationSettings: s }),
 
-      /* =========================
-       * Selectors
-       * ========================= */
       getAll: () =>
         get()
           .orderedIds
           .map(id => get().alertsById[id])
           .filter(Boolean),
 
-      /* =========================
-       * Bootstrap
-       * ========================= */
       bootstrap: async () => {
+        /* 🔥 indicatorEnabled 동기화 */
+        try {
+          const resSettings = await fetch('/api/alerts/indicator-settings', { cache: 'no-store' })
+          const jsonSettings = await resSettings.json()
+          if (jsonSettings?.data) {
+            set({ indicatorEnabled: jsonSettings.data })
+          }
+        } catch {}
+
         const res = await fetch('/api/alerts', { cache: 'no-store' })
         const json = await res.json()
         if (!Array.isArray(json?.alerts)) return
@@ -122,9 +133,6 @@ export const useAlertsStore = create<AlertsState>()(
         })
       },
 
-      /* =========================
-       * CRUD
-       * ========================= */
       addAlert: alert =>
         set(state => ({
           alertsById: {
@@ -158,15 +166,11 @@ export const useAlertsStore = create<AlertsState>()(
           }
         }),
 
-      /* =========================
-       * 🔥 Realtime Trigger (SSOT)
-       * ========================= */
       applyTriggered: ({ alertId, symbol, price, ts }) =>
         set(state => {
           const alert = state.alertsById[alertId]
           if (!alert) return state
 
-          // UI 이벤트 (toast 등)
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('alert:triggered', {

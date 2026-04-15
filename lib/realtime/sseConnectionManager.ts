@@ -263,4 +263,4 @@ class SSEConnectionManager {
   }
 }
 
-export const sseManager = SSEConnectionManager.getInstance()
+export const sseManager = SSEConnectionManager.getInstance() 

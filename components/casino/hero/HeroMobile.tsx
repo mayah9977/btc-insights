@@ -1,3 +1,4 @@
+// components/casino/hero/HeroMobile.tsx
 'use client'
 
 import { motion } from 'framer-motion'
@@ -8,16 +9,20 @@ import HeroCTAMobile from '@/components/casino/cta/HeroCTAMobile'
 export default function HeroMobile({
   isLoggedIn,
   isVIP,
+  title,
+  description,
 }: {
   isLoggedIn: boolean
   isVIP: boolean
+  title?: string
+  description?: string
 }) {
   const { riskLevel } = useVipOverviewStore()
 
   const [glitch, setGlitch] = useState(false)
 
   /* =========================
-     ⚡ GLITCH RANDOM TRIGGER
+    ⚡ GLITCH RANDOM TRIGGER
   ========================= */
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -60,6 +65,10 @@ export default function HeroMobile({
     HIGH: '비정상적인 흐름이 감지되고 있습니다.',
     EXTREME: '구조적 위험이 매우 높은 상태입니다.',
   }
+
+  // ✅ props 우선 사용, 없으면 기존 로직 fallback
+  const finalTitle = title ?? titleMap[riskLevel]
+  const finalDesc = description ?? descMap[riskLevel]
 
   return (
     <section
@@ -143,12 +152,12 @@ export default function HeroMobile({
         </div>
 
         <h1 className="text-xl font-bold text-white leading-snug">
-          {titleMap[riskLevel]}
+          {finalTitle}
         </h1>
       </div>
 
       <p className="text-sm text-zinc-400 leading-relaxed relative z-20">
-        {descMap[riskLevel]}
+        {finalDesc}
       </p>
 
       <div className="h-px bg-white/10 relative z-20" />

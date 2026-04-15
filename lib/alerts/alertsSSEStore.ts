@@ -1,3 +1,4 @@
+// /lib/alerts/alertsSSEStore.ts
 'use client'
 
 import { create } from 'zustand'
@@ -32,19 +33,53 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
       if (unsubscribe) return // already bootstrapped
 
       console.log('[alerts-sse] bootstrap (manager)')
+      console.log('[alerts-sse] manager-ready:', !!sseManager)
 
-      unsubscribe = sseManager.subscribe(
-        SSE_EVENT.ALERT_TRIGGERED ?? 'ALERT_TRIGGERED',
-        (data: any) => {
-          set({
-            connected: true,
-            systemRisk: 'SAFE',
-            lastEventAt: Date.now(),
-          })
+      const es = new EventSource('/api/alerts/sse')
+
+      es.onopen = () => {
+        console.log('[alerts-sse] connected: /api/alerts/sse')
+
+        set({
+          connected: true,
+          systemRisk: 'SAFE',
+          lastEventAt: Date.now(),
+        })
+      }
+
+      es.onmessage = (event) => {
+        let data: any
+
+        try {
+          data = JSON.parse(event.data)
+        } catch (error) {
+          console.error('[alerts-sse] parse error:', error)
+          return
+        }
+
+        console.log('SSE RAW DATA:', data)
+
+        set({
+          connected: true,
+          systemRisk: 'SAFE',
+          lastEventAt: Date.now(),
+        })
+
+        if (data?.type === 'ALERT_TRIGGERED') {
+          /* 🔒 Payload normalization (Zustand 호환) */
+          const payload = {
+            type: 'ALERT_TRIGGERED',
+            alertId: data.alertId,
+            symbol: data.symbol,
+            price: data.price,
+            ts: data.ts ?? Date.now(),
+          }
+
+          console.log('SSE PAYLOAD:', payload)
 
           /* 🔔 Toast */
           toast.success(
-            `🔔 ${data.symbol} 알림 발생\n가격: ${data.price}`,
+            `🔔 ${payload.symbol} 알림 발생\n가격: ${payload.price}`,
             {
               position: 'bottom-right',
               duration: 5000,
@@ -54,16 +89,40 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
           /* 🔥 기존 UI 호환 이벤트 유지 */
           window.dispatchEvent(
             new CustomEvent('alerts:sse', {
-              detail: data,
+              detail: payload,
             }),
           )
+
           window.dispatchEvent(
             new CustomEvent('alert:triggered', {
+              detail: payload,
+            }),
+          )
+        }
+
+        if (data?.type === 'INDICATOR_SIGNAL') {
+          console.log('INDICATOR SIGNAL:', data)
+
+          window.dispatchEvent(
+            new CustomEvent('alerts:sse', {
               detail: data,
             }),
           )
-        },
-      )
+        }
+      }
+
+      es.onerror = (error) => {
+        console.error('[alerts-sse] connection error:', error)
+
+        set({
+          connected: false,
+          systemRisk: 'CRITICAL',
+        })
+      }
+
+      unsubscribe = () => {
+        es.close()
+      }
 
       /* =========================
        * 💓 Watchdog
@@ -73,6 +132,7 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         if (!last) return
 
         const gap = Date.now() - last
+
         if (gap > 10_000) {
           set({
             connected: false,
