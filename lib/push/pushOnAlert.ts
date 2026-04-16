@@ -1,4 +1,4 @@
-// lib/push/pushOnAlert.ts
+// /lib/push/pushOnAlert.ts
 import { sendPushToUser } from './push'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
 
@@ -7,6 +7,16 @@ export type PushAlertPayload = {
   alertId: string
   symbol: string
   price: number
+  ts: number
+  level?: 'NORMAL' | 'CRITICAL'
+}
+
+export type PushIndicatorPayload = {
+  userId: string
+  indicator: string
+  signal: string
+  symbol: string
+  value: number
   ts: number
   level?: 'NORMAL' | 'CRITICAL'
 }
@@ -40,10 +50,8 @@ export async function pushAlertTriggered(
    * ========================= */
   const settings = await getUserNotificationSettings(userId)
 
-  // Push OFF
   if (!settings.pushEnabled) return
 
-  // 중요 알림만
   if (
     settings.importance === 'CRITICAL_ONLY' &&
     level !== 'CRITICAL'
@@ -51,7 +59,6 @@ export async function pushAlertTriggered(
     return
   }
 
-  // 방해금지 시간
   if (isQuietHour(settings.quietHours)) return
 
   /* =========================
@@ -65,6 +72,52 @@ export async function pushAlertTriggered(
       alertId,
       symbol,
       price: String(price),
+      ts: String(ts),
+    },
+  })
+}
+
+/**
+ * 🔔 INDICATOR_SIGNAL → Push fan-out
+ * - ALERT_TRIGGERED 구조와 동일하게 통합
+ * - 서버 설정 기반 필터
+ * - FCM data payload는 string-only
+ */
+export async function pushIndicatorTriggered(
+  payload: PushIndicatorPayload
+) {
+  const {
+    userId,
+    indicator,
+    signal,
+    symbol,
+    value,
+    ts,
+    level,
+  } = payload
+
+  const settings = await getUserNotificationSettings(userId)
+
+  if (!settings.pushEnabled) return
+
+  if (
+    settings.importance === 'CRITICAL_ONLY' &&
+    level !== 'CRITICAL'
+  ) {
+    return
+  }
+
+  if (isQuietHour(settings.quietHours)) return
+
+  await sendPushToUser(userId, {
+    title: `📊 ${symbol} ${indicator}`,
+    body: `${signal} · ${value.toFixed(2)}`,
+    data: {
+      type: 'INDICATOR_SIGNAL',
+      indicator,
+      signal,
+      symbol,
+      value: String(value),
       ts: String(ts),
     },
   })

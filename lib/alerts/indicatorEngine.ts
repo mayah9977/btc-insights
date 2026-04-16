@@ -1,5 +1,6 @@
 // /lib/alerts/indicatorEngine.ts
 import { redis } from '../redis'
+import { pushIndicatorTriggered } from '@/lib/push/pushOnAlert'
 
 type Kline = {
   close: number
@@ -29,12 +30,28 @@ type SignalState = {
   emaTrend: 'ABOVE' | 'BELOW' | 'EQUAL'
 }
 
+type MACDSeriesPoint = {
+  index: number
+  macd: number
+  signal: number
+  histogram: number
+}
+
 type MACDResult = {
   macd: number
   signal: number
   histogram: number
   prevMacd: number
   prevSignal: number
+  crossedUp: boolean
+  crossedDown: boolean
+}
+
+type EMASetResult = {
+  ema7: number
+  ema20: number
+  prevEma7: number
+  prevEma20: number
 }
 
 type FetchCache = {
@@ -81,6 +98,12 @@ const BINANCE_FUTURES_KLINES_URL =
  * - 10 ~ 30초 캐싱 요구사항 반영
  * ========================= */
 const KLINE_CACHE_TTL_MS = 15_000
+
+/* =========================
+ * 🔥 Indicator Push Target
+ * ========================= */
+const DEFAULT_INDICATOR_PUSH_USER_ID =
+  process.env.DEFAULT_INDICATOR_PUSH_USER_ID || 'dev-user'
 
 export function setIndicatorEnabled(v: IndicatorEnabled) {
   indicatorEnabled = v
@@ -142,23 +165,55 @@ function getCloses(klines: Kline[]) {
   return klines.map(k => k.close)
 }
 
-function calculateEMA(values: number[], period: number): number[] {
-  if (!values.length) return []
-  if (values.length < period) return []
+/* =========================
+ * EMA Full Series
+ * - SMA seed + standard EMA
+ * - 전체 배열 index 유지
+ * - null 포함 구조 유지
+ * ========================= */
+export function calculateEMAFull(
+  values: Array<number | null>,
+  period: number,
+): (number | null)[] {
+  const result: (number | null)[] = Array(values.length).fill(null)
 
-  const multiplier = 2 / (period + 1)
-  const result: number[] = []
+  if (!values.length) return result
 
-  let sma = 0
-  for (let i = 0; i < period; i++) {
-    sma += values[i]
+  let seedStart = -1
+  const seedValues: number[] = []
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i]
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue
+
+    if (seedStart === -1) seedStart = i
+    seedValues.push(value)
+
+    if (seedValues.length === period) break
   }
 
-  let prevEma = sma / period
-  result[period - 1] = prevEma
+  if (seedStart === -1 || seedValues.length < period) {
+    return result
+  }
 
-  for (let i = period; i < values.length; i++) {
-    const ema = values[i] * multiplier + prevEma * (1 - multiplier)
+  const multiplier = 2 / (period + 1)
+  const seedIndex = seedStart + period - 1
+
+  let sma = 0
+  for (const value of seedValues) sma += value
+
+  let prevEma = sma / period
+  result[seedIndex] = prevEma
+
+  for (let i = seedIndex + 1; i < values.length; i++) {
+    const value = values[i]
+
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      result[i] = null
+      continue
+    }
+
+    const ema = value * multiplier + prevEma * (1 - multiplier)
     result[i] = ema
     prevEma = ema
   }
@@ -183,7 +238,7 @@ export function calculateRSI(
 
   for (let i = 1; i <= length; i++) {
     const change = closes[i] - closes[i - 1]
-    if (change >= 0) gainSum += change
+    if (change > 0) gainSum += change
     else lossSum += Math.abs(change)
   }
 
@@ -205,23 +260,24 @@ export function calculateRSI(
 }
 
 /* =========================
- * MACD
- * - fast: 12
- * - slow: 26
- * - signal: 9
+ * MACD Series Builder (FIXED)
+ * - filter 사용 금지
+ * - cursor 사용 금지
+ * - signal[i] = EMA(macdLine)[i]
+ * - 전체 배열 index 정렬 유지
  * ========================= */
-export function calculateMACD(
+export function buildMACDSeries(
   closes: number[],
   fastPeriod = 12,
   slowPeriod = 26,
   signalPeriod = 9,
-): MACDResult | null {
-  if (closes.length < slowPeriod + signalPeriod) return null
+): MACDSeriesPoint[] {
+  const source = closes.map(v => v as number | null)
 
-  const emaFast = calculateEMA(closes, fastPeriod)
-  const emaSlow = calculateEMA(closes, slowPeriod)
+  const emaFast = calculateEMAFull(source, fastPeriod)
+  const emaSlow = calculateEMAFull(source, slowPeriod)
 
-  const macdLine: number[] = []
+  const macdLine: (number | null)[] = Array(closes.length).fill(null)
 
   for (let i = 0; i < closes.length; i++) {
     const fast = emaFast[i]
@@ -237,43 +293,100 @@ export function calculateMACD(
     }
   }
 
-  const macdValues = macdLine.filter(v => typeof v === 'number')
-  const signalValues = calculateEMA(macdValues, signalPeriod)
+  const signalLine = calculateEMAFull(macdLine, signalPeriod)
 
-  if (!signalValues.length) return null
+  const series: MACDSeriesPoint[] = []
 
-  const macd = macdValues[macdValues.length - 1]
-  const signal = signalValues[signalValues.length - 1]
-  const prevMacd = macdValues[macdValues.length - 2]
-  const prevSignal = signalValues[signalValues.length - 2]
+  for (let i = 0; i < macdLine.length; i++) {
+    const macd = macdLine[i]
+    const signal = signalLine[i]
+
+    if (
+      typeof macd !== 'number' ||
+      typeof signal !== 'number' ||
+      !Number.isFinite(macd) ||
+      !Number.isFinite(signal)
+    ) {
+      continue
+    }
+
+    series.push({
+      index: i,
+      macd,
+      signal,
+      histogram: macd - signal,
+    })
+  }
+
+  return series
+}
+
+/* =========================
+ * MACD
+ * - fast: 12
+ * - slow: 26
+ * - signal: 9
+ * - histogram 포함
+ * - cross detection 포함
+ * ========================= */
+export function calculateMACD(
+  closes: number[],
+  fastPeriod = 12,
+  slowPeriod = 26,
+  signalPeriod = 9,
+): MACDResult | null {
+  const series = buildMACDSeries(
+    closes,
+    fastPeriod,
+    slowPeriod,
+    signalPeriod,
+  )
+
+  if (series.length < 2) return null
+
+  const current = series[series.length - 1]
+  const prev = series[series.length - 2]
 
   if (
-    !Number.isFinite(macd) ||
-    !Number.isFinite(signal) ||
-    !Number.isFinite(prevMacd) ||
-    !Number.isFinite(prevSignal)
+    !Number.isFinite(current.macd) ||
+    !Number.isFinite(current.signal) ||
+    !Number.isFinite(current.histogram) ||
+    !Number.isFinite(prev.macd) ||
+    !Number.isFinite(prev.signal)
   ) {
     return null
   }
 
+  const crossedUp =
+    prev.macd <= prev.signal && current.macd > current.signal
+
+  const crossedDown =
+    prev.macd >= prev.signal && current.macd < current.signal
+
   return {
-    macd,
-    signal,
-    histogram: macd - signal,
-    prevMacd,
-    prevSignal,
+    macd: current.macd,
+    signal: current.signal,
+    histogram: current.histogram,
+    prevMacd: prev.macd,
+    prevSignal: prev.signal,
+    crossedUp,
+    crossedDown,
   }
 }
 
 /* =========================
  * EMA
  * - EMA 7 / EMA 20
+ * - current / previous 반환
  * ========================= */
-export function calculateEMASet(closes: number[]) {
+export function calculateEMASet(
+  closes: number[],
+): EMASetResult | null {
   if (closes.length < 20) return null
 
-  const ema7Series = calculateEMA(closes, 7)
-  const ema20Series = calculateEMA(closes, 20)
+  const source = closes.map(v => v as number | null)
+  const ema7Series = calculateEMAFull(source, 7)
+  const ema20Series = calculateEMAFull(source, 20)
 
   const ema7 = ema7Series[ema7Series.length - 1]
   const ema20 = ema20Series[ema20Series.length - 1]
@@ -281,6 +394,10 @@ export function calculateEMASet(closes: number[]) {
   const prevEma20 = ema20Series[ema20Series.length - 2]
 
   if (
+    typeof ema7 !== 'number' ||
+    typeof ema20 !== 'number' ||
+    typeof prevEma7 !== 'number' ||
+    typeof prevEma20 !== 'number' ||
     !Number.isFinite(ema7) ||
     !Number.isFinite(ema20) ||
     !Number.isFinite(prevEma7) ||
@@ -302,6 +419,7 @@ export function calculateEMASet(closes: number[]) {
  * - /fapi/v1/klines
  * - BTCUSDT / 15m / 100
  * - 캐싱 적용
+ * - 마지막 진행 중 봉 제외
  * ========================= */
 export async function fetchKlines(
   symbol: string,
@@ -330,13 +448,16 @@ export async function fetchKlines(
 
   const rows = await res.json()
 
-  const klines: Kline[] = Array.isArray(rows)
+  const allKlines: Kline[] = Array.isArray(rows)
     ? rows.map((row: any) => ({
         openTime: Number(row[0]),
         close: Number(row[4]),
         closeTime: Number(row[6]),
       }))
     : []
+
+  const klines =
+    allKlines.length > 1 ? allKlines.slice(0, -1) : allKlines
 
   fetchCache[normalizedSymbol] = {
     klines,
@@ -378,8 +499,6 @@ export function detectSignals(args: {
 
   /* =========================
    * RSI entry detection
-   * - 68 -> 71 -> 73 => 70 돌파 시 1회만
-   * - 32 -> 29 -> 25 => 30 이탈 시 1회만
    * ========================= */
   if (indicatorEnabled.RSI && typeof rsi === 'number') {
     let nextZone: SignalState['rsiZone'] = 'NEUTRAL'
@@ -426,22 +545,23 @@ export function detectSignals(args: {
 
   /* =========================
    * MACD cross detection
-   * - previous state vs current state
    * ========================= */
-  if (indicatorEnabled.MACD && macd) {
+  if (
+    indicatorEnabled.MACD &&
+    macd &&
+    Number.isFinite(macd.macd) &&
+    Number.isFinite(macd.signal) &&
+    Number.isFinite(macd.prevMacd) &&
+    Number.isFinite(macd.prevSignal)
+  ) {
     let nextTrend: SignalState['macdTrend'] = 'EQUAL'
 
     if (macd.macd > macd.signal) nextTrend = 'ABOVE'
     else if (macd.macd < macd.signal) nextTrend = 'BELOW'
 
-    const crossedUp =
-      macd.prevMacd <= macd.prevSignal && macd.macd > macd.signal
-    const crossedDown =
-      macd.prevMacd >= macd.prevSignal && macd.macd < macd.signal
-
     if (
       prevState.macdTrend !== nextTrend &&
-      crossedUp &&
+      macd.crossedUp &&
       lastSignals[symbol].MACD !== 'GOLDEN_CROSS'
     ) {
       events.push({
@@ -458,7 +578,7 @@ export function detectSignals(args: {
 
     if (
       prevState.macdTrend !== nextTrend &&
-      crossedDown &&
+      macd.crossedDown &&
       lastSignals[symbol].MACD !== 'DEAD_CROSS'
     ) {
       events.push({
@@ -478,10 +598,19 @@ export function detectSignals(args: {
 
   /* =========================
    * EMA trend entry detection
-   * - EMA7 vs EMA20
-   * - previous state vs current state
    * ========================= */
-  if (indicatorEnabled.EMA && ema) {
+  if (
+    indicatorEnabled.EMA &&
+    ema &&
+    typeof ema.ema7 === 'number' &&
+    typeof ema.ema20 === 'number' &&
+    typeof ema.prevEma7 === 'number' &&
+    typeof ema.prevEma20 === 'number' &&
+    Number.isFinite(ema.ema7) &&
+    Number.isFinite(ema.ema20) &&
+    Number.isFinite(ema.prevEma7) &&
+    Number.isFinite(ema.prevEma20)
+  ) {
     let nextTrend: SignalState['emaTrend'] = 'EQUAL'
 
     if (ema.ema7 > ema.ema20) nextTrend = 'ABOVE'
@@ -537,6 +666,7 @@ export function detectSignals(args: {
  * - handleIndicatorTick 구조 유지
  * - tick price 기반 계산 제거
  * - Binance Futures 15m close 기반
+ * - TradingView와 유사한 확정봉 기반 계산
  * ========================= */
 export async function handleIndicatorTick(
   symbol: string,
@@ -570,6 +700,15 @@ export async function handleIndicatorTick(
         'realtime:alerts',
         JSON.stringify(payload),
       )
+
+      await pushIndicatorTriggered({
+        userId: DEFAULT_INDICATOR_PUSH_USER_ID,
+        indicator: payload.indicator,
+        signal: payload.signal,
+        symbol: payload.symbol,
+        value: payload.value,
+        ts: payload.ts,
+      })
     }
   } catch (e) {
     console.error('[indicatorEngine]', e)

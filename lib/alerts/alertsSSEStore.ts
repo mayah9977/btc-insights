@@ -19,6 +19,41 @@ type AlertsSSEState = {
 let unsubscribe: (() => void) | null = null
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 
+async function ensureBrowserNotificationPermission() {
+  if (typeof window === 'undefined') return false
+  if (!('Notification' in window)) return false
+
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+
+  try {
+    const result = await Notification.requestPermission()
+    return result === 'granted'
+  } catch {
+    return false
+  }
+}
+
+async function fireBrowserNotification(args: {
+  title: string
+  body: string
+  tag: string
+}) {
+  if (typeof window === 'undefined') return
+
+  const granted = await ensureBrowserNotificationPermission()
+  if (!granted) return
+
+  try {
+    new Notification(args.title, {
+      body: args.body,
+      tag: args.tag,
+    })
+  } catch (error) {
+    console.error('[alerts-sse][browser-notification]', error)
+  }
+}
+
 export const useAlertsSSEStore = create<AlertsSSEState>(
   (set, get) => ({
     connected: false,
@@ -30,10 +65,11 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
      * ========================= */
     bootstrap: () => {
       if (typeof window === 'undefined') return
-      if (unsubscribe) return // already bootstrapped
+      if (unsubscribe) return
 
       console.log('[alerts-sse] bootstrap (manager)')
       console.log('[alerts-sse] manager-ready:', !!sseManager)
+      console.log('[alerts-sse] SSE_EVENT ready:', !!SSE_EVENT)
 
       const es = new EventSource('/api/alerts/sse')
 
@@ -66,7 +102,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         })
 
         if (data?.type === 'ALERT_TRIGGERED') {
-          /* 🔒 Payload normalization (Zustand 호환) */
           const payload = {
             type: 'ALERT_TRIGGERED',
             alertId: data.alertId,
@@ -77,7 +112,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
 
           console.log('SSE PAYLOAD:', payload)
 
-          /* 🔔 Toast */
           toast.success(
             `🔔 ${payload.symbol} 알림 발생\n가격: ${payload.price}`,
             {
@@ -86,7 +120,12 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
             },
           )
 
-          /* 🔥 기존 UI 호환 이벤트 유지 */
+          void fireBrowserNotification({
+            title: `🔔 ${payload.symbol} ALERT`,
+            body: `${payload.price} USDT 도달`,
+            tag: `alert-${payload.alertId}`,
+          })
+
           window.dispatchEvent(
             new CustomEvent('alerts:sse', {
               detail: payload,
@@ -103,8 +142,28 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         if (data?.type === 'INDICATOR_SIGNAL') {
           console.log('INDICATOR SIGNAL:', data)
 
+          toast.success(
+            `📊 ${data.symbol} ${data.indicator}\n${data.signal}`,
+            {
+              position: 'bottom-right',
+              duration: 5000,
+            },
+          )
+
+          void fireBrowserNotification({
+            title: `📊 ${data.symbol} ${data.indicator}`,
+            body: `${data.signal} · ${Number(data.value).toFixed(2)}`,
+            tag: `indicator-${data.indicator}-${data.signal}-${data.ts}`,
+          })
+
           window.dispatchEvent(
             new CustomEvent('alerts:sse', {
+              detail: data,
+            }),
+          )
+
+          window.dispatchEvent(
+            new CustomEvent('indicator:triggered', {
               detail: data,
             }),
           )

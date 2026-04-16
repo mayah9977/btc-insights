@@ -74,6 +74,14 @@ export const useAlertsStore = create<AlertsState>()(
           set(state => ({
             indicatorSignals: [data, ...state.indicatorSignals].slice(0, 50),
           }))
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('indicator:triggered', {
+                detail: data,
+              }),
+            )
+          }
         }
       })
     }
@@ -102,9 +110,10 @@ export const useAlertsStore = create<AlertsState>()(
           .filter(Boolean),
 
       bootstrap: async () => {
-        /* 🔥 indicatorEnabled 동기화 */
         try {
-          const resSettings = await fetch('/api/alerts/indicator-settings', { cache: 'no-store' })
+          const resSettings = await fetch('/api/alerts/indicator-settings', {
+            cache: 'no-store',
+          })
           const jsonSettings = await resSettings.json()
           if (jsonSettings?.data) {
             set({ indicatorEnabled: jsonSettings.data })
