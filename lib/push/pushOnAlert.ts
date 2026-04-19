@@ -1,6 +1,7 @@
 // /lib/push/pushOnAlert.ts
 import { sendPushToUser } from './push'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
+import { getUserVIP } from '@/lib/auth/getUserVIP' // ✅ added VIP logic
 
 export type PushAlertPayload = {
   userId: string
@@ -13,7 +14,7 @@ export type PushAlertPayload = {
 
 export type PushIndicatorPayload = {
   userId: string
-  indicator: string
+  indicator: 'RSI' | 'MACD' | 'EMA'
   signal: string
   symbol: string
   value: number
@@ -37,17 +38,12 @@ function isQuietHour(
 
 /**
  * 🔔 ALERT_TRIGGERED → Push fan-out
- * - 서버 설정 기반 필터
- * - FCM data payload는 string-only
  */
 export async function pushAlertTriggered(
   payload: PushAlertPayload
 ) {
   const { userId, alertId, symbol, price, ts, level } = payload
 
-  /* =========================
-   * 🔒 User Push Settings
-   * ========================= */
   const settings = await getUserNotificationSettings(userId)
 
   if (!settings.pushEnabled) return
@@ -61,9 +57,6 @@ export async function pushAlertTriggered(
 
   if (isQuietHour(settings.quietHours)) return
 
-  /* =========================
-   * 🔥 Push Send
-   * ========================= */
   await sendPushToUser(userId, {
     title: `🚨 ${symbol} ALERT`,
     body: `${price.toLocaleString()} USDT 도달`,
@@ -79,9 +72,6 @@ export async function pushAlertTriggered(
 
 /**
  * 🔔 INDICATOR_SIGNAL → Push fan-out
- * - ALERT_TRIGGERED 구조와 동일하게 통합
- * - 서버 설정 기반 필터
- * - FCM data payload는 string-only
  */
 export async function pushIndicatorTriggered(
   payload: PushIndicatorPayload
@@ -108,6 +98,20 @@ export async function pushIndicatorTriggered(
   }
 
   if (isQuietHour(settings.quietHours)) return
+
+  // ✅ added VIP logic
+  const isVIP = await getUserVIP(userId)
+  if (!isVIP) {
+    return
+  }
+
+  // ✅ added indicator filter
+  if (
+    settings.indicatorEnabled &&
+    settings.indicatorEnabled[indicator] === false
+  ) {
+    return
+  }
 
   await sendPushToUser(userId, {
     title: `📊 ${symbol} ${indicator}`,

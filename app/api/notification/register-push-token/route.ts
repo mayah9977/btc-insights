@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { registerPushToken } from "@/lib/push/pushTokenStore";
+import { saveUserPushToken } from "@/lib/push/pushStore";
 
 /**
  * Client → Server Push Token Register
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     console.log("[API] registerPushToken", userId, token);
 
-    await registerPushToken(userId, token);
+    await saveUserPushToken(userId, token);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

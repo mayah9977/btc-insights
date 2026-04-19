@@ -1,6 +1,7 @@
 // /lib/alerts/indicatorEngine.ts
 import { redis } from '../redis'
 import { pushIndicatorTriggered } from '@/lib/push/pushOnAlert'
+import { getAllUserIds } from '@/lib/push/getAllUserIds'
 
 type Kline = {
   close: number
@@ -94,26 +95,13 @@ const BINANCE_FUTURES_KLINES_URL =
 
 /* =========================
  * 🔥 Cache TTL
- * - every tick API call 금지
- * - 10 ~ 30초 캐싱 요구사항 반영
  * ========================= */
 const KLINE_CACHE_TTL_MS = 15_000
-
-/* =========================
- * 🔥 Indicator Push Target
- * ========================= */
-const DEFAULT_INDICATOR_PUSH_USER_ID =
-  process.env.DEFAULT_INDICATOR_PUSH_USER_ID || 'dev-user'
 
 export function setIndicatorEnabled(v: IndicatorEnabled) {
   indicatorEnabled = v
 }
 
-/* =========================
- * 🔥 서버 시작 시 Redis 로드
- * - 값 없으면 fallback 생성 + Redis 저장
- * - 이후 메모리 캐시 사용
- * ========================= */
 async function initIndicatorSettings() {
   try {
     const raw = await redis.get(REDIS_KEY)
@@ -158,18 +146,12 @@ async function initIndicatorSettings() {
 
 void initIndicatorSettings()
 
-/* =========================
- * Utils
- * ========================= */
 function getCloses(klines: Kline[]) {
   return klines.map(k => k.close)
 }
 
 /* =========================
  * EMA Full Series
- * - SMA seed + standard EMA
- * - 전체 배열 index 유지
- * - null 포함 구조 유지
  * ========================= */
 export function calculateEMAFull(
   values: Array<number | null>,
@@ -222,10 +204,7 @@ export function calculateEMAFull(
 }
 
 /* =========================
- * RSI (TradingView 유사)
- * - Close 기준
- * - Length 14
- * - Wilder's smoothing
+ * RSI
  * ========================= */
 export function calculateRSI(
   closes: number[],
@@ -260,11 +239,7 @@ export function calculateRSI(
 }
 
 /* =========================
- * MACD Series Builder (FIXED)
- * - filter 사용 금지
- * - cursor 사용 금지
- * - signal[i] = EMA(macdLine)[i]
- * - 전체 배열 index 정렬 유지
+ * MACD Series Builder
  * ========================= */
 export function buildMACDSeries(
   closes: number[],
@@ -323,11 +298,6 @@ export function buildMACDSeries(
 
 /* =========================
  * MACD
- * - fast: 12
- * - slow: 26
- * - signal: 9
- * - histogram 포함
- * - cross detection 포함
  * ========================= */
 export function calculateMACD(
   closes: number[],
@@ -376,8 +346,6 @@ export function calculateMACD(
 
 /* =========================
  * EMA
- * - EMA 7 / EMA 20
- * - current / previous 반환
  * ========================= */
 export function calculateEMASet(
   closes: number[],
@@ -415,11 +383,7 @@ export function calculateEMASet(
 }
 
 /* =========================
- * Binance Futures Klines
- * - /fapi/v1/klines
- * - BTCUSDT / 15m / 100
- * - 캐싱 적용
- * - 마지막 진행 중 봉 제외
+ * fetchKlines
  * ========================= */
 export async function fetchKlines(
   symbol: string,
@@ -468,10 +432,7 @@ export async function fetchKlines(
 }
 
 /* =========================
- * Signal Detector
- * - Fake signal filter
- * - "entry point" only
- * - 이전 상태 vs 현재 상태 비교
+ * detectSignals
  * ========================= */
 export function detectSignals(args: {
   symbol: string
@@ -497,9 +458,6 @@ export function detectSignals(args: {
   const prevState = signalStateMap[symbol]
   const events: IndicatorEvent[] = []
 
-  /* =========================
-   * RSI entry detection
-   * ========================= */
   if (indicatorEnabled.RSI && typeof rsi === 'number') {
     let nextZone: SignalState['rsiZone'] = 'NEUTRAL'
 
@@ -543,9 +501,6 @@ export function detectSignals(args: {
     prevState.rsiZone = nextZone
   }
 
-  /* =========================
-   * MACD cross detection
-   * ========================= */
   if (
     indicatorEnabled.MACD &&
     macd &&
@@ -596,9 +551,6 @@ export function detectSignals(args: {
     prevState.macdTrend = nextTrend
   }
 
-  /* =========================
-   * EMA trend entry detection
-   * ========================= */
   if (
     indicatorEnabled.EMA &&
     ema &&
@@ -663,10 +615,6 @@ export function detectSignals(args: {
 
 /* =========================
  * Main Entry
- * - handleIndicatorTick 구조 유지
- * - tick price 기반 계산 제거
- * - Binance Futures 15m close 기반
- * - TradingView와 유사한 확정봉 기반 계산
  * ========================= */
 export async function handleIndicatorTick(
   symbol: string,
@@ -693,6 +641,9 @@ export async function handleIndicatorTick(
 
     if (!signals.length) return
 
+    const userIds = await getAllUserIds()
+    if (!userIds.length) return
+
     for (const payload of signals) {
       console.log('[INDICATOR_SIGNAL]', payload)
 
@@ -701,14 +652,18 @@ export async function handleIndicatorTick(
         JSON.stringify(payload),
       )
 
-      await pushIndicatorTriggered({
-        userId: DEFAULT_INDICATOR_PUSH_USER_ID,
-        indicator: payload.indicator,
-        signal: payload.signal,
-        symbol: payload.symbol,
-        value: payload.value,
-        ts: payload.ts,
-      })
+      await Promise.all(
+        userIds.map(userId =>
+          pushIndicatorTriggered({
+            userId,
+            indicator: payload.indicator,
+            signal: payload.signal,
+            symbol: payload.symbol,
+            value: payload.value,
+            ts: payload.ts,
+          }),
+        ),
+      )
     }
   } catch (e) {
     console.error('[indicatorEngine]', e)

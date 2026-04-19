@@ -1,14 +1,16 @@
-import { defaultNotificationSettings } from './notificationSettings'
+// /lib/notification/settingsStore.ts
 
-const store = new Map<string, any>()
+import { defaultNotificationSettings, type NotificationSettings } from './notificationSettings'
 
-export async function getUserNotificationSettings(userId: string) {
+const store = new Map<string, NotificationSettings>()
+
+export async function getUserNotificationSettings(userId: string): Promise<NotificationSettings> {
   return store.get(userId) ?? defaultNotificationSettings
 }
 
 export async function saveUserNotificationSettings(
   userId: string,
-  settings: any,
+  settings: NotificationSettings,
 ) {
   store.set(userId, settings)
 }

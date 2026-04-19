@@ -2,9 +2,9 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import {
-  registerPushToken,
-  unregisterPushToken,
-} from '@/lib/alerts/pushTokenStore'
+  saveUserPushToken,
+  removeUserPushToken,
+} from '@/lib/push/pushStore'
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -21,10 +21,10 @@ export async function POST(req: Request) {
   }
 
   if (action === 'unregister') {
-    await unregisterPushToken(userId, token)
-  } else {
-    await registerPushToken(userId, token)
-  }
+  await removeUserPushToken(userId, token)
+} else {
+  await saveUserPushToken(userId, token)
+}
 
   return NextResponse.json({ ok: true })
 }

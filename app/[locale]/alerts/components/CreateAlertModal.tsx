@@ -12,8 +12,6 @@ export default function CreateAlertModal({
   const [price, setPrice] = useState(112000)
   const [condition, setCondition] =
     useState<'ABOVE' | 'BELOW'>('ABOVE')
-  const [level, setLevel] =
-    useState<'NORMAL' | 'CRITICAL'>('NORMAL')
   const [loading, setLoading] = useState(false)
 
   /** ✅ selector 타입 안전하게 */
@@ -31,12 +29,9 @@ export default function CreateAlertModal({
           symbol: 'BTCUSDT',
 
           /* 🔔 Alert Engine 필수 */
-          condition,          // ABOVE | BELOW
-          targetPrice: price, // 기준 가격
+          condition, // ABOVE | BELOW 유지
+          targetPrice: price,
           repeatMode: 'ONCE',
-
-          /* UI / Push 메타 */
-          level,              // NORMAL | CRITICAL
         }),
       })
 
@@ -48,7 +43,6 @@ export default function CreateAlertModal({
         await res.json()
 
       if (data.ok && data.alert) {
-        // 🔥 핵심: POST 직후 UI Store 즉시 반영
         addAlert(data.alert)
       }
 
@@ -62,65 +56,101 @@ export default function CreateAlertModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-neutral-900 p-6 rounded-lg w-96 space-y-4">
-        <h2 className="text-lg font-bold">새 알림 생성</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+      <div className="w-96 space-y-5 rounded-2xl bg-neutral-900 p-6 shadow-2xl transform animate-scaleIn">
+        <h2 className="text-lg font-bold text-white">새 알림 생성</h2>
 
         {/* 가격 */}
         <div>
-          <label className="block text-sm mb-1">가격</label>
+          <label className="mb-1 block text-sm text-gray-300">가격</label>
           <input
             type="number"
             value={price}
             onChange={e => setPrice(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded bg-neutral-800"
+            className="w-full rounded-lg bg-neutral-800 px-3 py-2 text-white outline-none transition focus:ring-2 focus:ring-yellow-400"
           />
         </div>
 
         {/* 조건 */}
         <div>
-          <label className="block text-sm mb-1">알림 조건</label>
-          <select
-            value={condition}
-            onChange={e =>
-              setCondition(e.target.value as 'ABOVE' | 'BELOW')
-            }
-            className="w-full px-3 py-2 rounded bg-neutral-800"
-          >
-            <option value="ABOVE">가격 이상</option>
-            <option value="BELOW">가격 이하</option>
-          </select>
-        </div>
+          <label className="mb-1 block text-sm text-gray-300">
+            알림 조건
+          </label>
 
-        {/* 중요도 */}
-        <div>
-          <label className="block text-sm mb-1">중요도</label>
-          <select
-            value={level}
-            onChange={e =>
-              setLevel(e.target.value as 'NORMAL' | 'CRITICAL')
-            }
-            className="w-full px-3 py-2 rounded bg-neutral-800"
-          >
-            <option value="NORMAL">NORMAL</option>
-            <option value="CRITICAL">CRITICAL</option>
-          </select>
+          <div className="space-y-2">
+            <button
+              onClick={() => setCondition('ABOVE')}
+              className={`w-full rounded-lg px-3 py-2 text-sm font-bold transition
+                ${
+                  condition === 'ABOVE'
+                    ? 'bg-yellow-500 text-black'
+                    : 'bg-neutral-800 text-white hover:bg-neutral-700'
+                }`}
+            >
+              설정가격 돌파 시 (상향)
+            </button>
+
+            <button
+              onClick={() => setCondition('BELOW')}
+              className={`w-full rounded-lg px-3 py-2 text-sm font-bold transition
+                ${
+                  condition === 'BELOW'
+                    ? 'bg-yellow-500 text-black'
+                    : 'bg-neutral-800 text-white hover:bg-neutral-700'
+                }`}
+            >
+              설정가격 돌파 시 (하향)
+            </button>
+          </div>
         </div>
 
         {/* 버튼 */}
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} disabled={loading}>
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-lg px-4 py-2 text-sm text-gray-300 transition hover:bg-white/10 active:scale-95"
+          >
             취소
           </button>
+
           <button
             onClick={submit}
             disabled={loading}
-            className="bg-yellow-500 px-4 py-1 rounded text-black font-bold disabled:opacity-50"
+            className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-400 active:scale-95 disabled:opacity-50"
           >
             {loading ? '생성 중…' : '생성'}
           </button>
         </div>
       </div>
+
+      {/* Tailwind animation */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+        .animate-scaleIn {
+          animation: scaleIn 0.25s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

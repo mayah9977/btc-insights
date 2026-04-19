@@ -5,6 +5,8 @@ import { create } from 'zustand'
 import { toast } from 'react-hot-toast'
 import { sseManager } from '@/lib/realtime/sseConnectionManager'
 import { SSE_EVENT } from '@/lib/realtime/types'
+import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
+import { getUserVIP } from '@/lib/auth/getUserVIP' // ✅ added VIP logic
 
 export type SystemRiskLevel = 'SAFE' | 'WARNING' | 'CRITICAL'
 
@@ -18,6 +20,130 @@ type AlertsSSEState = {
 
 let unsubscribe: (() => void) | null = null
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
+
+let soundInterval: ReturnType<typeof setInterval> | null = null
+let vibrationInterval: ReturnType<typeof setInterval> | null = null
+
+let audioInstance: HTMLAudioElement | null = null
+
+let notificationLoopToken = 0
+let notificationLoopLock: Promise<void> | null = null
+
+let isNotificationLoopRunning = false
+
+export function stopNotificationLoop() {
+  notificationLoopToken += 1
+
+  isNotificationLoopRunning = false
+
+  if (soundInterval) {
+    clearInterval(soundInterval)
+    soundInterval = null
+  }
+
+  if (vibrationInterval) {
+    clearInterval(vibrationInterval)
+    vibrationInterval = null
+  }
+
+  try {
+    navigator.vibrate?.(0)
+  } catch {}
+
+  if (audioInstance) {
+    try {
+      audioInstance.pause()
+      audioInstance.currentTime = 0
+      audioInstance.src = ''
+      audioInstance.load()
+    } catch {}
+    audioInstance = null
+  }
+
+  if (typeof document !== 'undefined') {
+    const audios = document.querySelectorAll('audio')
+    audios.forEach(audio => {
+      try {
+        audio.pause()
+        audio.currentTime = 0
+        audio.src = ''
+        audio.load()
+      } catch {}
+    })
+  }
+}
+
+function getSoundFilePath(soundType: string) {
+  const SOUND_MAP: Record<string, string> = {
+    default: '/sounds/default.mp3',
+    alert1: '/sounds/alert1.mp3',
+    alert2: '/sounds/alert2.mp3',
+    siren: '/sounds/siren.mp3',
+  }
+
+  return SOUND_MAP[soundType] ?? SOUND_MAP.default
+}
+
+async function startNotificationLoop() {
+  if (isNotificationLoopRunning) {
+    return
+  }
+
+  if (notificationLoopLock) {
+    await notificationLoopLock
+  }
+
+  let resolveLock: () => void
+  notificationLoopLock = new Promise<void>(resolve => {
+    resolveLock = resolve
+  })
+
+  try {
+    isNotificationLoopRunning = true
+
+    const currentToken = ++notificationLoopToken
+
+    stopNotificationLoop()
+
+    const settings = await getUserNotificationSettings('local')
+
+    if (currentToken !== notificationLoopToken - 1) return
+
+    if (settings.soundEnabled) {
+      try {
+        const audio = new Audio(getSoundFilePath(settings.soundType))
+        audio.loop = true
+        audio.preload = 'auto'
+
+        if (currentToken !== notificationLoopToken - 1) {
+          try {
+            audio.pause()
+            audio.currentTime = 0
+            audio.src = ''
+            audio.load()
+          } catch {}
+          return
+        }
+
+        audioInstance = audio
+        void audio.play().catch(() => {})
+      } catch {
+        audioInstance = null
+      }
+    }
+
+    if (settings.vibrationEnabled && 'vibrate' in navigator) {
+      if (currentToken !== notificationLoopToken - 1) return
+
+      vibrationInterval = setInterval(() => {
+        navigator.vibrate?.([200, 100, 200])
+      }, 1500)
+    }
+  } finally {
+    notificationLoopLock = null
+    resolveLock!()
+  }
+}
 
 async function ensureBrowserNotificationPermission() {
   if (typeof window === 'undefined') return false
@@ -45,10 +171,20 @@ async function fireBrowserNotification(args: {
   if (!granted) return
 
   try {
-    new Notification(args.title, {
+    const notification = new Notification(args.title, {
       body: args.body,
       tag: args.tag,
     })
+
+    notification.onclick = () => {
+      try {
+        stopNotificationLoop()
+        window.focus()
+        window.location.href = '/ko/alerts'
+      } catch (error) {
+        console.error('[alerts-sse][notification-click]', error)
+      }
+    }
   } catch (error) {
     console.error('[alerts-sse][browser-notification]', error)
   }
@@ -60,9 +196,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
     systemRisk: 'SAFE',
     lastEventAt: null,
 
-    /* =========================
-     * 🔥 Bootstrap (subscribe)
-     * ========================= */
     bootstrap: () => {
       if (typeof window === 'undefined') return
       if (unsubscribe) return
@@ -83,7 +216,7 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         })
       }
 
-      es.onmessage = (event) => {
+      es.onmessage = async (event) => {
         let data: any
 
         try {
@@ -126,6 +259,8 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
             tag: `alert-${payload.alertId}`,
           })
 
+          void startNotificationLoop()
+
           window.dispatchEvent(
             new CustomEvent('alerts:sse', {
               detail: payload,
@@ -142,8 +277,46 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         if (data?.type === 'INDICATOR_SIGNAL') {
           console.log('INDICATOR SIGNAL:', data)
 
+          // ✅ added VIP logic
+          const isVIP = await getUserVIP('local')
+          if (!isVIP) {
+            return
+          }
+
+          const settings = await getUserNotificationSettings('local')
+
+          // ✅ fixed type error
+          const indicator =
+            data.indicator as keyof typeof settings.indicatorEnabled
+
+          if (
+            settings.indicatorEnabled &&
+            settings.indicatorEnabled[indicator] === false
+          ) {
+            return
+          }
+
+          const SIGNAL_MAP: Record<string, Record<string, string>> = {
+            RSI: {
+              RSI_OVERBOUGHT: 'RSI 과매수 진입',
+              RSI_OVERSOLD: 'RSI 과매도 진입',
+            },
+            MACD: {
+              GOLDEN_CROSS: 'MACD 골든크로스',
+              DEAD_CROSS: 'MACD 데드크로스',
+            },
+            EMA: {
+              BULLISH_TREND: 'EMA 상승 전환',
+              BEARISH_TREND: 'EMA 하락 추세',
+            },
+          }
+
+          const label =
+            SIGNAL_MAP[data.indicator]?.[data.signal] ??
+            `${data.indicator} ${data.signal}`
+
           toast.success(
-            `📊 ${data.symbol} ${data.indicator}\n${data.signal}`,
+            `📊 ${data.symbol} ${data.indicator}\n${label}`,
             {
               position: 'bottom-right',
               duration: 5000,
@@ -152,9 +325,11 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
 
           void fireBrowserNotification({
             title: `📊 ${data.symbol} ${data.indicator}`,
-            body: `${data.signal} · ${Number(data.value).toFixed(2)}`,
+            body: `${label} · ${Number(data.value).toFixed(2)}`,
             tag: `indicator-${data.indicator}-${data.signal}-${data.ts}`,
           })
+
+          void startNotificationLoop()
 
           window.dispatchEvent(
             new CustomEvent('alerts:sse', {
@@ -183,9 +358,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         es.close()
       }
 
-      /* =========================
-       * 💓 Watchdog
-       * ========================= */
       watchdogTimer = setInterval(() => {
         const last = get().lastEventAt
         if (!last) return
@@ -206,9 +378,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
       }, 5_000)
     },
 
-    /* =========================
-     * 🔌 Shutdown
-     * ========================= */
     shutdown: () => {
       if (unsubscribe) {
         unsubscribe()
@@ -219,6 +388,8 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         clearInterval(watchdogTimer)
         watchdogTimer = null
       }
+
+      stopNotificationLoop()
 
       set({
         connected: false,
