@@ -2,11 +2,14 @@
 'use client'
 
 import { create } from 'zustand'
-import { toast } from 'react-hot-toast'
 import { sseManager } from '@/lib/realtime/sseConnectionManager'
 import { SSE_EVENT } from '@/lib/realtime/types'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
-import { getUserVIP } from '@/lib/auth/getUserVIP' // ✅ added VIP logic
+import { getUserVIP } from '@/lib/auth/getUserVIP'
+import {
+  renderAlertToast,
+  renderIndicatorToast,
+} from '@/app/[locale]/alerts/components/AlertToastRenderer' // 🔧 추가: renderer 사용
 
 export type SystemRiskLevel = 'SAFE' | 'WARNING' | 'CRITICAL'
 
@@ -145,51 +148,6 @@ async function startNotificationLoop() {
   }
 }
 
-async function ensureBrowserNotificationPermission() {
-  if (typeof window === 'undefined') return false
-  if (!('Notification' in window)) return false
-
-  if (Notification.permission === 'granted') return true
-  if (Notification.permission === 'denied') return false
-
-  try {
-    const result = await Notification.requestPermission()
-    return result === 'granted'
-  } catch {
-    return false
-  }
-}
-
-async function fireBrowserNotification(args: {
-  title: string
-  body: string
-  tag: string
-}) {
-  if (typeof window === 'undefined') return
-
-  const granted = await ensureBrowserNotificationPermission()
-  if (!granted) return
-
-  try {
-    const notification = new Notification(args.title, {
-      body: args.body,
-      tag: args.tag,
-    })
-
-    notification.onclick = () => {
-      try {
-        stopNotificationLoop()
-        window.focus()
-        window.location.href = '/ko/alerts'
-      } catch (error) {
-        console.error('[alerts-sse][notification-click]', error)
-      }
-    }
-  } catch (error) {
-    console.error('[alerts-sse][browser-notification]', error)
-  }
-}
-
 export const useAlertsSSEStore = create<AlertsSSEState>(
   (set, get) => ({
     connected: false,
@@ -245,18 +203,23 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
 
           console.log('SSE PAYLOAD:', payload)
 
-          toast.success(
-            `🔔 ${payload.symbol} 알림 발생\n가격: ${payload.price}`,
-            {
-              position: 'bottom-right',
-              duration: 5000,
-            },
-          )
+          // 🔧 변경: toast.success → custom renderer
+          renderAlertToast({
+            symbol: payload.symbol,
+            price: payload.price,
+          })
 
-          void fireBrowserNotification({
-            title: `🔔 ${payload.symbol} ALERT`,
-            body: `${payload.price} USDT 도달`,
-            tag: `alert-${payload.alertId}`,
+          // 🔧 유지: 저장 API
+          void fetch('/api/notification/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: String(payload.alertId),
+              type: 'BTC_ALERT',
+              title: `${payload.symbol} price notification`,
+              body: `Price ${payload.price} reached`,
+              createdAt: payload.ts,
+            }),
           })
 
           void startNotificationLoop()
@@ -277,7 +240,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
         if (data?.type === 'INDICATOR_SIGNAL') {
           console.log('INDICATOR SIGNAL:', data)
 
-          // ✅ added VIP logic
           const isVIP = await getUserVIP('local')
           if (!isVIP) {
             return
@@ -285,7 +247,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
 
           const settings = await getUserNotificationSettings('local')
 
-          // ✅ fixed type error
           const indicator =
             data.indicator as keyof typeof settings.indicatorEnabled
 
@@ -315,18 +276,26 @@ export const useAlertsSSEStore = create<AlertsSSEState>(
             SIGNAL_MAP[data.indicator]?.[data.signal] ??
             `${data.indicator} ${data.signal}`
 
-          toast.success(
-            `📊 ${data.symbol} ${data.indicator}\n${label}`,
-            {
-              position: 'bottom-right',
-              duration: 5000,
-            },
-          )
+          // 🔧 변경: toast.success → custom renderer
+          renderIndicatorToast({
+            symbol: data.symbol,
+            indicator: data.indicator,
+            label: label,
+            signal: data.signal,
+            value: Number(data.value),
+          })
 
-          void fireBrowserNotification({
-            title: `📊 ${data.symbol} ${data.indicator}`,
-            body: `${label} · ${Number(data.value).toFixed(2)}`,
-            tag: `indicator-${data.indicator}-${data.signal}-${data.ts}`,
+          // 🔧 유지: 저장 API
+          void fetch('/api/notification/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: `${data.symbol}-${data.signal}-${Date.now()}`,
+              type: 'INDICATOR',
+              title: `${data.indicator} signal`,
+              body: label,
+              createdAt: Date.now(),
+            }),
           })
 
           void startNotificationLoop()

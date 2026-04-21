@@ -19,4 +19,4 @@ export default function ClientBootstrap() {
   }, [bootstrapAlertsSSE])
 
   return <Toaster position="bottom-right" />
-}
+} 

@@ -1,23 +1,30 @@
 // /lib/auth/getUserVIP.ts
 
 /**
- * ✅ 실제 서비스용 VIP 판별 함수
- * - 현재: localStorage / cookie 기반
- * - 추후: DB / 결제 시스템 연결 가능
+ * ✅ VIP discrimination function for actual service
+ * - Current: localStorage / cookie based
+ * - Future: DB/payment system connection possible
  */
-
 export async function getUserVIP(userId?: string): Promise<boolean> {
   try {
-    // ✅ 1. 클라이언트 환경 (UI / SSE)
+    // ✅ dev-only VIP override
+    if (
+      process.env.NODE_ENV === 'development' ||
+      process.env.NEXT_PUBLIC_FORCE_VIP === 'true'
+    ) {
+      return true
+    }
+
+    // ✅ 1. Client environment (UI / SSE)
     if (typeof window !== 'undefined') {
       const vipFlag = localStorage.getItem('vip')
       return vipFlag === 'true'
     }
 
-    // ✅ 2. 서버 환경 (PUSH)
-    // TODO: 추후 DB / Redis / Subscription 서비스 연동
+    // ✅ 2. Server environment (PUSH)
+    // TODO: Integrate with DB / Redis / Subscription services in the future
     if (userId) {
-      // 예시: userId 기반 조회 구조
+      // Example: userId-based query structure
       // const user = await db.user.find(userId)
       // return user.subscription === 'VIP'
 
