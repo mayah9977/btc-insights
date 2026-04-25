@@ -17,7 +17,7 @@
     "plugins": [{ "name": "next" }],
 
     // 🔥 여기 수정
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
 
     // 🔥 구조 유지 (삭제 안함)
     "baseUrl": ".",
