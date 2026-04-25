@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, MouseEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, type Transition } from 'framer-motion'
 import type { NotificationViewItem } from '@/lib/notification/notificationStore'
 import { useNotificationStore } from '@/lib/notification/notificationStore'
+import { stopNotificationLoop } from '@/lib/alerts/alertsSSEStore'
 
 type Props = {
   initialNotifications: NotificationViewItem[]
@@ -158,10 +160,33 @@ function AccordionBody({
 function NotificationCard({
   item,
   onRead,
+  onDelete,
 }: {
   item: NotificationViewItem
   onRead: (id: string) => void
+  onDelete: (id: string) => void
 }) {
+  const router = useRouter()
+
+  const handleConfirm = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+
+    void onRead(item.id)
+    stopNotificationLoop()
+
+    if (item.type === 'BTC_ALERT') {
+      router.push('/ko/alerts')
+      return
+    }
+
+    if (item.type === 'INDICATOR') {
+      router.push('/ko/alerts?tab=indicator')
+      return
+    }
+
+    router.push('/ko/notices')
+  }
+
   return (
     <motion.div
       layout
@@ -194,6 +219,29 @@ function NotificationCard({
         </div>
 
         <div className="shrink-0 text-right">
+          <div className="mb-2 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="inline-flex min-h-[36px] min-w-[64px] items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15 hover:text-emerald-200"
+              aria-label="confirm notification"
+            >
+              OK
+            </button>
+
+            <button
+              type="button"
+              onClick={event => {
+                event.stopPropagation()
+                void onDelete(item.id)
+              }}
+              className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] text-gray-300 transition hover:bg-white/10 hover:text-white"
+              aria-label="delete notification"
+            >
+              ❌
+            </button>
+          </div>
+
           <div className="text-xs text-gray-400">
             {formatTime(item.createdAt)}
           </div>
@@ -216,14 +264,17 @@ export default function NotificationsPageClient({
   const setServerSnapshot = useNotificationStore(state => state.setServerSnapshot)
   const pushIncoming = useNotificationStore(state => state.pushIncoming)
   const markOneRead = useNotificationStore(state => state.markOneRead)
-  const markAllRead = useNotificationStore(state => state.markAllRead)
+  const deleteOne = useNotificationStore(state => state.deleteOne)
+  const deleteAll = useNotificationStore(state => state.deleteAll)
 
   const [openSections, setOpenSections] = useState({
     btcAlert: true,
     indicator: true,
   })
 
-  const [openIndicatorGroups, setOpenIndicatorGroups] = useState<Record<IndicatorGroupKey, boolean>>({
+  const [openIndicatorGroups, setOpenIndicatorGroups] = useState<
+    Record<IndicatorGroupKey, boolean>
+  >({
     RSI: true,
     MACD: true,
     EMA: true,
@@ -236,14 +287,11 @@ export default function NotificationsPageClient({
       unreadCount: initialUnreadCount,
       isVIP,
     })
-
-    void markAllRead()
   }, [
     initialNotifications,
     initialUnreadCount,
     isVIP,
     setServerSnapshot,
-    markAllRead,
   ])
 
   useEffect(() => {
@@ -367,10 +415,10 @@ export default function NotificationsPageClient({
             </span>
 
             <button
-              onClick={() => void markAllRead()}
+              onClick={() => void deleteAll()}
               className="rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/15"
             >
-              모두 읽음
+              모두 삭제
             </button>
           </div>
         </div>
@@ -394,6 +442,7 @@ export default function NotificationsPageClient({
                       key={item.id}
                       item={item}
                       onRead={markOneRead}
+                      onDelete={deleteOne}
                     />
                   ))}
                 </motion.div>
@@ -430,6 +479,7 @@ export default function NotificationsPageClient({
                               key={item.id}
                               item={item}
                               onRead={markOneRead}
+                              onDelete={deleteOne}
                             />
                           ))}
                         </motion.div>
@@ -453,6 +503,7 @@ export default function NotificationsPageClient({
                               key={item.id}
                               item={item}
                               onRead={markOneRead}
+                              onDelete={deleteOne}
                             />
                           ))}
                         </motion.div>
@@ -476,6 +527,7 @@ export default function NotificationsPageClient({
                               key={item.id}
                               item={item}
                               onRead={markOneRead}
+                              onDelete={deleteOne}
                             />
                           ))}
                         </motion.div>
@@ -499,6 +551,7 @@ export default function NotificationsPageClient({
                               key={item.id}
                               item={item}
                               onRead={markOneRead}
+                              onDelete={deleteOne}
                             />
                           ))}
                         </motion.div>

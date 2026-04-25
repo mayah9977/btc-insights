@@ -61,7 +61,7 @@ export default function ReferralsPage() {
             </h1>
 
             <p className="text-base md:text-lg text-slate-400 max-w-2xl">
-              실제 트레이더 기준으로 검증된 거래 환경 목록입니다.
+              실제 트레이더 기준으로 검증된 거래소 목록입니다.
             </p>
           </header>
 

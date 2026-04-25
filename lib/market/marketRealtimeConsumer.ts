@@ -453,4 +453,4 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
       } catch {}
     }
   }, 1000)
-}
+} 

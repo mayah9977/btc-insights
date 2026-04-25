@@ -29,6 +29,10 @@ type NotificationStore = {
   loadUnreadCount: () => Promise<void>
   markOneRead: (id: string) => Promise<void>
   markAllRead: () => Promise<void>
+  // 🔥 NEW
+  deleteOne: (id: string) => Promise<void>
+  // 🔥 NEW
+  deleteAll: () => Promise<void>
 }
 
 function mergeNotifications(
@@ -65,21 +69,32 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     })
   },
 
-  pushIncoming: (item) => {
+  pushIncoming: item => {
     const { isVIP, notifications, unreadCount } = get()
 
     if (!isVIP && item.type !== 'NOTICE') {
       return
     }
 
-    // 🔥 핵심: ID 기반 dedupe (절대 필수)
-    const exists = notifications.some(n => n.id === item.id)
-    if (exists) {
+    // 🔥 MODIFIED: id 기반 dedupe
+    const existsById = notifications.some(n => n.id === item.id)
+    if (existsById) {
+      return
+    }
+
+    // 🔥 MODIFIED: 내용 기반 dedupe (type + title + createdAt)
+    const existsByContent = notifications.some(
+      n =>
+        n.type === item.type &&
+        n.title === item.title &&
+        n.createdAt === item.createdAt,
+    )
+    if (existsByContent) {
       return
     }
 
     set({
-      notifications: [item, ...notifications], // prepend 유지
+      notifications: [item, ...notifications],
       unreadCount: unreadCount + (item.read ? 0 : 1),
     })
   },
@@ -102,7 +117,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     })
   },
 
-  markOneRead: async (id: string) => {
+  markOneRead: async id => {
     const current = get().notifications
     const target = current.find(item => item.id === id)
 
@@ -160,5 +175,64 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     set({
       unreadCount: data.unreadCount ?? 0,
     })
+  },
+
+  // 🔥 NEW
+  deleteOne: async id => {
+    const current = get().notifications
+    const target = current.find(item => item.id === id)
+
+    if (!target) {
+      return
+    }
+
+    const prevNotifications = current
+    const prevUnreadCount = get().unreadCount
+
+    set({
+      notifications: current.filter(item => item.id !== id),
+      unreadCount: Math.max(
+        0,
+        prevUnreadCount - (target.read ? 0 : 1),
+      ),
+    })
+
+    const res = await fetch('/api/notification/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+
+    if (!res.ok) {
+      set({
+        notifications: prevNotifications,
+        unreadCount: prevUnreadCount,
+      })
+    }
+  },
+
+  // 🔥 NEW
+  deleteAll: async () => {
+    const current = get().notifications
+    const prevNotifications = current
+    const prevUnreadCount = get().unreadCount
+
+    set({
+      notifications: [],
+      unreadCount: 0,
+    })
+
+    const res = await fetch('/api/notification/delete-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    if (!res.ok) {
+      set({
+        notifications: prevNotifications,
+        unreadCount: prevUnreadCount,
+      })
+    }
   },
 }))

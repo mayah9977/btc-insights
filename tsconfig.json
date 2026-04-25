@@ -16,8 +16,10 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
 
-    "ignoreDeprecations": "5.0",
+    // 🔥 여기 수정
+    "ignoreDeprecations": "6.0",
 
+    // 🔥 구조 유지 (삭제 안함)
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
@@ -25,6 +27,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "global.d.ts", // 🔥 추가
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",

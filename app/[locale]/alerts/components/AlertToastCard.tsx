@@ -1,8 +1,16 @@
 'use client'
 
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion'
+import {
+  motion,
+  AnimatePresence,
+  useMotionValue,
+  useTransform,
+  animate,
+} from 'framer-motion'
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react'
+import { stopNotificationLoop } from '@/lib/alerts/alertsSSEStore'
 
 type Props = {
   t: any
@@ -25,6 +33,8 @@ export default function AlertToastCard({
   signal,
   value,
 }: Props) {
+  const router = useRouter()
+
   const isUp =
     signal?.toLowerCase().includes('golden') ||
     label?.includes('상승')
@@ -44,6 +54,22 @@ export default function AlertToastCard({
     }
   }, [count, price])
 
+  /* =========================
+     🔥 OK BUTTON HANDLER
+  ========================= */
+  const handleConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    stopNotificationLoop()
+
+    if (type === 'BTC') {
+      router.push('/ko/alerts')
+      return
+    }
+
+    router.push('/ko/alerts?tab=indicator')
+  }
+
   return (
     <AnimatePresence>
       {t.visible && (
@@ -62,10 +88,43 @@ export default function AlertToastCard({
             whileHover={{ scale: 1.03 }}
             className="relative rounded-2xl bg-[#0B0F19]/95 p-4 backdrop-blur-xl"
           >
+            {/* =========================
+               🔥 OK BUTTON (overlay)
+               기존 layout 절대 안건드림
+            ========================= */}
+            <button
+              onClick={handleConfirm}
+              className="
+                absolute
+                top-3
+                right-3
+                z-20
+                min-w-[52px]
+                min-h-[32px]
+                px-3
+                rounded-full
+                border
+                border-emerald-400/20
+                bg-emerald-500/10
+                text-[11px]
+                font-semibold
+                text-emerald-300
+                backdrop-blur-md
+                transition
+                hover:bg-emerald-500/20
+                hover:text-emerald-200
+                active:scale-95
+              "
+            >
+              OK
+            </button>
+
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <Activity size={14} />
-                {type === 'BTC' ? 'BTC PRICE ALERT' : 'INDICATOR SIGNAL'}
+                {type === 'BTC'
+                  ? 'BTC PRICE ALERT'
+                  : 'INDICATOR SIGNAL'}
               </div>
 
               {type === 'BTC' && (
@@ -99,7 +158,8 @@ export default function AlertToastCard({
                 </motion.div>
 
                 <div className="mt-1 text-3xl font-bold tracking-tight text-white">
-                  $<motion.span>{rounded}</motion.span>
+                  $
+                  <motion.span>{rounded}</motion.span>
                 </div>
 
                 <div className="mt-1 text-xs text-gray-500">

@@ -1,35 +1,38 @@
 import { NextResponse } from 'next/server'
-import { saveNotification } from '@/lib/notification/repository'
+import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { deleteNotification } from '@/lib/notification/repository'
 
 export async function POST(req: Request) {
   try {
-    let body: unknown = null
+    const viewerId = 'local'
+    await getUserVIP('local')
 
-    // 🔥 NEW: req.json 안정화
+    let body: { id?: string } = {}
+
     try {
       body = await req.json()
-    } catch (error) {
-      console.error('[SAVE_NOTIFICATION] invalid json body:', error)
-
+    } catch {
       return NextResponse.json(
         { ok: false, reason: 'invalid-json-body' },
         { status: 400 },
       )
     }
 
-    // 🔥 NEW: empty body 방어
-    if (!body || typeof body !== 'object') {
+    if (!body.id) {
       return NextResponse.json(
-        { ok: false, reason: 'empty-body' },
+        { ok: false, reason: 'missing-id' },
         { status: 400 },
       )
     }
 
-    await saveNotification(body as any)
+    await deleteNotification({
+      viewerId,
+      id: body.id,
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[SAVE_NOTIFICATION]', error)
+    console.error('[DELETE_NOTIFICATION]', error)
 
     return NextResponse.json(
       { ok: false },

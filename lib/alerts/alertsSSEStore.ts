@@ -9,7 +9,7 @@ import { getUserVIP } from '@/lib/auth/getUserVIP'
 import {
   renderAlertToast,
   renderIndicatorToast,
-} from '@/app/[locale]/alerts/components/AlertToastRenderer' // 🔧 추가: renderer 사용
+} from '@/app/[locale]/alerts/components/AlertToastRenderer'
 
 export type SystemRiskLevel = 'SAFE' | 'WARNING' | 'CRITICAL'
 
@@ -24,6 +24,7 @@ type AlertsSSEState = {
 let unsubscribe: (() => void) | null = null
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 
+// 기존 구조 유지
 let soundInterval: ReturnType<typeof setInterval> | null = null
 let vibrationInterval: ReturnType<typeof setInterval> | null = null
 
@@ -34,9 +35,57 @@ let notificationLoopLock: Promise<void> | null = null
 
 let isNotificationLoopRunning = false
 
+// 🔥 MODIFIED: client dedupe / sound dedupe
+const CLIENT_DEDUPE_TTL_MS = 30_000
+const processedEventMap = new Map<string, number>()
+const playedSoundMap = new Map<string, number>()
+
+// 🔥 MODIFIED: TTL cleanup to prevent memory leaks
+function cleanupTTLMap(map: Map<string, number>, ttlMs: number) {
+  const now = Date.now()
+
+  for (const [key, ts] of map.entries()) {
+    if (now - ts > ttlMs) {
+      map.delete(key)
+    }
+  }
+}
+
+// 🔥 MODIFIED: shared dedupe helper with TTL cleanup
+function markIfDuplicate(
+  map: Map<string, number>,
+  key: string,
+  ttlMs: number,
+) {
+  const now = Date.now()
+
+  cleanupTTLMap(map, ttlMs)
+
+  const existing = map.get(key)
+  if (existing && now - existing <= ttlMs) {
+    return true
+  }
+
+  map.set(key, now)
+  return false
+}
+
+// 🔥 MODIFIED: alertId-based SSE dedupe key
+function buildAlertDedupeKey(data: any) {
+  return `alert:${String(data?.alertId ?? '')}`
+}
+
+// 🔥 MODIFIED: indicator dedupe key
+function buildIndicatorDedupeKey(data: any) {
+  const ts = String(data?.ts ?? '')
+  return `indicator:${String(data?.symbol ?? '')}:${String(
+    data?.indicator ?? '',
+  )}:${String(data?.signal ?? '')}:${ts}`
+}
+
+// stop 함수 외부 사용
 export function stopNotificationLoop() {
   notificationLoopToken += 1
-
   isNotificationLoopRunning = false
 
   if (soundInterval) {
@@ -87,7 +136,19 @@ function getSoundFilePath(soundType: string) {
   return SOUND_MAP[soundType] ?? SOUND_MAP.default
 }
 
-async function startNotificationLoop() {
+// 기존 함수명 유지, 중복 실행 방지 + 단발 재생
+async function startNotificationLoop(lockKey?: string) {
+  if (lockKey) {
+    const duplicated = markIfDuplicate(
+      playedSoundMap,
+      lockKey,
+      CLIENT_DEDUPE_TTL_MS,
+    )
+    if (duplicated) {
+      return
+    }
+  }
+
   if (isNotificationLoopRunning) {
     return
   }
@@ -96,7 +157,7 @@ async function startNotificationLoop() {
     await notificationLoopLock
   }
 
-  let resolveLock: () => void
+  let resolveLock!: () => void
   notificationLoopLock = new Promise<void>(resolve => {
     resolveLock = resolve
   })
@@ -115,7 +176,7 @@ async function startNotificationLoop() {
     if (settings.soundEnabled) {
       try {
         const audio = new Audio(getSoundFilePath(settings.soundType))
-        audio.loop = true
+        audio.loop = false
         audio.preload = 'auto'
 
         if (currentToken !== notificationLoopToken - 1) {
@@ -129,7 +190,15 @@ async function startNotificationLoop() {
         }
 
         audioInstance = audio
+
         void audio.play().catch(() => {})
+
+        audio.onended = () => {
+          if (audioInstance === audio) {
+            audioInstance = null
+          }
+          isNotificationLoopRunning = false
+        }
       } catch {
         audioInstance = null
       }
@@ -137,234 +206,260 @@ async function startNotificationLoop() {
 
     if (settings.vibrationEnabled && 'vibrate' in navigator) {
       if (currentToken !== notificationLoopToken - 1) return
-
-      vibrationInterval = setInterval(() => {
-        navigator.vibrate?.([200, 100, 200])
-      }, 1500)
+      navigator.vibrate?.([180, 80, 120])
     }
   } finally {
     notificationLoopLock = null
-    resolveLock!()
+    resolveLock()
+
+    if (!audioInstance) {
+      isNotificationLoopRunning = false
+    }
   }
 }
 
-export const useAlertsSSEStore = create<AlertsSSEState>(
-  (set, get) => ({
-    connected: false,
-    systemRisk: 'SAFE',
-    lastEventAt: null,
+export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
+  connected: false,
+  systemRisk: 'SAFE',
+  lastEventAt: null,
 
-    bootstrap: () => {
-      if (typeof window === 'undefined') return
-      if (unsubscribe) return
+  bootstrap: () => {
+    if (typeof window === 'undefined') return
+    if (unsubscribe) return
 
-      console.log('[alerts-sse] bootstrap (manager)')
-      console.log('[alerts-sse] manager-ready:', !!sseManager)
-      console.log('[alerts-sse] SSE_EVENT ready:', !!SSE_EVENT)
+    console.log('[alerts-sse] bootstrap (manager)')
+    console.log('[alerts-sse] manager-ready:', !!sseManager)
+    console.log('[alerts-sse] SSE_EVENT ready:', !!SSE_EVENT)
 
-      const es = new EventSource('/api/alerts/sse')
+    const es = new EventSource('/api/alerts/sse')
 
-      es.onopen = () => {
-        console.log('[alerts-sse] connected: /api/alerts/sse')
+    es.onopen = () => {
+      console.log('[alerts-sse] connected: /api/alerts/sse')
 
-        set({
-          connected: true,
-          systemRisk: 'SAFE',
-          lastEventAt: Date.now(),
-        })
+      set({
+        connected: true,
+        systemRisk: 'SAFE',
+        lastEventAt: Date.now(),
+      })
+    }
+
+    es.onmessage = async event => {
+      let data: any
+
+      try {
+        data = JSON.parse(event.data)
+      } catch (error) {
+        console.error('[alerts-sse] parse error:', error)
+        return
       }
 
-      es.onmessage = async (event) => {
-        let data: any
+      console.log('SSE RAW DATA:', data)
 
-        try {
-          data = JSON.parse(event.data)
-        } catch (error) {
-          console.error('[alerts-sse] parse error:', error)
+      set({
+        connected: true,
+        systemRisk: 'SAFE',
+        lastEventAt: Date.now(),
+      })
+
+      if (data?.type === 'ALERT_TRIGGERED') {
+        // 🔥 MODIFIED: SSE dedupe by alertId
+        const dedupeKey = buildAlertDedupeKey(data)
+        if (
+          markIfDuplicate(
+            processedEventMap,
+            dedupeKey,
+            CLIENT_DEDUPE_TTL_MS,
+          )
+        ) {
+          console.log('[alerts-sse] duplicate alert ignored:', dedupeKey)
           return
         }
 
-        console.log('SSE RAW DATA:', data)
+        const payload = {
+          type: 'ALERT_TRIGGERED',
+          alertId: data.alertId,
+          symbol: data.symbol,
+          price: data.price,
+          ts: data.ts ?? Date.now(),
+        }
 
-        set({
-          connected: true,
-          systemRisk: 'SAFE',
-          lastEventAt: Date.now(),
+        console.log('SSE PAYLOAD:', payload)
+
+        renderAlertToast({
+          symbol: payload.symbol,
+          price: payload.price,
         })
 
-        if (data?.type === 'ALERT_TRIGGERED') {
-          const payload = {
-            type: 'ALERT_TRIGGERED',
-            alertId: data.alertId,
-            symbol: data.symbol,
-            price: data.price,
-            ts: data.ts ?? Date.now(),
-          }
+        void fetch('/api/notification/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: String(payload.alertId),
+            type: 'BTC_ALERT',
+            title: `${payload.symbol} price notification`,
+            body: `Price ${payload.price} reached`,
+            createdAt: payload.ts,
+          }),
+        })
 
-          console.log('SSE PAYLOAD:', payload)
+        void startNotificationLoop(dedupeKey)
 
-          // 🔧 변경: toast.success → custom renderer
-          renderAlertToast({
-            symbol: payload.symbol,
-            price: payload.price,
-          })
+        window.dispatchEvent(
+          new CustomEvent('alerts:sse', {
+            detail: payload,
+          }),
+        )
 
-          // 🔧 유지: 저장 API
-          void fetch('/api/notification/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: String(payload.alertId),
-              type: 'BTC_ALERT',
-              title: `${payload.symbol} price notification`,
-              body: `Price ${payload.price} reached`,
-              createdAt: payload.ts,
-            }),
-          })
-
-          void startNotificationLoop()
-
-          window.dispatchEvent(
-            new CustomEvent('alerts:sse', {
-              detail: payload,
-            }),
-          )
-
-          window.dispatchEvent(
-            new CustomEvent('alert:triggered', {
-              detail: payload,
-            }),
-          )
-        }
-
-        if (data?.type === 'INDICATOR_SIGNAL') {
-          console.log('INDICATOR SIGNAL:', data)
-
-          const isVIP = await getUserVIP('local')
-          if (!isVIP) {
-            return
-          }
-
-          const settings = await getUserNotificationSettings('local')
-
-          const indicator =
-            data.indicator as keyof typeof settings.indicatorEnabled
-
-          if (
-            settings.indicatorEnabled &&
-            settings.indicatorEnabled[indicator] === false
-          ) {
-            return
-          }
-
-          const SIGNAL_MAP: Record<string, Record<string, string>> = {
-            RSI: {
-              RSI_OVERBOUGHT: 'RSI 과매수 진입',
-              RSI_OVERSOLD: 'RSI 과매도 진입',
-            },
-            MACD: {
-              GOLDEN_CROSS: 'MACD 골든크로스',
-              DEAD_CROSS: 'MACD 데드크로스',
-            },
-            EMA: {
-              BULLISH_TREND: 'EMA 상승 전환',
-              BEARISH_TREND: 'EMA 하락 추세',
-            },
-          }
-
-          const label =
-            SIGNAL_MAP[data.indicator]?.[data.signal] ??
-            `${data.indicator} ${data.signal}`
-
-          // 🔧 변경: toast.success → custom renderer
-          renderIndicatorToast({
-            symbol: data.symbol,
-            indicator: data.indicator,
-            label: label,
-            signal: data.signal,
-            value: Number(data.value),
-          })
-
-          // 🔧 유지: 저장 API
-          void fetch('/api/notification/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: `${data.symbol}-${data.signal}-${Date.now()}`,
-              type: 'INDICATOR',
-              title: `${data.indicator} signal`,
-              body: label,
-              createdAt: Date.now(),
-            }),
-          })
-
-          void startNotificationLoop()
-
-          window.dispatchEvent(
-            new CustomEvent('alerts:sse', {
-              detail: data,
-            }),
-          )
-
-          window.dispatchEvent(
-            new CustomEvent('indicator:triggered', {
-              detail: data,
-            }),
-          )
-        }
+        window.dispatchEvent(
+          new CustomEvent('alert:triggered', {
+            detail: payload,
+          }),
+        )
       }
 
-      es.onerror = (error) => {
-        console.error('[alerts-sse] connection error:', error)
+      if (data?.type === 'INDICATOR_SIGNAL') {
+        // 🔥 MODIFIED: indicator dedupe
+        const dedupeKey = buildIndicatorDedupeKey(data)
+        if (
+          markIfDuplicate(
+            processedEventMap,
+            dedupeKey,
+            CLIENT_DEDUPE_TTL_MS,
+          )
+        ) {
+          console.log('[alerts-sse] duplicate indicator ignored:', dedupeKey)
+          return
+        }
 
+        console.log('INDICATOR SIGNAL:', data)
+
+        const isVIP = await getUserVIP('local')
+        if (!isVIP) {
+          return
+        }
+
+        const settings = await getUserNotificationSettings('local')
+
+        const indicator =
+          data.indicator as keyof typeof settings.indicatorEnabled
+
+        if (
+          settings.indicatorEnabled &&
+          settings.indicatorEnabled[indicator] === false
+        ) {
+          return
+        }
+
+        const SIGNAL_MAP: Record<string, Record<string, string>> = {
+          RSI: {
+            RSI_OVERBOUGHT: 'RSI 과매수 진입',
+            RSI_OVERSOLD: 'RSI 과매도 진입',
+          },
+          MACD: {
+            GOLDEN_CROSS: 'MACD 골든크로스',
+            DEAD_CROSS: 'MACD 데드크로스',
+          },
+          EMA: {
+            BULLISH_TREND: 'EMA 상승 전환',
+            BEARISH_TREND: 'EMA 하락 추세',
+          },
+        }
+
+        const label =
+          SIGNAL_MAP[data.indicator]?.[data.signal] ??
+          `${data.indicator} ${data.signal}`
+
+        renderIndicatorToast({
+          symbol: data.symbol,
+          indicator: data.indicator,
+          label,
+          signal: data.signal,
+          value: Number(data.value),
+        })
+
+        void fetch('/api/notification/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: `${data.symbol}-${data.signal}-${String(data.ts ?? Date.now())}`,
+            type: 'INDICATOR',
+            title: `${data.indicator} signal`,
+            body: label,
+            createdAt: data.ts ?? Date.now(),
+          }),
+        })
+
+        void startNotificationLoop(dedupeKey)
+
+        window.dispatchEvent(
+          new CustomEvent('alerts:sse', {
+            detail: data,
+          }),
+        )
+
+        window.dispatchEvent(
+          new CustomEvent('indicator:triggered', {
+            detail: data,
+          }),
+        )
+      }
+    }
+
+    es.onerror = error => {
+      console.error('[alerts-sse] connection error:', error)
+
+      set({
+        connected: false,
+        systemRisk: 'CRITICAL',
+      })
+    }
+
+    unsubscribe = () => {
+      es.close()
+    }
+
+    watchdogTimer = setInterval(() => {
+      const last = get().lastEventAt
+      if (!last) return
+
+      const gap = Date.now() - last
+
+      if (gap > 10_000) {
         set({
           connected: false,
           systemRisk: 'CRITICAL',
         })
+      } else if (gap > 5_000) {
+        set({
+          connected: true,
+          systemRisk: 'WARNING',
+        })
       }
+    }, 5_000)
+  },
 
-      unsubscribe = () => {
-        es.close()
-      }
+  shutdown: () => {
+    // 🔥 MODIFIED: keep existing flow, ensure EventSource is actually closed
+    if (unsubscribe) {
+      unsubscribe()
+      unsubscribe = null
+    }
 
-      watchdogTimer = setInterval(() => {
-        const last = get().lastEventAt
-        if (!last) return
+    if (watchdogTimer) {
+      clearInterval(watchdogTimer)
+      watchdogTimer = null
+    }
 
-        const gap = Date.now() - last
+    // 🔥 MODIFIED: cleanup dedupe maps on shutdown
+    processedEventMap.clear()
+    playedSoundMap.clear()
 
-        if (gap > 10_000) {
-          set({
-            connected: false,
-            systemRisk: 'CRITICAL',
-          })
-        } else if (gap > 5_000) {
-          set({
-            connected: true,
-            systemRisk: 'WARNING',
-          })
-        }
-      }, 5_000)
-    },
+    stopNotificationLoop()
 
-    shutdown: () => {
-      if (unsubscribe) {
-        unsubscribe()
-        unsubscribe = null
-      }
-
-      if (watchdogTimer) {
-        clearInterval(watchdogTimer)
-        watchdogTimer = null
-      }
-
-      stopNotificationLoop()
-
-      set({
-        connected: false,
-        systemRisk: 'SAFE',
-        lastEventAt: null,
-      })
-    },
-  }),
-)
+    set({
+      connected: false,
+      systemRisk: 'SAFE',
+      lastEventAt: null,
+    })
+  },
+}))

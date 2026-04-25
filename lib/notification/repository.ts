@@ -16,6 +16,7 @@ export type NotificationViewItem = NotificationItem & {
 
 const NOTIFICATION_ZSET_KEY = 'notification:list'
 const NOTIFICATION_DEDUPE_KEY = 'notification:dedupe'
+const NOTIFICATION_SHORT_DEDUPE_PREFIX = 'notification:dedupe:short'
 
 function getReadSetKey(viewerId: string) {
   return `notification:read:${viewerId}`
@@ -42,10 +43,70 @@ function applyRoleFilter(
   return notifications.filter(item => item.type === 'NOTICE')
 }
 
+function isNotificationItem(value: unknown): value is NotificationItem {
+  if (!value || typeof value !== 'object') return false
+
+  const item = value as Record<string, unknown>
+
+  return (
+    typeof item.id === 'string' &&
+    (item.type === 'NOTICE' ||
+      item.type === 'BTC_ALERT' ||
+      item.type === 'INDICATOR') &&
+    typeof item.title === 'string' &&
+    typeof item.body === 'string' &&
+    typeof item.createdAt === 'number'
+  )
+}
+
+// 🔥 NEW
+async function getAllRawNotificationRows() {
+  return redis.zrevrange(
+    NOTIFICATION_ZSET_KEY,
+    0,
+    -1,
+  )
+}
+
+// 🔥 NEW
+async function removeNotificationRowsByIds(ids: string[]) {
+  if (ids.length === 0) return 0
+
+  const idSet = new Set(ids)
+  const rows = await getAllRawNotificationRows()
+
+  const rawTargets = rows.filter(raw => {
+    const parsed = parseNotification(raw)
+    return parsed !== null && idSet.has(parsed.id)
+  })
+
+  if (rawTargets.length === 0) return 0
+
+  return redis.zrem(NOTIFICATION_ZSET_KEY, ...rawTargets)
+}
+
 /* ============================= */
-/* 기존 저장 로직 유지 */
+/* 저장 로직 */
 /* ============================= */
 export async function saveNotification(notification: NotificationItem) {
+  if (!isNotificationItem(notification)) {
+    throw new Error('Invalid notification payload')
+  }
+
+  const shortKey = `${NOTIFICATION_SHORT_DEDUPE_PREFIX}:${notification.id}`
+
+  const shortLock = await redis.set(
+    shortKey,
+    '1',
+    'EX',
+    30,
+    'NX',
+  )
+
+  if (shortLock !== 'OK') {
+    return
+  }
+
   const isDuplicate = await redis.sismember(
     NOTIFICATION_DEDUPE_KEY,
     notification.id,
@@ -71,7 +132,7 @@ export async function saveNotification(notification: NotificationItem) {
 }
 
 /* ============================= */
-/* 기존 12시간 조회 */
+/* 기존 조회 */
 /* ============================= */
 export async function getRawNotificationsLast12h() {
   const now = Date.now()
@@ -119,7 +180,7 @@ export async function getUnreadCountLast12h(params: {
 }
 
 /* ============================= */
-/* 🔥 NEW: NOTICE 전용 전체 조회 */
+/* NOTICE 전용 */
 /* ============================= */
 export async function getNoticeNotifications(params: {
   viewerId: string
@@ -127,7 +188,6 @@ export async function getNoticeNotifications(params: {
 }) {
   const { viewerId, isVIP } = params
 
-  // 🔥 전체 24시간 범위 (현재 저장 구조 기준)
   const rows = await redis.zrevrange(
     NOTIFICATION_ZSET_KEY,
     0,
@@ -155,7 +215,7 @@ export async function getNoticeNotifications(params: {
 }
 
 /* ============================= */
-/* 기존 read 처리 유지 */
+/* read 처리 */
 /* ============================= */
 export async function markNotificationsRead(params: {
   viewerId: string
@@ -185,4 +245,45 @@ export async function markNotificationsRead(params: {
     viewerId,
     isVIP,
   })
+}
+
+/* ============================= */
+/* 🔥 NEW: delete one */
+/* ============================= */
+export async function deleteNotification(params: {
+  viewerId: string
+  id: string
+}) {
+  const { viewerId, id } = params
+  const readKey = getReadSetKey(viewerId)
+
+  await removeNotificationRowsByIds([id])
+  await redis.srem(readKey, id)
+
+  return { ok: true }
+}
+
+/* ============================= */
+/* 🔥 NEW: delete all visible notifications */
+/* ============================= */
+export async function deleteAllNotifications(params: {
+  viewerId: string
+  isVIP: boolean
+}) {
+  const { viewerId, isVIP } = params
+  const readKey = getReadSetKey(viewerId)
+
+  const visibleItems = await getNotificationsLast12h({
+    viewerId,
+    isVIP,
+  })
+
+  const ids = visibleItems.map(item => item.id)
+
+  if (ids.length > 0) {
+    await removeNotificationRowsByIds(ids)
+    await redis.srem(readKey, ...ids)
+  }
+
+  return { ok: true, deletedCount: ids.length }
 }

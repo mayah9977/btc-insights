@@ -3,6 +3,9 @@
 import { toast } from 'react-hot-toast'
 import AlertToastCard from './AlertToastCard'
 
+/* =========================
+   BTC ALERT
+========================= */
 export function renderAlertToast(payload: {
   symbol: string
   price: number
@@ -23,6 +26,9 @@ export function renderAlertToast(payload: {
   )
 }
 
+/* =========================
+   INDICATOR
+========================= */
 export function renderIndicatorToast(data: {
   symbol: string
   indicator: string

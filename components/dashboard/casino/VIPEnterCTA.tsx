@@ -13,7 +13,7 @@ const phraseByRisk: Record<
 > = {
   LOW: { title: '현재 구조적 상태 검토', sub: '시장 안정 구간으로 분류되었습니다' },
   MEDIUM: { title: '구조적 압력 해석 확인', sub: '변동성 확장 가능성이 감지되었습니다' },
-  HIGH: { title: '상승된 위험 구조 원인 확인', sub: '반복적 이상 신호 군집이 감지되었습니다' },
+  HIGH: { title: '위험 신호 증가 ', sub: '비정상적인 흐름이 감지되고 있습니다' },
   EXTREME: { title: '이 구조 레이어는 보호 중입니다', sub: '상세 해석은 VIP 권한이 필요합니다' },
 }
 
@@ -94,7 +94,7 @@ export default function VIPEnterCTA() {
 
         {dwell > 8 && (
           <div className="pt-1 text-xs text-zinc-400">
-            본 브리핑은 현재 시장 상태에서만 의미를 가집니다.
+            실시간 고래들의 매수/매도 확인하러가기.
           </div>
         )}
       </motion.button>

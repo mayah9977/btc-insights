@@ -124,33 +124,49 @@ self.addEventListener("notificationclick", (event) => {
 
   const action = event.action;
   const data = event.notification.data || {};
-  const targetUrl = data.clickUrl || "/";
+
+  // 🔥 relative URL -> absolute URL
+  const targetUrl = new URL(
+    data.clickUrl || "/",
+    self.location.origin
+  ).href;
 
   // Close 버튼 → 아무 동작 없음
   if (action === "close") return;
 
   event.waitUntil(
-    self.clients
-      .matchAll({
+    (async () => {
+      const clientList = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
-      })
-      .then((clientList) => {
-        for (const client of clientList) {
-          try {
-            const clientUrl = new URL(client.url);
+      });
 
-            if (clientUrl.origin === self.location.origin) {
-              if (client.url !== targetUrl && "navigate" in client) {
-                client.navigate(targetUrl);
-              }
-              return client.focus();
-            }
-          } catch (_) {}
-        }
+      for (const client of clientList) {
+        try {
+          const clientUrl = new URL(client.url);
 
-        // 열린 탭이 없으면 새 창
-        return self.clients.openWindow(targetUrl);
-      })
+          // 🔥 same-origin tab reuse only
+          if (clientUrl.origin !== self.location.origin) {
+            continue;
+          }
+
+          // 🔥 already on same URL -> focus only
+          if (clientUrl.href === targetUrl) {
+            return client.focus();
+          }
+
+          // 🔥 reuse existing tab and navigate
+          if ("navigate" in client) {
+            await client.focus();
+            return client.navigate(targetUrl);
+          }
+
+          return client.focus();
+        } catch (_) {}
+      }
+
+      // 🔥 open new tab only when no existing tab is available
+      return self.clients.openWindow(targetUrl);
+    })()
   );
 });
