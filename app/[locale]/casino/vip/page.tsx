@@ -1,9 +1,12 @@
+// app/[locale]/casino/vip/page.tsx
+
 import { redirect } from 'next/navigation'
 import { redis } from '@/lib/redis/index'
 import VIPClientPage from './vipClientPage'
 import VIPRealtimeBoundary from './VIPRealtimeBoundary'
 import { getVIP3Metrics } from '@/lib/vip/redis/getVIP3Metrics'
-import { getSession } from '@/lib/auth/session'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 
 type PageProps = {
   params: Promise<{
@@ -14,12 +17,18 @@ type PageProps = {
 export default async function VIPPage({ params }: PageProps) {
   const { locale } = await params
 
-  const session = await getSession()
-  if (!session) {
+  // ✅ 로그인만 서버에서 체크
+  const user = await getCurrentUser()
+
+  if (!user) {
     redirect(`/${locale}/login`)
   }
 
-  const userId = session.userId
+  const userId = user.id
+
+  // ✅ VIP 여부는 전달만 (redirect ❌)
+  const vipLevel = await getUserVIPLevel(userId)
+  const isVIP = vipLevel === 'VIP'
 
   let dailyMetrics = {
     avoidedExtremeCount: 0,
@@ -49,6 +58,7 @@ export default async function VIPPage({ params }: PageProps) {
     <VIPRealtimeBoundary>
       <VIPClientPage
         userId={userId}
+        isVIP={isVIP}
         weeklySummary={weeklySummary}
         monthlySummary={monthlySummary}
         vip3Metrics={vip3Metrics}

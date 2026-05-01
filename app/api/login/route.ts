@@ -1,24 +1,27 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { email } = body
+  const email = typeof body.email === 'string' ? body.email : null
 
   if (!email) {
     return NextResponse.json(
       { error: 'Email required' },
-      { status: 400 }
+      { status: 400 },
     )
   }
 
-  const res = NextResponse.json({ ok: true })
+  const res = NextResponse.json({
+    ok: true,
+    userId: email,
+  })
 
-  // 🔥 테스트용: email을 userId로 저장
   res.cookies.set('userId', email, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
+    maxAge: 60 * 60 * 24 * 30,
   })
 
   return res

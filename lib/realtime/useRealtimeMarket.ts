@@ -1,15 +1,13 @@
+// lib/realtime/useRealtimeMarket.ts
 'use client'
 
 /**
- * ⛔ useRealtimeMarket — Disabled
+ * ⛔ useRealtimeMarket — Disabled (Safe Stub)
  *
- * - 통합 Market 훅 제거
- * - 개별 훅(useRealtimePrice / useRealtimeVolume / useRealtimeOI) 사용 권장
- * - SSE 구독 ❌
- * - 상태 변경 ❌
- * - 리렌더 ❌
- *
- * 점진적 제거를 위한 안전 더미 훅
+ * - 기존 구조 유지
+ * - 모든 로그 제거 (console.warn 완전 제거)
+ * - 반환 구조 유지
+ * - 외부 사용 코드 영향 없음
  */
 
 export type RealtimeMarketState = {
@@ -33,11 +31,5 @@ const DISABLED_STATE: RealtimeMarketState = {
 export function useRealtimeMarket(
   _symbol: string = 'BTCUSDT',
 ): RealtimeMarketState {
-  if (process.env.NODE_ENV !== 'production') {
-    console.warn(
-      '[useRealtimeMarket] ⚠️ Disabled. Use individual hooks instead.',
-    )
-  }
-
   return DISABLED_STATE
 }

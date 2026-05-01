@@ -1,50 +1,40 @@
-// app/api/cron/vip-expire/route.ts
-import { NextResponse } from 'next/server';
-import {
-  getUserVIPState,
-  applyAutoExtendIfEnabled,
-} from '@/lib/vip/vipDB';
-import { expireUserVip } from '@/lib/vip/vipService';
-import { isVIPInGracePeriod } from '@/lib/vip/vipGrace';
+import { NextRequest, NextResponse } from 'next/server'
+import { expireOverdueVIPs } from '@/lib/vip/vipDB'
+import { logger } from '@/lib/logger'
 
-/**
- * ⏰ VIP 만료 Cron
- * AutoExtend → Grace → Expire
- */
-export async function GET() {
-  const now = Date.now();
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
 
-  /**
-   * DEV ONLY
-   * PROD: DB 쿼리로 교체
-   */
-  const users = (global as any).__VIP_USERS__ as string[] | undefined;
-  if (!users) {
-    return NextResponse.json({ skipped: true });
+  if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json(
+      { error: 'UNAUTHORIZED' },
+      { status: 401 },
+    )
   }
 
-  for (const userId of users) {
-    let state = await getUserVIPState(userId);
-    if (!state) continue;
+  try {
+    const expiredCount = await expireOverdueVIPs()
 
-    // 아직 유효
-    if (state.expiredAt > now) continue;
+    logger.info('[VIP EXPIRE CRON SUCCESS]', {
+      expiredCount,
+    })
 
-    // 1️⃣ 자동 연장
-    await applyAutoExtendIfEnabled(userId);
+    return NextResponse.json({
+      ok: true,
+      expiredCount,
+    })
+  } catch (error) {
+    logger.error('[VIP EXPIRE CRON FAILED]', {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unknown expire cron error',
+    })
 
-    // 재조회
-    state = await getUserVIPState(userId);
-    if (!state) continue;
-
-    if (state.expiredAt > now) continue;
-
-    // 2️⃣ Grace Period
-    if (isVIPInGracePeriod(state)) continue;
-
-    // 3️⃣ 최종 만료
-    await expireUserVip(userId);
+    return NextResponse.json(
+      { error: 'VIP expire cron failed' },
+      { status: 500 },
+    )
   }
-
-  return NextResponse.json({ ok: true });
 }

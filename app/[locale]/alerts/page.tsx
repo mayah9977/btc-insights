@@ -1,4 +1,5 @@
-// /app/[locale]/alerts/page.tsx
+// app/[locale]/alerts/page.tsx
+
 'use client'
 
 import { useEffect } from 'react'

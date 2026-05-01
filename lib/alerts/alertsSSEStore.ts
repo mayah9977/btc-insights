@@ -1,4 +1,3 @@
-// /lib/alerts/alertsSSEStore.ts
 'use client'
 
 import { create } from 'zustand'
@@ -24,7 +23,6 @@ type AlertsSSEState = {
 let unsubscribe: (() => void) | null = null
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 
-// 기존 구조 유지
 let soundInterval: ReturnType<typeof setInterval> | null = null
 let vibrationInterval: ReturnType<typeof setInterval> | null = null
 
@@ -35,15 +33,12 @@ let notificationLoopLock: Promise<void> | null = null
 
 let isNotificationLoopRunning = false
 
-// 🔥 MODIFIED: client dedupe / sound dedupe
 const CLIENT_DEDUPE_TTL_MS = 30_000
 const processedEventMap = new Map<string, number>()
 const playedSoundMap = new Map<string, number>()
 
-// 🔥 MODIFIED: TTL cleanup to prevent memory leaks
 function cleanupTTLMap(map: Map<string, number>, ttlMs: number) {
   const now = Date.now()
-
   for (const [key, ts] of map.entries()) {
     if (now - ts > ttlMs) {
       map.delete(key)
@@ -51,7 +46,6 @@ function cleanupTTLMap(map: Map<string, number>, ttlMs: number) {
   }
 }
 
-// 🔥 MODIFIED: shared dedupe helper with TTL cleanup
 function markIfDuplicate(
   map: Map<string, number>,
   key: string,
@@ -70,12 +64,10 @@ function markIfDuplicate(
   return false
 }
 
-// 🔥 MODIFIED: alertId-based SSE dedupe key
 function buildAlertDedupeKey(data: any) {
   return `alert:${String(data?.alertId ?? '')}`
 }
 
-// 🔥 MODIFIED: indicator dedupe key
 function buildIndicatorDedupeKey(data: any) {
   const ts = String(data?.ts ?? '')
   return `indicator:${String(data?.symbol ?? '')}:${String(
@@ -83,7 +75,6 @@ function buildIndicatorDedupeKey(data: any) {
   )}:${String(data?.signal ?? '')}:${ts}`
 }
 
-// stop 함수 외부 사용
 export function stopNotificationLoop() {
   notificationLoopToken += 1
   isNotificationLoopRunning = false
@@ -136,7 +127,6 @@ function getSoundFilePath(soundType: string) {
   return SOUND_MAP[soundType] ?? SOUND_MAP.default
 }
 
-// 기존 함수명 유지, 중복 실행 방지 + 단발 재생
 async function startNotificationLoop(lockKey?: string) {
   if (lockKey) {
     const duplicated = markIfDuplicate(
@@ -262,7 +252,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
       })
 
       if (data?.type === 'ALERT_TRIGGERED') {
-        // 🔥 MODIFIED: SSE dedupe by alertId
         const dedupeKey = buildAlertDedupeKey(data)
         if (
           markIfDuplicate(
@@ -318,7 +307,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
       }
 
       if (data?.type === 'INDICATOR_SIGNAL') {
-        // 🔥 MODIFIED: indicator dedupe
         const dedupeKey = buildIndicatorDedupeKey(data)
         if (
           markIfDuplicate(
@@ -333,7 +321,9 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
 
         console.log('INDICATOR SIGNAL:', data)
 
-        const isVIP = await getUserVIP('local')
+        // 🔥 FIXED: remove invalid argument (function expects 0 args)
+        const isVIP = await getUserVIP() // ← CHANGED
+
         if (!isVIP) {
           return
         }
@@ -439,7 +429,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
   },
 
   shutdown: () => {
-    // 🔥 MODIFIED: keep existing flow, ensure EventSource is actually closed
     if (unsubscribe) {
       unsubscribe()
       unsubscribe = null
@@ -450,7 +439,6 @@ export const useAlertsSSEStore = create<AlertsSSEState>((set, get) => ({
       watchdogTimer = null
     }
 
-    // 🔥 MODIFIED: cleanup dedupe maps on shutdown
     processedEventMap.clear()
     playedSoundMap.clear()
 

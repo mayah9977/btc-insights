@@ -1,30 +1,35 @@
+// app/[locale]/notifications/page.tsx
+
 import NotificationsPageClient from './NotificationsPageClient'
-import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import {
   getNotificationsLast12h,
   getUnreadCountLast12h,
 } from '@/lib/notification/repository'
 import { redirect } from 'next/navigation'
+import { logger } from '@/lib/logger'
 
 export default async function NotificationsPage() {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect('/ko/notices?from=notifications')
+  }
+
+  const viewerId = user.id
+
+  const vipLevel = await getUserVIPLevel(viewerId)
+  const isVIP = vipLevel === 'VIP'
+
   try {
-    const viewerId = 'local'
-    const isVIP = await getUserVIP('local')
+    const notifications = isVIP
+      ? await getNotificationsLast12h({ viewerId, isVIP })
+      : []
 
-    // 🔥 추가: VIP 접근 제어 (쿼리 포함)
-    if (!isVIP) {
-      return redirect('/ko/notices?from=notifications')
-    }
-
-    const notifications = await getNotificationsLast12h({
-      viewerId,
-      isVIP,
-    })
-
-    const unreadCount = await getUnreadCountLast12h({
-      viewerId,
-      isVIP,
-    })
+    const unreadCount = isVIP
+      ? await getUnreadCountLast12h({ viewerId, isVIP })
+      : 0
 
     return (
       <NotificationsPageClient
@@ -34,7 +39,7 @@ export default async function NotificationsPage() {
       />
     )
   } catch (error) {
-    console.error('[NOTIFICATIONS_PAGE]', error)
+    logger.error('[NOTIFICATIONS_PAGE_DATA]', error)
 
     return (
       <main className="min-h-screen bg-black px-4 py-20 text-white">

@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/vip-expire",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/aggregate-vip-kpi",
       "schedule": "0 15 * * *"
     },
@@ -16,7 +20,6 @@
       "path": "/api/cron/send-vip-telegram",
       "schedule": "0 22 * * *"
     },
-
     {
       "path": "/api/cron/update-sentiment",
       "schedule": "0 0 * * *"

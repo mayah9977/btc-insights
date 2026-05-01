@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-// REMOVE: import { AdvancedRealtimeHeader } from '@/components/realtime/AdvancedRealtimeHeader'
+import { AdvancedRealtimeHeader } from '@/components/realtime/AdvancedRealtimeHeader'
 import { MobileRealtimeHUD } from '@/components/realtime/MobileRealtimeHUD'
 import { VIP3GlowWrapper } from '@/components/realtime/VIP3GlowWrapper'
 import { VIP3MiniStats } from '@/components/realtime/VIP3MiniStats'
@@ -13,17 +13,12 @@ type SSEStatus = 'connecting' | 'open' | 'error'
 
 export function CasinoRealtimeUI() {
   const { vipLevel } = useVIP()
-  const [sseStatus, setSseStatus] =
-    useState<SSEStatus>('connecting')
+  const [sseStatus, setSseStatus] = useState<SSEStatus>('connecting')
 
-  // ✅ 단일 SSE 매니저 연결 상태 추적
   useEffect(() => {
-    const unsubscribe = sseManager.subscribe(
-      '*',
-      () => {
-        setSseStatus('open')
-      },
-    )
+    const unsubscribe = sseManager.subscribe('*', () => {
+      setSseStatus('open')
+    })
 
     return () => {
       unsubscribe()
@@ -32,27 +27,22 @@ export function CasinoRealtimeUI() {
   }, [])
 
   const { dropRate } = getStreamQuality()
+  const isVIP = vipLevel === 'VIP'
 
   return (
     <>
-      {/* ===============================
-          Realtime Header
-      ================================ */}
-      <VIP3GlowWrapper active={vipLevel === 'VIP3'}>
-        {/* REMOVE: <AdvancedRealtimeHeader sseStatus={sseStatus} /> */}
+      <VIP3GlowWrapper active={isVIP}>
+        {/* 🔥 모바일에서는 완전 제거 */}
+        <div className="hidden md:block">
+          <AdvancedRealtimeHeader sseStatus={sseStatus} />
 
-        {vipLevel === 'VIP3' && (
-          <VIP3MiniStats
-            sse={sseStatus}
-            dropRate={dropRate}
-          />
-        )}
+          {isVIP && (
+            <VIP3MiniStats sse={sseStatus} dropRate={dropRate} />
+          )}
+        </div>
       </VIP3GlowWrapper>
 
-      {/* ===============================
-          Mobile HUD
-      ================================ */}
-      <VIP3GlowWrapper active={vipLevel === 'VIP3'}>
+      <VIP3GlowWrapper active={isVIP}>
         <MobileRealtimeHUD sseStatus={sseStatus} />
       </VIP3GlowWrapper>
     </>

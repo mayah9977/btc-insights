@@ -168,16 +168,6 @@ function AlertRow({ alert, onEdit, onDeleted }: Props) {
 
           <div className="flex gap-4">
             <button
-              onClick={e => {
-                e.stopPropagation()
-                onEdit()
-              }}
-              className="text-vipAccent hover:underline"
-            >
-              수정
-            </button>
-
-            <button
               onClick={remove}
               className="text-rose-400 hover:underline"
             >

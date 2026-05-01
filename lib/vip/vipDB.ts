@@ -1,10 +1,11 @@
-// lib/vip/vipDB.ts
 import type { VIPLevel, VIPAddon } from './vipTypes'
 import { recordVIPChange } from './vipAuditLog'
+import { pool } from '@/lib/db'
 
 export type VIPState = {
   level: VIPLevel
   expiredAt: number
+  graceUntil: number | null
   updatedAt: number
   priceId?: string
   addons?: {
@@ -12,56 +13,143 @@ export type VIPState = {
   }
 }
 
-/**
- * DEV in-memory DB
- * ⚠️ 실서비스에서는 Redis / DB로 교체
- */
-const mem = new Map<string, VIPState>()
-const autoExtendOption = new Map<string, number>()
-
-/* =========================
-   Price → VIP Level / Period
-========================= */
-function priceIdToVIP(priceId: string): {
+type VIPUserRow = {
+  user_id: string
   level: VIPLevel
-  days: number
-} {
-  if (priceId === process.env.STRIPE_PRICE_VIP3)
-    return { level: 'VIP3', days: 30 }
-
-  if (priceId === process.env.STRIPE_PRICE_VIP2)
-    return { level: 'VIP2', days: 30 }
-
-  if (priceId === process.env.STRIPE_PRICE_VIP1)
-    return { level: 'VIP1', days: 30 }
-
-  return { level: 'VIP1', days: 30 }
+  expired_at: string | number
+  grace_until: string | number | null
+  updated_at: string | number
+  price_id: string | null
+  addons: Record<string, number> | null
 }
 
-/* =========================
-   Read
-========================= */
+const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000
+
+function mapRow(row: VIPUserRow): VIPState {
+  return {
+    level: row.level,
+    expiredAt: Number(row.expired_at),
+    graceUntil:
+      row.grace_until === null ? null : Number(row.grace_until),
+    updatedAt: Number(row.updated_at),
+    priceId: row.price_id ?? undefined,
+    addons: (row.addons ?? {}) as {
+      [key in VIPAddon]?: number
+    },
+  }
+}
+
+async function upsertVIP(
+  userId: string,
+  state: VIPState,
+): Promise<void> {
+  await pool.query(
+    `
+    INSERT INTO vip_users (
+      user_id,
+      level,
+      expired_at,
+      grace_until,
+      updated_at,
+      price_id,
+      addons
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      level = EXCLUDED.level,
+      expired_at = EXCLUDED.expired_at,
+      grace_until = EXCLUDED.grace_until,
+      updated_at = EXCLUDED.updated_at,
+      price_id = EXCLUDED.price_id,
+      addons = EXCLUDED.addons
+    `,
+    [
+      userId,
+      state.level,
+      state.expiredAt,
+      state.graceUntil,
+      state.updatedAt,
+      state.priceId ?? null,
+      JSON.stringify(state.addons ?? {}),
+    ],
+  )
+}
+
 export async function getUserVIPState(
-  userId: string
+  userId: string,
 ): Promise<VIPState | null> {
-  return mem.get(userId) ?? null
+  const result = await pool.query<VIPUserRow>(
+    `
+    SELECT
+      user_id,
+      level,
+      expired_at,
+      grace_until,
+      updated_at,
+      price_id,
+      addons
+    FROM vip_users
+    WHERE user_id = $1
+    LIMIT 1
+    `,
+    [userId],
+  )
+
+  const row = result.rows[0]
+  return row ? mapRow(row) : null
 }
 
-/* =========================
-   Write (결제 성공 SSOT)
-========================= */
+export async function isVIP(userId: string): Promise<boolean> {
+  const vip = await getUserVIPState(userId)
+  if (!vip) return false
+
+  const now = Date.now()
+
+  if (vip.level === 'VIP' && vip.expiredAt > now) return true
+  if (vip.graceUntil && vip.graceUntil > now) return true
+
+  return false
+}
+
+export async function setVIP(
+  userId: string,
+  days: number,
+): Promise<void> {
+  const now = Date.now()
+  const prev = await getUserVIPState(userId)
+
+  await upsertVIP(userId, {
+    level: 'VIP',
+    expiredAt: now + days * 86400000,
+    graceUntil: null,
+    updatedAt: now,
+    priceId: prev?.priceId,
+    addons: prev?.addons,
+  })
+
+  recordVIPChange({
+    userId,
+    before: prev?.level ?? 'FREE',
+    after: 'VIP',
+    reason: 'RECOVER',
+    at: now,
+  })
+}
+
 export async function applyVIPPaymentSuccess(
   userId: string,
-  priceId: string
-) {
+  priceId: string,
+  expiredAt: number,
+): Promise<void> {
   const now = Date.now()
-  const { level, days } = priceIdToVIP(priceId)
-  const prev = mem.get(userId)
+  const prev = await getUserVIPState(userId)
 
-  mem.set(userId, {
-    level,
+  await upsertVIP(userId, {
+    level: 'VIP',
     priceId,
-    expiredAt: now + days * 86400000,
+    expiredAt,
+    graceUntil: null,
     updatedAt: now,
     addons: prev?.addons,
   })
@@ -69,58 +157,75 @@ export async function applyVIPPaymentSuccess(
   recordVIPChange({
     userId,
     before: prev?.level ?? 'FREE',
-    after: level,
+    after: 'VIP',
     reason: 'PAYMENT',
     at: now,
   })
 }
 
-/* =========================
-   Downgrade / Expire
-========================= */
-export async function downgradeUserVIP(userId: string) {
-  const prev = mem.get(userId)
+export async function applyVIPPaymentSuccessByDays({
+  userId,
+  priceId,
+  days,
+}: {
+  userId: string
+  priceId: string
+  days: number
+}): Promise<void> {
+  await applyVIPPaymentSuccess(
+    userId,
+    priceId,
+    Date.now() + days * 86400000,
+  )
+}
+
+export async function downgradeUserVIP(
+  userId: string,
+): Promise<void> {
+  const prev = await getUserVIPState(userId)
   if (!prev) return
 
   const now = Date.now()
-  mem.set(userId, { ...prev, expiredAt: now, updatedAt: now })
+
+  await upsertVIP(userId, {
+    ...prev,
+    level: 'FREE',
+    expiredAt: now,
+    graceUntil: null,
+    updatedAt: now,
+  })
 
   recordVIPChange({
     userId,
     before: prev.level,
-    after: prev.level,
+    after: 'FREE',
     reason: 'CANCEL',
     at: now,
   })
 }
 
-export async function forceExpireVIP(userId: string) {
-  const prev = mem.get(userId)
-  if (!prev) return
+export async function applyGracePeriod(
+  userId: string,
+): Promise<void> {
+  const prev = await getUserVIPState(userId)
 
   const now = Date.now()
-  mem.set(userId, { ...prev, expiredAt: now, updatedAt: now })
 
-  recordVIPChange({
-    userId,
-    before: prev.level,
-    after: prev.level,
-    reason: 'EXPIRE',
-    at: now,
-  })
-}
+  if (!prev) {
+    await upsertVIP(userId, {
+      level: 'FREE',
+      expiredAt: now,
+      graceUntil: now + GRACE_PERIOD_MS,
+      updatedAt: now,
+      addons: {},
+    })
 
-/* =========================
-   Extend / Recover
-========================= */
-export async function extendVIP(userId: string, days: number) {
-  const prev = mem.get(userId)
-  if (!prev) return
+    return
+  }
 
-  const now = Date.now()
-  mem.set(userId, {
+  await upsertVIP(userId, {
     ...prev,
-    expiredAt: prev.expiredAt + days * 86400000,
+    graceUntil: now + GRACE_PERIOD_MS,
     updatedAt: now,
   })
 
@@ -128,6 +233,88 @@ export async function extendVIP(userId: string, days: number) {
     userId,
     before: prev.level,
     after: prev.level,
+    reason: 'GRACE',
+    at: now,
+  })
+}
+
+export async function forceExpireVIP(userId: string): Promise<void> {
+  const prev = await getUserVIPState(userId)
+  if (!prev) return
+
+  const now = Date.now()
+
+  await upsertVIP(userId, {
+    ...prev,
+    level: 'FREE',
+    expiredAt: now,
+    graceUntil: null,
+    updatedAt: now,
+  })
+
+  recordVIPChange({
+    userId,
+    before: prev.level,
+    after: 'FREE',
+    reason: 'EXPIRE',
+    at: now,
+  })
+}
+
+export async function expireOverdueVIPs(): Promise<number> {
+  const now = Date.now()
+
+  const result = await pool.query<{ user_id: string }>(
+    `
+    UPDATE vip_users
+    SET
+      level = 'FREE',
+      updated_at = $1
+    WHERE
+      level = 'VIP'
+      AND expired_at <= $1
+      AND (grace_until IS NULL OR grace_until <= $1)
+    RETURNING user_id
+    `,
+    [now],
+  )
+
+  for (const row of result.rows) {
+    recordVIPChange({
+      userId: row.user_id,
+      before: 'VIP',
+      after: 'FREE',
+      reason: 'EXPIRE',
+      at: now,
+    })
+  }
+
+  return result.rowCount ?? 0
+}
+
+export async function extendVIP(
+  userId: string,
+  days: number,
+): Promise<void> {
+  const prev = await getUserVIPState(userId)
+  if (!prev) return
+
+  const now = Date.now()
+
+  const base = Math.max(prev.expiredAt, now)
+
+  await upsertVIP(userId, {
+    ...prev,
+    level: 'VIP',
+    expiredAt: base + days * 86400000,
+    graceUntil: null,
+    updatedAt: now,
+  })
+
+  recordVIPChange({
+    userId,
+    before: prev.level,
+    after: 'VIP',
     reason: 'EXTEND',
     at: now,
   })
@@ -136,14 +323,15 @@ export async function extendVIP(userId: string, days: number) {
 export async function recoverVIP(
   userId: string,
   level: VIPLevel,
-  days: number
-) {
+  days: number,
+): Promise<void> {
   const now = Date.now()
-  const prev = mem.get(userId)
+  const prev = await getUserVIPState(userId)
 
-  mem.set(userId, {
+  await upsertVIP(userId, {
     level,
     expiredAt: now + days * 86400000,
+    graceUntil: null,
     updatedAt: now,
     addons: prev?.addons,
   })
@@ -155,16 +343,4 @@ export async function recoverVIP(
     reason: 'RECOVER',
     at: now,
   })
-}
-
-/* =========================
-   Auto Extend
-========================= */
-export async function enableAutoExtend(userId: string, days: number) {
-  autoExtendOption.set(userId, days)
-}
-
-export async function applyAutoExtendIfEnabled(userId: string) {
-  const days = autoExtendOption.get(userId)
-  if (days) await extendVIP(userId, days)
 }

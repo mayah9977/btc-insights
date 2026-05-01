@@ -23,26 +23,15 @@ export function VIP3MiniStats({
         select-none
       "
     >
-      <span>📡 SSE: <strong className="text-[#D1D4DC]">{sse}</strong></span>
+      <span>
+        📡 SSE: <strong className="text-[#D1D4DC]">{sse}</strong>
+      </span>
 
       {ws && (
-        <span>⚡ WS: <strong className="text-[#D1D4DC]">{ws}</strong></span>
+        <span>
+          ⚡ WS: <strong className="text-[#D1D4DC]">{ws}</strong>
+        </span>
       )}
-
-      <span>
-        📉 Drop:{' '}
-        <strong
-          className={
-            dropRate > 0.05
-              ? 'text-red-400'
-              : dropRate > 0.01
-              ? 'text-yellow-400'
-              : 'text-emerald-400'
-          }
-        >
-          {(dropRate * 100).toFixed(1)}%
-        </strong>
-      </span>
     </div>
   )
 }

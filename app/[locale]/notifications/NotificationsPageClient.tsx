@@ -224,7 +224,6 @@ function NotificationCard({
               type="button"
               onClick={handleConfirm}
               className="inline-flex min-h-[36px] min-w-[64px] items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15 hover:text-emerald-200"
-              aria-label="confirm notification"
             >
               OK
             </button>
@@ -236,7 +235,6 @@ function NotificationCard({
                 void onDelete(item.id)
               }}
               className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-white/10 bg-white/5 text-[11px] text-gray-300 transition hover:bg-white/10 hover:text-white"
-              aria-label="delete notification"
             >
               ❌
             </button>
@@ -259,6 +257,30 @@ export default function NotificationsPageClient({
   initialUnreadCount,
   isVIP,
 }: Props) {
+  if (!isVIP) {
+    return (
+      <main className="min-h-screen bg-black px-4 py-20 text-white">
+        <div className="mx-auto max-w-md text-center">
+          <div className="rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-white/5 p-8 backdrop-blur-xl">
+            <div className="mb-4 text-3xl">🔒</div>
+            <h2 className="text-xl font-semibold text-white">
+              VIP 전용 기능입니다
+            </h2>
+            <p className="mt-2 text-sm text-gray-400">
+              실시간 알림 히스토리는 VIP 회원만 확인할 수 있습니다.
+            </p>
+            <button
+              onClick={() => (window.location.href = '/ko/vip/upgrade')}
+              className="mt-6 w-full rounded-xl bg-yellow-500 py-3 text-sm font-semibold text-black transition hover:bg-yellow-400"
+            >
+              VIP 업그레이드
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   const notifications = useNotificationStore(state => state.notifications)
   const unreadCount = useNotificationStore(state => state.unreadCount)
   const setServerSnapshot = useNotificationStore(state => state.setServerSnapshot)
@@ -287,12 +309,7 @@ export default function NotificationsPageClient({
       unreadCount: initialUnreadCount,
       isVIP,
     })
-  }, [
-    initialNotifications,
-    initialUnreadCount,
-    isVIP,
-    setServerSnapshot,
-  ])
+  }, [initialNotifications, initialUnreadCount, isVIP, setServerSnapshot])
 
   useEffect(() => {
     const handleAlert = (event: Event) => {

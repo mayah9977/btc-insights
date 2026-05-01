@@ -1,14 +1,5 @@
 // lib/vip/vipAuditLog.ts
-import { VIPLevel } from './vipTypes'
-
-export type VIPAuditReason =
-  | 'ADMIN'
-  | 'PAYMENT'
-  | 'CANCEL'
-  | 'EXPIRE'
-  | 'EXTEND'
-  | 'ABUSE'
-  | 'RECOVER'
+import type { VIPLevel, VIPAuditReason } from './vipTypes'
 
 export type VIPAuditLog = {
   userId: string

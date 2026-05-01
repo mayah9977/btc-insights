@@ -1,6 +1,10 @@
+// app/[locale]/notices/page.tsx
+
 import NoticesPageClient from './NoticesPageClient'
-import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 import { getNoticeNotifications } from '@/lib/notification/repository'
+import { logger } from '@/lib/logger'
 
 export default async function NoticesPage({
   searchParams,
@@ -8,8 +12,14 @@ export default async function NoticesPage({
   searchParams?: { from?: string }
 }) {
   try {
-    const viewerId = 'local'
-    const isVIP = await getUserVIP('local')
+    const user = await getCurrentUser()
+
+    const viewerId = user?.id ?? 'guest'
+    const vipLevel = user
+      ? await getUserVIPLevel(user.id)
+      : 'FREE'
+
+    const isVIP = vipLevel === 'VIP'
 
     const notifications = await getNoticeNotifications({
       viewerId,
@@ -18,12 +28,19 @@ export default async function NoticesPage({
 
     return (
       <>
-        {/* 🔥 추가: 접근 제한 안내 메시지 */}
-        {searchParams?.from === 'notifications' && (
+        {/* 🔥 VIP 안내 UI */}
+        {searchParams?.from && (
           <main className="bg-black px-4 pt-24 text-white">
             <div className="mx-auto mb-6 max-w-2xl rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-sm text-yellow-200">
-              ⚠️ 알림(Notification)은 VIP 사용자만 이용 가능합니다.  
-              현재 공지사항 페이지로 이동되었습니다.
+              ⚠️ 해당 기능은 VIP 전용입니다.
+              <div className="mt-2">
+                <a
+                  href="/ko/vip"
+                  className="text-emerald-400 underline"
+                >
+                  VIP 업그레이드 →
+                </a>
+              </div>
             </div>
           </main>
         )}
@@ -34,13 +51,11 @@ export default async function NoticesPage({
       </>
     )
   } catch (error) {
-    console.error('[NOTICES_PAGE]', error)
+    logger.error('[NOTICES_PAGE]', error)
 
     return (
       <main className="min-h-screen bg-black px-4 py-20 text-white">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-6">
-          Failed to load notices.
-        </div>
+        Failed to load notices.
       </main>
     )
   }

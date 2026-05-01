@@ -16,7 +16,7 @@ export default function SubscribeButton() {
       bg-gradient-to-r from-yellow-500 to-red-500
       text-black font-bold text-lg shadow-xl"
     >
-      🔓 PRO 카지노 입장 ($19.99)
+      🔓 VIP입장 ($19.99)
     </button>
   );
 }
