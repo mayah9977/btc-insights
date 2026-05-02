@@ -10,7 +10,7 @@ export default function ExtremeFullScreen() {
 
   if (
     !POLICY.enableExtremeVisuals ||
-    vipLevel !== 'VIP3' ||
+    vipLevel !== 'VIP' ||
     !extreme
   ) {
     return null
@@ -23,7 +23,7 @@ export default function ExtremeFullScreen() {
           EXTREME
         </div>
         <p className="mt-4 text-red-300 font-bold">
-          VIP3 FULL POWER MODE
+          VIP FULL POWER MODE
         </p>
       </div>
     </div>
