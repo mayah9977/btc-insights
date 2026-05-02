@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { VIPLevel } from '@/lib/vip/vipTypes';
+import type { VIPLevel } from '@/lib/vip/vipTypes';
 import { setAdminVIP } from '@/lib/vip/vipAdmin';
 
 export default function AdminVIPPage() {
   const [userId, setUserId] = useState('');
-  const [level, setLevel] = useState<VIPLevel>('VIP1');
+  const [level, setLevel] = useState<VIPLevel>('VIP');
   const [priceId, setPriceId] = useState('');
 
   /** 1️⃣ Admin Override (즉시 VIP 강제 적용) */
@@ -16,7 +16,7 @@ export default function AdminVIPPage() {
     alert(`Admin Override 적용: ${userId} → ${level}`);
   };
 
-  /** 2️⃣ 강제 만료 (Grace 정책에 맡김) */
+  /** 2️⃣ 강제 만료 */
   const forceExpire = async () => {
     if (!userId) return alert('userId를 입력하세요');
 
@@ -32,7 +32,7 @@ export default function AdminVIPPage() {
     alert(`강제 만료 처리됨: ${userId}`);
   };
 
-  /** 3️⃣ 복구 (결제 없이 VIP 재부여) */
+  /** 3️⃣ 복구 (priceId 기준) */
   const recoverVIP = async () => {
     if (!userId || !priceId) {
       return alert('userId와 priceId를 입력하세요');
@@ -70,9 +70,7 @@ export default function AdminVIPPage() {
         style={{ width: '100%', marginTop: 12 }}
       >
         <option value="FREE">FREE</option>
-        <option value="VIP1">VIP1</option>
-        <option value="VIP2">VIP2</option>
-        <option value="VIP3">VIP3</option>
+        <option value="VIP">VIP</option>
       </select>
 
       {/* Admin Override */}
@@ -97,7 +95,7 @@ export default function AdminVIPPage() {
 
       {/* 복구 */}
       <input
-        placeholder="priceId (VIP1/VIP2/VIP3)"
+        placeholder="priceId (예: MONTHLY / YEAR)"
         value={priceId}
         onChange={(e) => setPriceId(e.target.value)}
         style={{ width: '100%', marginTop: 12 }}
