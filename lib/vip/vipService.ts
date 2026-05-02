@@ -1,18 +1,96 @@
-// lib/vip/vipService.ts
 import type { VIPLevel } from './vipTypes'
 import {
-  recoverVIP,
-  getUserVIPState,
+  applyVIPPaymentSuccess,
+  downgradeUserVIP,
   forceExpireVIP,
+  getUserVIPState,
+  recoverVIP,
 } from './vipDB'
-
 import { appendAudit } from './vipAuditStore'
 import { pushVipUpdate } from './vipSSEHub'
 import { notifyVipUpgrade } from './vipNotifier'
 
-/* =========================
- * 1️⃣ VIP 업그레이드 (Stripe / Admin)
- * ========================= */
+type GrantVIPInput = {
+  userId: string
+  expiredAt: number
+  ref: string
+  source: 'toss' | 'stripe' | 'manual'
+}
+
+type CancelVIPInput = {
+  userId: string
+  source: 'toss' | 'stripe' | 'manual'
+  reason?: string
+}
+
+export async function grantVIP({
+  userId,
+  expiredAt,
+  ref,
+  source,
+}: GrantVIPInput) {
+  const prev = await getUserVIPState(userId)
+  const before: VIPLevel = prev?.level ?? 'FREE'
+
+  await applyVIPPaymentSuccess(userId, ref, expiredAt)
+
+  appendAudit({
+    userId,
+    before,
+    after: 'VIP',
+    reason: 'PAYMENT',
+    at: Date.now(),
+  })
+
+  pushVipUpdate(userId, {
+    vipLevel: 'VIP',
+  })
+
+  await notifyVipUpgrade(userId, before, 'VIP')
+
+  return {
+    userId,
+    before,
+    after: 'VIP' as VIPLevel,
+    expiredAt,
+    ref,
+    source,
+  }
+}
+
+export async function cancelVIP({
+  userId,
+  source,
+  reason,
+}: CancelVIPInput) {
+  const prev = await getUserVIPState(userId)
+  if (!prev || prev.level === 'FREE') return null
+
+  const before: VIPLevel = prev.level
+
+  await downgradeUserVIP(userId)
+
+  appendAudit({
+    userId,
+    before,
+    after: 'FREE',
+    reason: 'CANCEL',
+    at: Date.now(),
+  })
+
+  pushVipUpdate(userId, {
+    vipLevel: 'FREE',
+  })
+
+  return {
+    userId,
+    before,
+    after: 'FREE' as VIPLevel,
+    source,
+    reason,
+  }
+}
+
 export async function upgradeUserVip(
   userId: string,
   vipLevel: VIPLevel,
@@ -21,10 +99,8 @@ export async function upgradeUserVip(
   const prev = await getUserVIPState(userId)
   const before: VIPLevel = prev?.level ?? 'FREE'
 
-  // ✅ VIP 부여 / 복구
   await recoverVIP(userId, vipLevel, days)
 
-  // Audit
   appendAudit({
     userId,
     before,
@@ -33,30 +109,21 @@ export async function upgradeUserVip(
     at: Date.now(),
   })
 
-  // ✅ SSE (string SSOT)
   pushVipUpdate(userId, {
     vipLevel,
   })
 
-  // Notification
   await notifyVipUpgrade(userId, before, vipLevel)
-
-  console.log('[VIP] upgrade', userId, before, '→', vipLevel)
 }
 
-/* =========================
- * 2️⃣ VIP 최종 만료 (Cron)
- * ========================= */
 export async function expireUserVip(userId: string) {
   const prev = await getUserVIPState(userId)
   if (!prev || prev.level === 'FREE') return
 
   const before: VIPLevel = prev.level
 
-  // DB
   await forceExpireVIP(userId)
 
-  // Audit
   appendAudit({
     userId,
     before,
@@ -65,10 +132,7 @@ export async function expireUserVip(userId: string) {
     at: Date.now(),
   })
 
-  // ✅ SSE (string SSOT)
   pushVipUpdate(userId, {
     vipLevel: 'FREE',
   })
-
-  console.log('[VIP] expired → FREE', userId)
 }
