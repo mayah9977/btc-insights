@@ -1,14 +1,8 @@
 'use client'
 
 import { useVIP } from '@/lib/vip/vipClient'
-import type { VIPLevel } from './vipAccess'
+import type { VIPLevel } from '@/lib/vip/vipTypes'
 
-/**
- * ⚠️ LEGACY BRIDGE
- * ------------------------------------
- * 기존 코드 호환용 헬퍼 훅
- * 실제 Context는 VIPProvider 단일 사용
- */
 export function useVIPLevel(): {
   vipLevel: VIPLevel
   extremeForced: boolean
@@ -17,6 +11,6 @@ export function useVIPLevel(): {
 
   return {
     vipLevel,
-    extremeForced: vipLevel === 'VIP3',
+    extremeForced: vipLevel === 'VIP',
   }
 }
