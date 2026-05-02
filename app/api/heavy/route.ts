@@ -1,57 +1,35 @@
-// app/api/heavy/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { getUserVIPLevel } from '@/lib/vip/vipServer';
+import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 
-/**
- * 고부하 API 예시
- * - VIP3: Rate Limit 해제
- * - VIP1/VIP2/FREE: 제한 적용
- */
-export async function GET(req: NextRequest) {
-  /**
-   * ⚠️ 실제 서비스에서는
-   * - cookie
-   * - session
-   * - JWT
-   * 등에서 userId를 꺼내야 함
-   */
-  const userId = req.headers.get('x-user-id');
+export async function POST(req: NextRequest) {
+  const user = await getCurrentUser()
 
-  if (!userId) {
+  if (!user) {
     return NextResponse.json(
       { error: 'Unauthorized' },
-      { status: 401 }
-    );
+      { status: 401 },
+    )
   }
 
-  // 🔑 VIP 판단 (SSOT)
-  const vipLevel = await getUserVIPLevel(userId);
+  const vipLevel = await getUserVIPLevel(user.id)
 
   /**
-   * 🚦 Rate Limit
-   * - VIP3만 통과
+   * 접근 정책
+   * - VIP만 통과
    */
-  if (vipLevel !== 'VIP3') {
+  if (vipLevel !== 'VIP') {
     return NextResponse.json(
       {
-        error: 'VIP3 only API',
-        currentVIP: vipLevel,
+        error: 'VIP only API',
       },
-      { status: 403 }
-    );
+      { status: 403 },
+    )
   }
 
-  /**
-   * ✅ VIP3 전용 고부하 처리
-   * (실제 로직은 여기 교체)
-   */
+  // 실제 heavy 작업 (예시)
   return NextResponse.json({
     ok: true,
-    vip: vipLevel,
-    data: {
-      signal: 'EXTREME_WHALE_ACTIVITY',
-      confidence: 0.97,
-      generatedAt: Date.now(),
-    },
-  });
+    message: 'Heavy API executed',
+  })
 }
