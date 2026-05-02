@@ -16,8 +16,8 @@ export function ExtremeThemeProvider({
 
   const value = useMemo(
     () => ({
-      // 🔥 VIP3 이상일 때만 Extreme 테마 허용
-      extreme: vipLevel === 'VIP3',
+      // VIP 구조: FREE | VIP
+      extreme: vipLevel === 'VIP',
     }),
     [vipLevel]
   )
