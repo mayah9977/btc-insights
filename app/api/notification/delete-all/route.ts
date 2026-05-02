@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server'
-import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 import { deleteAllNotifications } from '@/lib/notification/repository'
 
 export async function POST() {
   try {
-    const viewerId = 'local'
-    const isVIP = await getUserVIP('local')
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Unauthorized',
+        },
+        { status: 401 },
+      )
+    }
+
+    const viewerId = user.id
+
+    const vipLevel = await getUserVIPLevel(viewerId)
+    const isVIP = vipLevel === 'VIP'
 
     const result = await deleteAllNotifications({
       viewerId,
