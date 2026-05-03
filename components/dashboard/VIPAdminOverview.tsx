@@ -42,8 +42,8 @@ export function VIPAdminOverview() {
         </div>
       </div>
 
-      {/* Extreme 상태 */}
-      {vipLevel === 'VIP3' && (
+      {/* Extreme 상태 (VIP일 때만 표시) */}
+      {vipLevel === 'VIP' && (
         <div className="border rounded p-3 space-y-2">
           <div className="text-sm">
             Extreme 평균 신뢰도:{' '}
