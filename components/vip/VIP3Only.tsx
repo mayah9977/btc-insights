@@ -1,20 +1,19 @@
-// components/vip/VIP3Only.tsx
-'use client';
+'use client'
 
-import { ReactNode } from 'react';
-import { useVIP } from '@/lib/vip/vipClient';
+import type { ReactNode } from 'react'
+import { useVIP } from '@/lib/vip/vipClient'
 
 type Props = {
-  children: ReactNode;
-  fallback?: ReactNode;
-};
+  children: ReactNode
+  fallback?: ReactNode
+}
 
 export function VIP3Only({ children, fallback = null }: Props) {
-  const { vipLevel } = useVIP();
+  const { vipLevel } = useVIP()
 
-  if (vipLevel !== 'VIP3') {
-    return <>{fallback}</>;
+  if (vipLevel !== 'VIP') {
+    return <>{fallback}</>
   }
 
-  return <>{children}</>;
+  return <>{children}</>
 }
