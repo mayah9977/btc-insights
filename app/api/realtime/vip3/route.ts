@@ -6,16 +6,21 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const encoder = new TextEncoder()
-const sseConnections = new Map<string, number>()
+
+// 👉 타입 명시 (중요)
+const sseConnections: Map<string, number> = new Map()
 
 export async function GET(req: NextRequest) {
   const userId = req.headers.get('x-user-id')
+
   if (!userId) {
     return new Response('Unauthorized', { status: 401 })
   }
 
   const vip = await getUserVIPLevel(userId)
-  if (vip !== 'VIP3') {
+
+  // ✅ VIP 기준으로 변경
+  if (vip !== 'VIP') {
     return new Response('Forbidden', { status: 403 })
   }
 
@@ -38,17 +43,18 @@ export async function GET(req: NextRequest) {
         )
       }
 
-      /* ✅ comment ping (중요) */
-      controller.enqueue(encoder.encode(`: vip3 connected\n\n`))
+      // ✅ 연결 확인 ping
+      controller.enqueue(encoder.encode(`: vip connected\n\n`))
 
-      /* INIT */
+      // INIT
       send({ type: 'INIT', vip })
 
       const timer = setInterval(() => {
         if (closed) return
+
         try {
           send({
-            type: 'VIP3_STREAM',
+            type: 'VIP_STREAM',
             signal: 'EXTREME_WHALE_ACTIVITY',
             score: Number(Math.random().toFixed(3)),
             at: Date.now(),
@@ -58,7 +64,7 @@ export async function GET(req: NextRequest) {
         }
       }, 2000)
 
-      /* ✅ Abort cleanup */
+      // cleanup
       req.signal.addEventListener(
         'abort',
         () => {
