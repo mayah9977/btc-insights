@@ -12,9 +12,8 @@ type Props = {
 export function VIPGuard({ require, children }: Props) {
   const { vipLevel } = useVIP()
 
-  const order: VIPLevel[] = ['FREE', 'VIP1', 'VIP2', 'VIP3']
-  const allowed =
-    order.indexOf(vipLevel) >= order.indexOf(require)
+  // ✅ 단순 구조: FREE vs VIP
+  const allowed = require === 'VIP' && vipLevel === 'VIP'
 
   if (allowed) return <>{children}</>
 
