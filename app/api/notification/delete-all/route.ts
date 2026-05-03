@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
-import { deleteNotification } from '@/lib/notification/repository'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
+import { deleteAllNotifications } from '@/lib/notification/repository'
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const user = await getCurrentUser()
 
@@ -18,33 +19,20 @@ export async function POST(req: NextRequest) {
 
     const viewerId = user.id
 
-    let body: { id?: string } = {}
+    const vipLevel = await getUserVIPLevel(viewerId)
+    const isVIP = vipLevel === 'VIP'
 
-    try {
-      body = await req.json()
-    } catch {}
-
-    if (!body.id) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'Missing id',
-        },
-        { status: 400 },
-      )
-    }
-
-    const result = await deleteNotification({
+    const result = await deleteAllNotifications({
       viewerId,
-      id: body.id,
+      isVIP,
     })
 
     return NextResponse.json({
       ok: true,
-      deleted: result,
+      deletedCount: result.deletedCount,
     })
   } catch (error) {
-    console.error('[DELETE_NOTIFICATION]', error)
+    console.error('[DELETE_ALL_NOTIFICATIONS]', error)
 
     return NextResponse.json(
       { ok: false },

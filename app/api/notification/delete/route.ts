@@ -1,36 +1,48 @@
-import { NextResponse } from 'next/server'
-import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { deleteNotification } from '@/lib/notification/repository'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const viewerId = 'local'
-    await getUserVIP('local')
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Unauthorized',
+        },
+        { status: 401 },
+      )
+    }
+
+    const viewerId = user.id
 
     let body: { id?: string } = {}
 
     try {
       body = await req.json()
-    } catch {
-      return NextResponse.json(
-        { ok: false, reason: 'invalid-json-body' },
-        { status: 400 },
-      )
-    }
+    } catch {}
 
     if (!body.id) {
       return NextResponse.json(
-        { ok: false, reason: 'missing-id' },
+        {
+          ok: false,
+          error: 'Missing id',
+        },
         { status: 400 },
       )
     }
 
-    await deleteNotification({
+    const result = await deleteNotification({
       viewerId,
       id: body.id,
     })
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      ok: true,
+      deleted: result,
+    })
   } catch (error) {
     console.error('[DELETE_NOTIFICATION]', error)
 
