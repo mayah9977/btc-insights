@@ -14,7 +14,7 @@ export function NotificationConsumer() {
 
       items.forEach((item) => {
         processNotification(item, {
-          isVIP3: vipLevel === 'VIP3',
+          isVIP: vipLevel === 'VIP',
         });
       });
     }, 1000);
