@@ -1,7 +1,6 @@
-// /lib/push/pushOnAlert.ts
 import { sendPushToUser } from './push'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
-import { getUserVIP } from '@/lib/auth/getUserVIP' // ✅ added VIP logic
+import { getUserVIPLevel } from '@/lib/vip/vipServer' // ✅ 수정 (userId 기반 VIP 조회)
 
 export type PushAlertPayload = {
   userId: string
@@ -99,13 +98,15 @@ export async function pushIndicatorTriggered(
 
   if (isQuietHour(settings.quietHours)) return
 
-  // ✅ added VIP logic
-  const isVIP = await getUserVIP(userId)
+  // ✅ VIP 체크 (userId 기반)
+  const vipLevel = await getUserVIPLevel(userId)
+  const isVIP = vipLevel === 'VIP'
+
   if (!isVIP) {
     return
   }
 
-  // ✅ added indicator filter
+  // ✅ indicator 필터
   if (
     settings.indicatorEnabled &&
     settings.indicatorEnabled[indicator] === false
