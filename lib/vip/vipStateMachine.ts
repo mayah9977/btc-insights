@@ -1,6 +1,4 @@
-// lib/vip/vipStateMachine.ts
-
-import { VIPLevel } from './vipTypes'
+import { VIPLevel, VIPAuditReason } from './vipTypes'
 import {
   getUserVIPState,
   recoverVIP,
@@ -8,7 +6,6 @@ import {
 } from './vipDB'
 import {
   recordVIPChange,
-  VIPAuditReason,
 } from './vipAuditLog'
 
 export type VipStatus =
