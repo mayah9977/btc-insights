@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserVIP } from '@/lib/auth/getUserVIP'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 import {
   getNotificationsLast12h,
   getUnreadCountLast12h,
@@ -7,8 +8,25 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const isVIP = await getUserVIP('local')
-    const viewerId = 'local'
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          notifications: [],
+          unreadCount: 0,
+          isVIP: false,
+        },
+        { status: 401 },
+      )
+    }
+
+    const viewerId = user.id
+
+    const vipLevel = await getUserVIPLevel(viewerId)
+    const isVIP = vipLevel === 'VIP'
+
     const mode = req.nextUrl.searchParams.get('mode')
 
     const unreadCount = await getUnreadCountLast12h({
