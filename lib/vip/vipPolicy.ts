@@ -1,14 +1,12 @@
-import { VIPLevel } from './vipTypes';
+import type { VIPLevel } from './vipTypes'
 
 /**
  * VIP 등급 우선순위 (SSOT)
  */
 export const VIP_ORDER: VIPLevel[] = [
   'FREE',
-  'VIP1',
-  'VIP2',
-  'VIP3',
-];
+  'VIP',
+]
 
 /**
  * 🔐 VIP 접근 권한 체크
@@ -21,7 +19,7 @@ export function hasVipAccess(
   return (
     VIP_ORDER.indexOf(user) >=
     VIP_ORDER.indexOf(required)
-  );
+  )
 }
 
 /**
@@ -31,13 +29,9 @@ export function getMaxAlertsByVip(
   level: VIPLevel
 ): number {
   switch (level) {
-    case 'VIP3':
-      return 100;
-    case 'VIP2':
-      return 30;
-    case 'VIP1':
-      return 10;
+    case 'VIP':
+      return 100
     default:
-      return 3; // FREE
+      return 3 // FREE
   }
 }
