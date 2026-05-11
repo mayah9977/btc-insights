@@ -135,26 +135,31 @@ function BottomTab() {
   const tabs = [
     { label: 'Home', path: `/${locale}/casino` },
     { label: 'VIP', path: `/${locale}/casino/vip` },
+    { label: 'VIP Login', path: `/${locale}/vip-login` },
     { label: 'Alerts', path: `/${locale}/alerts` },
     { label: 'Ref', path: `/${locale}/referrals` },
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 grid h-14 grid-cols-4 border-t border-white/10 bg-black/90 backdrop-blur">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 grid h-14 grid-cols-5 border-t border-white/10 bg-black/90 backdrop-blur">
       {tabs.map(tab => {
         const isHome = tab.path === `/${locale}/casino`
         const isVIP = tab.path === `/${locale}/casino/vip`
+        const isVIPLogin = tab.path === `/${locale}/vip-login`
 
         const active =
           (isHome && cleanPath === `/${locale}/casino`) ||
           (isVIP && cleanPath.startsWith(`/${locale}/casino/vip`)) ||
-          (!isHome && !isVIP && cleanPath.startsWith(tab.path))
+          (isVIPLogin && cleanPath === `/${locale}/vip-login`) ||
+          (!isHome && !isVIP && !isVIPLogin && cleanPath.startsWith(tab.path))
 
         const icon =
           tab.label === 'Home'
             ? '🏠'
             : tab.label === 'VIP'
             ? '💎'
+            : tab.label === 'VIP Login'
+            ? '🔐'
             : tab.label === 'Alerts'
             ? '🔔'
             : '💰'
@@ -166,7 +171,7 @@ function BottomTab() {
               navigator.vibrate?.(8)
               router.push(tab.path)
             }}
-            className={`text-xs flex flex-col items-center justify-center transition-all duration-150 active:scale-95 ${
+            className={`text-[10px] flex flex-col items-center justify-center transition-all duration-150 active:scale-95 ${
               active ? 'scale-105 font-semibold text-white' : 'text-gray-400'
             }`}
           >

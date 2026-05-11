@@ -1,3 +1,4 @@
+// lib/notification/notificationStore.ts
 'use client'
 
 import { create } from 'zustand'
@@ -18,20 +19,20 @@ type NotificationStore = {
   unreadCount: number
   isVIP: boolean
   initialized: boolean
+  authenticated: boolean
 
   setServerSnapshot: (payload: {
     notifications: NotificationViewItem[]
     unreadCount: number
     isVIP: boolean
+    authenticated?: boolean
   }) => void
 
   pushIncoming: (item: NotificationViewItem) => void
   loadUnreadCount: () => Promise<void>
   markOneRead: (id: string) => Promise<void>
   markAllRead: () => Promise<void>
-  // 🔥 NEW
   deleteOne: (id: string) => Promise<void>
-  // 🔥 NEW
   deleteAll: () => Promise<void>
 }
 
@@ -52,46 +53,55 @@ function mergeNotifications(
   return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt)
 }
 
+async function safeFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, {
+    ...init,
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      ...(init?.headers || {}),
+    },
+  })
+}
+
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
   unreadCount: 0,
   isVIP: false,
   initialized: false,
+  authenticated: false,
 
-  setServerSnapshot: ({ notifications, unreadCount, isVIP }) => {
+  setServerSnapshot: ({ notifications, unreadCount, isVIP, authenticated }) => {
     const merged = mergeNotifications(get().notifications, notifications)
 
     set({
       notifications: merged,
       unreadCount,
       isVIP,
+      authenticated: authenticated ?? true,
       initialized: true,
     })
   },
 
   pushIncoming: item => {
-    const { isVIP, notifications, unreadCount } = get()
+    const { isVIP, notifications, unreadCount, authenticated } = get()
+
+    if (!authenticated) return
 
     if (!isVIP && item.type !== 'NOTICE') {
       return
     }
 
-    // 🔥 MODIFIED: id 기반 dedupe
     const existsById = notifications.some(n => n.id === item.id)
-    if (existsById) {
-      return
-    }
+    if (existsById) return
 
-    // 🔥 MODIFIED: 내용 기반 dedupe (type + title + createdAt)
     const existsByContent = notifications.some(
       n =>
         n.type === item.type &&
         n.title === item.title &&
         n.createdAt === item.createdAt,
     )
-    if (existsByContent) {
-      return
-    }
+    if (existsByContent) return
 
     set({
       notifications: [item, ...notifications],
@@ -100,45 +110,69 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   },
 
   loadUnreadCount: async () => {
-    const res = await fetch('/api/notification?mode=badge', {
-      cache: 'no-store',
-    })
+    try {
+      const res = await safeFetch('/api/notification?mode=badge')
 
-    if (!res.ok) {
-      return
+      if (!res.ok) {
+        set({
+          authenticated: false,
+          unreadCount: 0,
+          isVIP: false,
+          initialized: true,
+        })
+        return
+      }
+
+      const data = await res.json()
+
+      set({
+        unreadCount: data.unreadCount ?? 0,
+        isVIP: data.isVIP ?? false,
+        authenticated: data.authenticated ?? false,
+        initialized: true,
+      })
+    } catch (error) {
+      console.error('[NOTIFICATION_LOAD_UNREAD]', error)
+
+      set({
+        authenticated: false,
+        unreadCount: 0,
+        isVIP: false,
+        initialized: true,
+      })
     }
-
-    const data = await res.json()
-
-    set({
-      unreadCount: data.unreadCount ?? 0,
-      isVIP: data.isVIP ?? false,
-      initialized: true,
-    })
   },
 
   markOneRead: async id => {
+    const { authenticated } = get()
+    if (!authenticated) return
+
     const current = get().notifications
     const target = current.find(item => item.id === id)
 
-    if (!target || target.read) {
-      return
-    }
+    if (!target || target.read) return
+
+    const prevNotifications = current
+    const prevUnreadCount = get().unreadCount
 
     set({
       notifications: current.map(item =>
         item.id === id ? { ...item, read: true } : item,
       ),
-      unreadCount: Math.max(0, get().unreadCount - 1),
+      unreadCount: Math.max(0, prevUnreadCount - 1),
     })
 
-    const res = await fetch('/api/notification/read', {
+    const res = await safeFetch('/api/notification/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: [id] }),
     })
 
     if (!res.ok) {
+      set({
+        notifications: prevNotifications,
+        unreadCount: prevUnreadCount,
+      })
       return
     }
 
@@ -150,7 +184,11 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   },
 
   markAllRead: async () => {
+    const { authenticated } = get()
+    if (!authenticated) return
+
     const current = get().notifications
+    const prevUnreadCount = get().unreadCount
 
     set({
       notifications: current.map(item => ({
@@ -160,13 +198,17 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       unreadCount: 0,
     })
 
-    const res = await fetch('/api/notification/read', {
+    const res = await safeFetch('/api/notification/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
 
     if (!res.ok) {
+      set({
+        notifications: current,
+        unreadCount: prevUnreadCount,
+      })
       return
     }
 
@@ -177,14 +219,14 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     })
   },
 
-  // 🔥 NEW
   deleteOne: async id => {
+    const { authenticated } = get()
+    if (!authenticated) return
+
     const current = get().notifications
     const target = current.find(item => item.id === id)
 
-    if (!target) {
-      return
-    }
+    if (!target) return
 
     const prevNotifications = current
     const prevUnreadCount = get().unreadCount
@@ -197,7 +239,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       ),
     })
 
-    const res = await fetch('/api/notification/delete', {
+    const res = await safeFetch('/api/notification/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
@@ -211,10 +253,11 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     }
   },
 
-  // 🔥 NEW
   deleteAll: async () => {
+    const { authenticated } = get()
+    if (!authenticated) return
+
     const current = get().notifications
-    const prevNotifications = current
     const prevUnreadCount = get().unreadCount
 
     set({
@@ -222,7 +265,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       unreadCount: 0,
     })
 
-    const res = await fetch('/api/notification/delete-all', {
+    const res = await safeFetch('/api/notification/delete-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -230,7 +273,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
 
     if (!res.ok) {
       set({
-        notifications: prevNotifications,
+        notifications: current,
         unreadCount: prevUnreadCount,
       })
     }

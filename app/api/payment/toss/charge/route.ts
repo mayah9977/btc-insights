@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getBillingKey, markBillingPaymentFailed, markBillingPaymentSuccess } from '@/lib/toss/tossDB'
 import { chargeBillingKey } from '@/lib/toss/tossClient'
-import { getVIPPlan, isVIPPlan } from '@/lib/payment/vipPlans'
+import { getVIPPlan, isVIPPlan } from '@/lib/payments/vipPlans'
 import {
   applyGracePeriod,
   applyVIPPaymentSuccessByDays,

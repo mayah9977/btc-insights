@@ -1,7 +1,8 @@
+// components/casino/cta/HeroCTAMobile.tsx
 'use client'
 
-import Link from 'next/link'
 import { motion } from 'framer-motion'
+import { useRouter, useParams } from 'next/navigation'
 
 export default function HeroCTAMobile({
   isLoggedIn,
@@ -10,17 +11,30 @@ export default function HeroCTAMobile({
   isLoggedIn: boolean
   isVIP: boolean
 }) {
-  let href = '/ko/login'
-  let label = '로그인 후 계속하기'
+  const router = useRouter()
+  const params = useParams()
 
-  if (isLoggedIn && !isVIP) {
-    href = '/ko/account/upgrade'
-    label = 'VIP 권한 활성화'
-  }
+  const locale =
+    typeof params?.locale === 'string' ? params.locale : 'ko'
 
   if (isVIP) {
-    href = '/ko/casino/vip'
-    label = 'VIP 브리핑 입장'
+    return null
+  }
+
+  const label = !isLoggedIn
+    ? 'VIP 로그인하기'
+    : 'VIP 권한 활성화'
+
+  const handleClick = () => {
+    if (!isLoggedIn) {
+      router.push(`/${locale}/vip-login`)
+      return
+    }
+
+    if (isLoggedIn && !isVIP) {
+      router.push(`/${locale}/casino/vip`)
+      return
+    }
   }
 
   return (
@@ -29,8 +43,8 @@ export default function HeroCTAMobile({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <Link
-        href={href}
+      <button
+        onClick={handleClick}
         className="
           block w-full text-center
           h-[56px] leading-[56px]
@@ -42,7 +56,7 @@ export default function HeroCTAMobile({
         "
       >
         {label}
-      </Link>
+      </button>
     </motion.div>
   )
 }

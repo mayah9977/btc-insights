@@ -2,7 +2,7 @@
 
 import { grantVIP, cancelVIP } from '@/lib/vip/vipService'
 import { logger } from '@/lib/logger'
-import { isStripeEnabled } from '@/lib/payment/provider'
+import { isStripeEnabled } from '@/lib/payments/provider'
 
 type StripeEvent = {
   type: string

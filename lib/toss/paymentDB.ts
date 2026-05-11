@@ -1,5 +1,5 @@
 import { pool } from '@/lib/db'
-import type { VIPPlan } from '@/lib/payment/vipPlans'
+import type { VIPPlan } from '@/lib/payments/vipPlans'
 
 export async function createPendingPayment({
   orderId,

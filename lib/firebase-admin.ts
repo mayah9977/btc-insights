@@ -1,6 +1,7 @@
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
+import { getAuth } from 'firebase-admin/auth' // ✅ 추가
 
 /* =========================================================
    Firebase Admin 초기화 (Local / Vercel 공용)
@@ -17,9 +18,7 @@ function createCredential() {
         JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
       )
     } catch {
-      throw new Error(
-        '❌ FIREBASE_SERVICE_ACCOUNT_KEY JSON 파싱 실패'
-      )
+      throw new Error('❌ FIREBASE_SERVICE_ACCOUNT_KEY JSON 파싱 실패')
     }
   }
 
@@ -53,15 +52,18 @@ const adminApp: App =
 /* =========================
    3) Services Export
 ========================= */
+
+// 🔥 Firestore
 export const adminDB = getFirestore(adminApp)
+
+// 🔥 Messaging
 export const adminMessaging = getMessaging(adminApp)
+
+// 🔥 Auth (👉 이번에 추가된 핵심)
+export const adminAuth = getAuth(adminApp)
 
 // 🔒 하위 호환 (기존 코드 보호)
 export const adminMsg = adminMessaging
 
 // 🔧 Firestore util
 export { FieldValue }
-
-
-
-

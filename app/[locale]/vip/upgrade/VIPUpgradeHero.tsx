@@ -1,5 +1,3 @@
-// app/[locale]/vip/upgrade/VIPUpgradeHero.tsx
-
 'use client'
 
 import { motion } from 'framer-motion'

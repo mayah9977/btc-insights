@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger'
-import { isStripeEnabled } from '@/lib/payment/provider'
+import { isStripeEnabled } from '@/lib/payments/provider'
 
 export async function recoverVIPFromStripe(userId: string): Promise<boolean> {
   if (!isStripeEnabled()) {

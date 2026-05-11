@@ -1,3 +1,4 @@
+// app/api/notification/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { getUserVIPLevel } from '@/lib/vip/vipServer'
@@ -6,24 +7,24 @@ import {
   getUnreadCountLast12h,
 } from '@/lib/notification/repository'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser()
 
     if (!user) {
-      return NextResponse.json(
-        {
-          ok: false,
-          notifications: [],
-          unreadCount: 0,
-          isVIP: false,
-        },
-        { status: 401 },
-      )
+      return NextResponse.json({
+        ok: false,
+        notifications: [],
+        unreadCount: 0,
+        isVIP: false,
+        authenticated: false,
+      })
     }
 
     const viewerId = user.id
-
     const vipLevel = await getUserVIPLevel(viewerId)
     const isVIP = vipLevel === 'VIP'
 
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         unreadCount,
         isVIP,
+        authenticated: true,
       })
     }
 
@@ -52,6 +54,7 @@ export async function GET(req: NextRequest) {
       notifications,
       unreadCount,
       isVIP,
+      authenticated: true,
     })
   } catch (error) {
     console.error('[API_NOTIFICATION]', error)
@@ -62,6 +65,7 @@ export async function GET(req: NextRequest) {
         notifications: [],
         unreadCount: 0,
         isVIP: false,
+        authenticated: false,
       },
       { status: 500 },
     )

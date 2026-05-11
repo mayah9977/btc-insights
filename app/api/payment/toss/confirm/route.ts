@@ -7,7 +7,7 @@ import {
   markPaymentFailed,
   markPaymentPaid,
 } from '@/lib/toss/paymentDB'
-import { getVIPPlan, isVIPPlan } from '@/lib/payment/vipPlans'
+import { getVIPPlan, isVIPPlan } from '@/lib/payments/vipPlans'
 import { applyVIPPaymentSuccessByDays } from '@/lib/vip/vipDB'
 import { logger } from '@/lib/logger'
 

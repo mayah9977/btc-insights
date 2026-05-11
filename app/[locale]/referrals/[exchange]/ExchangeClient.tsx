@@ -145,13 +145,28 @@ export default function ExchangeClient({
             />
           </div>
 
-          <Link
-            href="/ko/referrals"
-            className="relative z-10 text-sm text-slate-400 hover:text-slate-200 transition"
-          >
-            ← 돌아가기
+          {/* ✅✅✅ CHANGED PART START (ONLY THIS BLOCK MODIFIED) */}
+          <Link href="/ko/referrals" className="relative z-10 inline-block">
+            <motion.span
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+              className="relative inline-flex items-center justify-center px-5 py-2.5
+              rounded-xl font-semibold text-base text-white
+              bg-white/5 backdrop-blur-lg
+              border border-white/10
+              shadow-[0_0_10px_rgba(0,0,0,0.2)]
+              transition-all duration-300
+              hover:border-emerald-400/40
+              hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]"
+            >
+              ← 돌아가기
+              <span className="absolute inset-0 rounded-xl opacity-0 hover:opacity-100 transition duration-300
+              bg-gradient-to-r from-emerald-400/10 via-cyan-400/10 to-emerald-400/10 blur-lg" />
+            </motion.span>
           </Link>
-
+          {/* ✅✅✅ CHANGED PART END */}
+          
           {/* BADGE */}
           <div className="relative z-10 inline-block text-xs tracking-widest px-3 py-1 rounded-full bg-gradient-to-r from-amber-300/20 to-orange-400/20 border border-amber-300/30 text-amber-200 font-semibold">
             PRO TRADER CHOICE

@@ -1,24 +1,130 @@
 // lib/vip/vipServer.ts
-import type { VIPLevel } from './vipTypes'
-import { getAdminVIP } from './vipAdmin'
+
 import { getUserVIPState } from './vipDB'
+import type { VIPLevel } from './vipTypes'
 
-export async function getUserVIPLevel(userId: string): Promise<VIPLevel> {
-  const adminVIP = getAdminVIP(userId)
-  if (adminVIP) return adminVIP
+import { adminDB } from '@/lib/firebase-admin'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 
-  const vipState = await getUserVIPState(userId)
-  if (!vipState) return 'FREE'
+/**
+ * 🔥 수정 이유:
+ * 기존 ADMIN_USER_IDS 구조 유지
+ */
+const ADMIN_USER_IDS: string[] = (
+  process.env.ADMIN_USER_IDS ?? ''
+)
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean)
 
-  const now = Date.now()
+/**
+ * 🔥 수정 이유:
+ * ADMIN_EMAILS 기반 VIP/ADMIN 처리 추가
+ * 현재 실제 운영 환경은 email 기반 관리
+ */
+const ADMIN_EMAILS: string[] = (
+  process.env.ADMIN_EMAILS ?? ''
+)
+  .split(',')
+  .map((email) =>
+    email.replace(/[\[\]\(\)"]/g, '').trim().toLowerCase(),
+  )
+  .filter(Boolean)
 
-  const isActiveVip =
-    vipState.level === 'VIP' && vipState.expiredAt > now
+function isAdminUserId(userId: string): boolean {
+  return ADMIN_USER_IDS.includes(userId)
+}
 
-  const isGraceVip =
-    vipState.graceUntil !== null && vipState.graceUntil > now
+/**
+ * 🔥 수정 이유:
+ * 현재 Redis session → getCurrentUser()
+ * 에서 email 읽어서 ADMIN_EMAILS 기반 판별
+ */
+async function isAdminEmail(): Promise<boolean> {
+  try {
+    const currentUser = await getCurrentUser()
 
-  if (isActiveVip || isGraceVip) return 'VIP'
+    const email = currentUser?.email
+      ?.trim()
+      .toLowerCase()
 
-  return 'FREE'
+    if (!email) {
+      return false
+    }
+
+    return ADMIN_EMAILS.includes(email)
+  } catch {
+    return false
+  }
+}
+
+async function getRealVIPLevel(
+  userId: string,
+): Promise<VIPLevel> {
+  const state = await getUserVIPState(userId)
+
+  return state?.level ?? 'FREE'
+}
+
+/**
+ * 🔥 수정 이유:
+ * 기존 ADMIN_USER_IDS 유지
+ * ADMIN_EMAILS 기반 VIP 처리 추가
+ * 기존 VIP DB fallback 유지
+ */
+export async function getUserVIPLevel(
+  userId: string,
+): Promise<VIPLevel> {
+  /**
+   * 🔥 기존 userId admin 유지
+   */
+  if (isAdminUserId(userId)) {
+    return 'VIP'
+  }
+
+  /**
+   * 🔥 신규:
+   * ADMIN_EMAILS 기반 VIP 처리
+   */
+  const adminByEmail = await isAdminEmail()
+
+  if (adminByEmail) {
+    return 'VIP'
+  }
+
+  /**
+   * 🔥 기존 VIP DB fallback 유지
+   */
+  return getRealVIPLevel(userId)
+}
+
+/**
+ * 🔥 기존 구조 유지
+ */
+export async function isVIP(
+  userId: string,
+): Promise<boolean> {
+  const level = await getUserVIPLevel(userId)
+
+  return level === 'VIP'
+}
+
+/* =========================================================
+   🔥 기존 VIP 활성화 구조 유지
+========================================================= */
+
+export async function setUserVIPLevel(
+  userId: string,
+  level: VIPLevel,
+) {
+  await adminDB
+    .collection('vip_users')
+    .doc(userId)
+    .set(
+      {
+        level,
+        updatedAt: new Date(),
+      },
+      { merge: true },
+    )
 }

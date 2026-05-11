@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPaymentProvider } from '@/lib/payment/provider'
-import { handleTossWebhook } from '@/lib/payment/toss'
-import { handleStripeWebhook } from '@/lib/payment/stripe'
+import { getPaymentProvider } from '@/lib/payments/provider'
+import { handleTossWebhook } from '@/lib/payments/toss'
+import { handleStripeWebhook } from '@/lib/payments/stripe'
 
 export async function POST(req: NextRequest) {
   const provider = getPaymentProvider()

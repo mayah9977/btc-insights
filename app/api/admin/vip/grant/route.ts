@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
-import { getVIPPlan, isVIPPlan } from '@/lib/payment/vipPlans'
+import { getVIPPlan, isVIPPlan } from '@/lib/payments/vipPlans'
 import { applyVIPPaymentSuccessByDays } from '@/lib/vip/vipDB'
 import { createPendingPayment, markPaymentPaid } from '@/lib/toss/paymentDB'
 import { logger } from '@/lib/logger'
