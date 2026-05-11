@@ -1,7 +1,11 @@
 // app/api/settings/notifications/route.ts
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server'
 
-import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+
 import {
   getUserNotificationSettings,
   saveUserNotificationSettings,
@@ -9,8 +13,18 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser(req)
+/**
+ * 알림 설정 조회
+ */
+export async function GET(
+  req: NextRequest,
+) {
+  /**
+   * 최신 auth 구조:
+   * req 전달 제거
+   */
+  const user =
+    await getCurrentUser()
 
   if (!user) {
     return NextResponse.json(
@@ -19,17 +33,34 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const settings = await getUserNotificationSettings(user.id)
+  const settings =
+    await getUserNotificationSettings(
+      user.id,
+    )
 
-  return NextResponse.json(settings, {
-    headers: {
-      'Cache-Control': 'no-store, no-cache',
+  return NextResponse.json(
+    settings,
+    {
+      headers: {
+        'Cache-Control':
+          'no-store, no-cache',
+      },
     },
-  })
+  )
 }
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser(req)
+/**
+ * 알림 설정 저장
+ */
+export async function POST(
+  req: NextRequest,
+) {
+  /**
+   * 최신 auth 구조:
+   * req 전달 제거
+   */
+  const user =
+    await getCurrentUser()
 
   if (!user) {
     return NextResponse.json(
@@ -40,13 +71,17 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
-  await saveUserNotificationSettings(user.id, body)
+  await saveUserNotificationSettings(
+    user.id,
+    body,
+  )
 
   return NextResponse.json(
     { ok: true },
     {
       headers: {
-        'Cache-Control': 'no-store, no-cache',
+        'Cache-Control':
+          'no-store, no-cache',
       },
     },
   )
