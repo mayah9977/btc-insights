@@ -1,21 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server'
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server'
+
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
-import { issueBillingKey, chargeBillingKey } from '@/lib/toss/tossClient'
-import { saveBillingKey, markBillingPaymentSuccess } from '@/lib/toss/tossDB'
+
+import {
+  issueBillingKey,
+  chargeBillingKey,
+} from '@/lib/toss/tossClient'
+
+import {
+  saveBillingKey,
+  markBillingPaymentSuccess,
+} from '@/lib/toss/tossDB'
+
 import {
   getPaymentByOrderId,
   markPaymentFailed,
   markPaymentPaid,
 } from '@/lib/toss/paymentDB'
-import { getVIPPlan, isVIPPlan } from '@/lib/payments/vipPlans'
-import { applyVIPPaymentSuccessByDays } from '@/lib/vip/vipDB'
+
+import {
+  getVIPPlan,
+  isVIPPlan,
+} from '@/lib/payments/vipPlans'
+
+import {
+  applyVIPPaymentSuccessByDays,
+} from '@/lib/vip/vipDB'
+
 import { logger } from '@/lib/logger'
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+) {
   let orderId: string | null = null
 
   try {
-    const user = await getCurrentUser(req)
+    /**
+     * 최신 auth 구조
+     */
+    const user =
+      await getCurrentUser()
 
     if (!user) {
       return NextResponse.json(
@@ -27,34 +54,73 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     const authKey =
-      typeof body.authKey === 'string' ? body.authKey : null
+      typeof body.authKey === 'string'
+        ? body.authKey
+        : null
+
     const customerKey =
-      typeof body.customerKey === 'string' ? body.customerKey : null
-    orderId = typeof body.orderId === 'string' ? body.orderId : null
+      typeof body.customerKey ===
+      'string'
+        ? body.customerKey
+        : null
+
+    orderId =
+      typeof body.orderId === 'string'
+        ? body.orderId
+        : null
+
     const plan = body.plan
 
-    if (!authKey || !customerKey || !orderId || !isVIPPlan(plan)) {
+    if (
+      !authKey ||
+      !customerKey ||
+      !orderId ||
+      !isVIPPlan(plan)
+    ) {
       return NextResponse.json(
         { error: 'Invalid request' },
         { status: 400 },
       )
     }
 
-    const payment = await getPaymentByOrderId(orderId)
+    const payment =
+      await getPaymentByOrderId(
+        orderId,
+      )
+
     const config = getVIPPlan(plan)
 
-    if (!payment || payment.userId !== user.id) {
+    /**
+     * months → days 변환
+     */
+    const days = config.months * 30
+
+    if (
+      !payment ||
+      payment.userId !== user.id
+    ) {
       return NextResponse.json(
         { error: 'Payment not found' },
         { status: 404 },
       )
     }
 
+    /**
+     * 중복 결제 방지
+     */
     if (payment.status === 'PAID') {
-      return NextResponse.json({ ok: true, duplicated: true })
+      return NextResponse.json({
+        ok: true,
+        duplicated: true,
+      })
     }
 
-    if (payment.amount !== config.amount) {
+    /**
+     * 금액 검증
+     */
+    if (
+      payment.amount !== config.amount
+    ) {
       await markPaymentFailed({
         orderId,
         reason: 'AMOUNT_MISMATCH',
@@ -66,12 +132,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const billing = await issueBillingKey({
-      authKey,
-      customerKey,
-      idempotencyKey: `issue_${orderId}`,
-    })
+    /**
+     * billing key 발급
+     */
+    const billing =
+      await issueBillingKey({
+        authKey,
+        customerKey,
+        idempotencyKey: `issue_${orderId}`,
+      })
 
+    /**
+     * billing key 저장
+     */
     await saveBillingKey({
       userId: user.id,
       customerKey,
@@ -79,25 +152,36 @@ export async function POST(req: NextRequest) {
       plan,
     })
 
-    const charge = await chargeBillingKey({
-      billingKey: billing.billingKey,
-      customerKey,
-      amount: config.amount,
-      orderId,
-      orderName: config.orderName,
-      idempotencyKey: `charge_${orderId}`,
-    })
+    /**
+     * 즉시 결제
+     */
+    const charge =
+      await chargeBillingKey({
+        billingKey: billing.billingKey,
+        customerKey,
+        amount: config.amount,
+        orderId,
+        orderName: config.orderName,
+        idempotencyKey: `charge_${orderId}`,
+      })
 
-    const applied = await markPaymentPaid({
-      orderId,
-      paymentKey: charge.paymentKey,
-    })
+    /**
+     * payment paid 처리
+     */
+    const applied =
+      await markPaymentPaid({
+        orderId,
+        paymentKey: charge.paymentKey,
+      })
 
+    /**
+     * VIP 적용
+     */
     if (applied) {
       await applyVIPPaymentSuccessByDays({
         userId: user.id,
         priceId: plan,
-        days: config.days,
+        days,
       })
 
       await markBillingPaymentSuccess({
@@ -107,25 +191,35 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    logger.info('[TOSS VIP CONFIRM SUCCESS]', {
-      userId: user.id,
-      orderId,
-      plan,
-      paymentKey: charge.paymentKey,
-    })
+    logger.info(
+      '[TOSS VIP CONFIRM SUCCESS]',
+      {
+        userId: user.id,
+        orderId,
+        plan,
+        days,
+        paymentKey:
+          charge.paymentKey,
+      },
+    )
 
     return NextResponse.json({
       ok: true,
-      paymentKey: charge.paymentKey,
+      paymentKey:
+        charge.paymentKey,
+      days,
     })
   } catch (error) {
-    logger.error('[TOSS VIP CONFIRM FAILED]', {
-      orderId,
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Unknown confirm error',
-    })
+    logger.error(
+      '[TOSS VIP CONFIRM FAILED]',
+      {
+        orderId,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown confirm error',
+      },
+    )
 
     if (orderId) {
       await markPaymentFailed({
