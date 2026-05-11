@@ -1,9 +1,17 @@
 export const runtime = 'nodejs'
+
 export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
+
 import { addVipClient } from '@/lib/vip/vipSSEHub'
+
 import { verifySession } from '@/lib/auth/session'
+
+/* =========================
+ * VIP LEVEL TYPE
+ * ========================= */
+type UserVIPLevel = 'FREE' | 'VIP'
 
 /* =========================
  * VIP SSE Payload
@@ -11,11 +19,15 @@ import { verifySession } from '@/lib/auth/session'
 export type VipSSEPayload =
   | {
       type: 'VIP_LEVEL'
-      vipLevel: number
+      vipLevel: UserVIPLevel
     }
   | {
       type: 'RISK_UPDATE'
-      riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+      riskLevel:
+        | 'LOW'
+        | 'MEDIUM'
+        | 'HIGH'
+        | 'EXTREME'
       judgement: string
       isExtreme: boolean
       ts: number
@@ -27,97 +39,136 @@ export type VipSSEPayload =
 
 const encoder = new TextEncoder()
 
-export async function GET(req: NextRequest) {
+export async function GET(
+  req: NextRequest,
+) {
   /* =========================
-   * ✅ Session / VIP Auth
+   * Session Auth
    * ========================= */
-  const user = await verifySession()
+  const user =
+    await verifySession()
 
-  // VIP3 이상만 허용
-  if (!user || user.vipLevel < 3) {
-    return new Response('Unauthorized', { status: 401 })
+  /**
+   * FREE / VIP 구조 적용
+   */
+  const vipLevel: UserVIPLevel =
+    user?.vipLevel === 'VIP'
+      ? 'VIP'
+      : 'FREE'
+
+  /**
+   * VIP 전용 SSE 접근 제한
+   */
+  if (!user || vipLevel !== 'VIP') {
+    return new Response(
+      'Unauthorized',
+      {
+        status: 401,
+      },
+    )
   }
 
   const userId = user.id
 
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let closed = false
+  const stream =
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        let closed = false
 
-      /* =========================
-       * SSE 연결 안정화 (comment)
-       * ========================= */
-      controller.enqueue(
-        encoder.encode(`: vip sse connected\n\n`)
-      )
-
-      /* =========================
-       * VIP SSE Hub 등록
-       * ========================= */
-      const removeClient = addVipClient(userId, controller)
-
-      /* =========================
-       * 초기 VIP 상태
-       * ========================= */
-      const initPayload: VipSSEPayload = {
-        type: 'VIP_LEVEL',
-        vipLevel: user.vipLevel,
-      }
-
-      controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify(initPayload)}\n\n`
+        /* =========================
+         * SSE Connected
+         * ========================= */
+        controller.enqueue(
+          encoder.encode(
+            `: vip sse connected\n\n`,
+          ),
         )
-      )
 
-      /* =========================
-       * 💓 Heartbeat
-       * ========================= */
-      const heartbeat = setInterval(() => {
-        if (closed) return
-        try {
-          const payload: VipSSEPayload = {
-            type: 'HEARTBEAT',
-            ts: Date.now(),
+        /* =========================
+         * VIP SSE Hub 등록
+         * ========================= */
+        const removeClient =
+          addVipClient(
+            userId,
+            controller,
+          )
+
+        /* =========================
+         * 초기 VIP 상태
+         * ========================= */
+        const initPayload: VipSSEPayload =
+          {
+            type: 'VIP_LEVEL',
+            vipLevel,
           }
 
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify(payload)}\n\n`
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify(initPayload)}\n\n`,
+          ),
+        )
+
+        /* =========================
+         * Heartbeat
+         * ========================= */
+        const heartbeat =
+          setInterval(() => {
+            if (closed) return
+
+            try {
+              const payload: VipSSEPayload =
+                {
+                  type: 'HEARTBEAT',
+                  ts: Date.now(),
+                }
+
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify(payload)}\n\n`,
+                ),
+              )
+            } catch {
+              closed = true
+            }
+          }, 10_000)
+
+        /* =========================
+         * Cleanup
+         * ========================= */
+        req.signal.addEventListener(
+          'abort',
+          () => {
+            if (closed) return
+
+            closed = true
+
+            clearInterval(
+              heartbeat,
             )
-          )
-        } catch {
-          closed = true
-        }
-      }, 10_000)
 
-      /* =========================
-       * 🔚 Cleanup
-       * ========================= */
-      req.signal.addEventListener(
-        'abort',
-        () => {
-          if (closed) return
-          closed = true
+            removeClient()
 
-          clearInterval(heartbeat)
-          removeClient()
-
-          try {
-            controller.close()
-          } catch {}
-        },
-        { once: true }
-      )
-    },
-  })
+            try {
+              controller.close()
+            } catch {}
+          },
+          { once: true },
+        )
+      },
+    })
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
+      'Content-Type':
+        'text/event-stream; charset=utf-8',
+
+      'Cache-Control':
+        'no-cache, no-transform',
+
       Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+
+      'X-Accel-Buffering':
+        'no',
     },
   })
 }
