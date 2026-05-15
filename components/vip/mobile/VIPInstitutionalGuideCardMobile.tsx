@@ -1,14 +1,25 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
-import { vipSound } from '@/lib/sound/vipSoundSystem'
-import VIPSignalCard from './VIPSignalCard'
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+
+import { vipSound }
+  from '@/lib/sound/vipSoundSystem'
+
+import VIPSignalCard
+  from './VIPSignalCard'
 
 type Props = {
   long: number
   short: number
   confidence: number
-  dominant: 'LONG' | 'SHORT' | 'NONE'
+  dominant:
+    | 'LONG'
+    | 'SHORT'
+    | 'NONE'
   intensity: number
 }
 
@@ -17,17 +28,14 @@ export default function VIPInstitutionalGuideCardMobile({
   short,
   confidence,
   dominant,
-  intensity
+  intensity,
 }: Props) {
 
-  const prevConfidence = useRef<number>(0)
+  const prevConfidence =
+    useRef<number>(0)
 
-  /* animation trigger */
-  const [trigger, setTrigger] = useState(0)
-
-  /* =========================
-     🔊 Sound Trigger
-  ========================= */
+  const [trigger, setTrigger] =
+    useState(0)
 
   useEffect(() => {
 
@@ -35,17 +43,16 @@ export default function VIPInstitutionalGuideCardMobile({
       confidence >= 65 &&
       prevConfidence.current < 65
     ) {
+
       vipSound.play('signal')
+
       setTrigger(Date.now())
     }
 
-    prevConfidence.current = confidence
+    prevConfidence.current =
+      confidence
 
   }, [confidence])
-
-  /* =========================
-     Derived Values
-  ========================= */
 
   const color =
     dominant === 'LONG'
@@ -56,70 +63,75 @@ export default function VIPInstitutionalGuideCardMobile({
 
   const label =
     dominant === 'LONG'
-      ? '매수 우위'
+      ? 'LONG Conviction'
       : dominant === 'SHORT'
-      ? '매도 우위'
-      : '시장관찰중'
+      ? 'SHORT Conviction'
+      : 'Neutral'
 
-  const gauge = Math.min(confidence, 100)
-
-  /* =========================
-     Render
-  ========================= */
+  const gauge =
+    Math.min(confidence, 100)
 
   return (
-
     <VIPSignalCard trigger={trigger}>
 
       <div
         className="
-        mx-4
-        rounded-xl
-        border
-        border-zinc-800
-        bg-zinc-900
-        p-4
-        text-sm
-        space-y-3
-      "
+          mx-4
+          rounded-xl
+          border
+          border-zinc-800
+          bg-zinc-900
+          p-4
+          text-sm
+          space-y-3
+        "
       >
 
         <div className="flex justify-between">
 
           <div className="font-semibold text-white">
-            기관급 자금 흐름강도
+            Institutional Conviction
           </div>
 
-          <div className={`font-semibold ${color}`}>
+          <div
+            className={`font-semibold ${color}`}
+          >
             {label}
           </div>
 
         </div>
 
         <div className="text-xs text-gray-400">
-          매수예상 {long.toFixed(0)}% | 매도예상 {short.toFixed(0)}%
+          LONG Probability {long.toFixed(0)}%
+          {' | '}
+          SHORT Probability {short.toFixed(0)}%
         </div>
 
         <div className="text-xs text-gray-400">
-          Whale Intensity(고래체결강도) {intensity.toFixed(1)}%
+          Institutional Intervention Energy
+          {' '}
+          {intensity.toFixed(1)}%
         </div>
 
         <div className="h-2 bg-zinc-800 rounded overflow-hidden">
 
           <div
             className="h-full bg-emerald-400"
-            style={{ width: `${gauge}%` }}
+            style={{
+              width: `${gauge}%`,
+            }}
           />
 
         </div>
 
         <div className="text-xs text-gray-500">
-          고래확정확율 {confidence.toFixed(1)}%
+          Directional Conviction
+          {' '}
+          {confidence.toFixed(1)}%
         </div>
 
       </div>
 
     </VIPSignalCard>
-
   )
 }

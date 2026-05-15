@@ -1,7 +1,17 @@
 'use client'
 
-import React, { useMemo, useEffect, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, {
+  useMemo,
+  useEffect,
+  useState,
+  useRef,
+} from 'react'
+
+import {
+  motion,
+  AnimatePresence,
+} from 'framer-motion'
+
 import {
   Area,
   AreaChart,
@@ -15,9 +25,13 @@ import {
 } from 'recharts'
 
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
+
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
+
 import { calculateInstitutionalProbability } from '@/lib/market/institutionalProbability'
+
 import VIPInstitutionalGuideCard from '@/components/vip/VIPInstitutionalGuideCard'
+
 import { useConfirmedInstitutionalSignal } from '@/lib/engine/useConfirmedInstitutionalSignal'
 
 import { chartController } from '@/lib/chart/chartController'
@@ -42,27 +56,40 @@ function VIPWhaleIntensityChart({
   showTimeAxis = false,
 }: Props) {
 
-  const { delta: oiDelta } = useRealtimeOI(symbol)
+  const { delta: oiDelta } =
+    useRealtimeOI(symbol)
 
-  const whaleIntensity = useVIPMarketStore(s => s.whaleIntensity)
-  const whaleNet = useVIPMarketStore(s => s.whaleNet)
-  const fmai = useVIPMarketStore(s => s.fmai)
+  const whaleIntensity =
+    useVIPMarketStore(
+      s => s.whaleIntensity,
+    )
 
-  const [history, setHistory] = useState<HistoryPoint[]>([])
+  const whaleNet =
+    useVIPMarketStore(
+      s => s.whaleNet,
+    )
 
-  const visualValueRef = useRef(whaleIntensity)
-  const targetValueRef = useRef(whaleIntensity)
+  const fmai =
+    useVIPMarketStore(
+      s => s.fmai,
+    )
 
-  const chartId = 'whaleIntensity_desktop'
+  const [history, setHistory] =
+    useState<HistoryPoint[]>([])
 
-  /* store → target */
+  const visualValueRef =
+    useRef(whaleIntensity)
+
+  const targetValueRef =
+    useRef(whaleIntensity)
+
+  const chartId =
+    'whaleIntensity_desktop'
+
   useEffect(() => {
-    targetValueRef.current = whaleIntensity
+    targetValueRef.current =
+      whaleIntensity
   }, [whaleIntensity])
-
-  /* ==============================
-     Chart Controller Register
-     ============================== */
 
   useEffect(() => {
 
@@ -71,18 +98,16 @@ function VIPWhaleIntensityChart({
       BUFFER_SIZE,
       (data) => {
         setHistory(data)
-      }
+      },
     )
 
     return () => {
-      chartController.unregisterChart(chartId)
+      chartController.unregisterChart(
+        chartId,
+      )
     }
 
   }, [])
-
-  /* ==============================
-     interpolation → chartBridge
-     ============================== */
 
   useEffect(() => {
 
@@ -90,63 +115,82 @@ function VIPWhaleIntensityChart({
 
     function loop() {
 
-      const current = visualValueRef.current
-      const target = targetValueRef.current
+      const current =
+        visualValueRef.current
 
-      const diff = target - current
-      visualValueRef.current = current + diff * 0.15
+      const target =
+        targetValueRef.current
+
+      const diff =
+        target - current
+
+      visualValueRef.current =
+        current + diff * 0.15
 
       const point: HistoryPoint = {
         ts: Date.now(),
-        value: visualValueRef.current,
+        value:
+          visualValueRef.current,
         fmaiScore: fmai,
         whaleNetRatio: whaleNet,
-        isSpike: Math.abs(fmai) > 0.8,
+        isSpike:
+          Math.abs(fmai) > 0.8,
       }
 
       chartController
-        .getBuffer<HistoryPoint>(chartId)
+        .getBuffer<HistoryPoint>(
+          chartId,
+        )
         ?.push(point)
 
-      raf = requestAnimationFrame(loop)
+      raf =
+        requestAnimationFrame(loop)
     }
 
-    raf = requestAnimationFrame(loop)
+    raf =
+      requestAnimationFrame(loop)
 
-    return () => cancelAnimationFrame(raf)
+    return () =>
+      cancelAnimationFrame(raf)
 
   }, [fmai, whaleNet])
 
-  const latest = history.at(-1)
+  const latest =
+    history.at(-1)
 
-  const intensityValue = latest?.value ?? 0
-  const whalePulse = latest?.isSpike ?? false
-  const netValue = latest?.whaleNetRatio ?? 0
+  const intensityValue =
+    latest?.value ?? 0
 
-  const [shockwave, setShockwave] = useState(false)
-  const [spikeGlow, setSpikeGlow] = useState(false)
+  const whalePulse =
+    latest?.isSpike ?? false
 
-  /* FX */
+  const netValue =
+    latest?.whaleNetRatio ?? 0
 
-  useEffect(() => {
-    if (whalePulse) {
-      setSpikeGlow(true)
-      const t = setTimeout(() => setSpikeGlow(false), 600)
-      return () => clearTimeout(t)
-    }
-  }, [whalePulse])
+  const [shockwave, setShockwave] =
+    useState(false)
 
   useEffect(() => {
+
     if (intensityValue > 80) {
+
       setShockwave(true)
-      const t = setTimeout(() => setShockwave(false), 900)
+
+      const t =
+        setTimeout(
+          () => setShockwave(false),
+          900,
+        )
+
       return () => clearTimeout(t)
     }
+
   }, [intensityValue])
 
   const yDomain = useMemo(() => {
 
-    if (!history.length) return [0, 100]
+    if (!history.length)
+      return [0, 100]
 
     let min = Infinity
     let max = -Infinity
@@ -156,7 +200,11 @@ function VIPWhaleIntensityChart({
       if (p.value > max) max = p.value
     }
 
-    const padding = Math.max(2, (max - min) * 0.25)
+    const padding =
+      Math.max(
+        2,
+        (max - min) * 0.25,
+      )
 
     return [
       Math.max(0, min - padding),
@@ -165,14 +213,24 @@ function VIPWhaleIntensityChart({
 
   }, [history])
 
-  const currentValue = intensityValue / 100
+  /* =====================================================
+     Institutional Energy
+  ===================================================== */
 
-  const probability = calculateInstitutionalProbability({
-    whaleRatio: currentValue,
-    netRatio: netValue,
-    oiDelta,
-    isSpike: whalePulse,
-  })
+  const institutionalEnergy =
+    intensityValue / 100
+
+  /* =====================================================
+     Directional Conviction
+  ===================================================== */
+
+  const probability =
+    calculateInstitutionalProbability({
+      institutionalEnergy,
+      netRatio: netValue,
+      oiDelta,
+      isSpike: whalePulse,
+    })
 
   const {
     longProbability,
@@ -184,13 +242,18 @@ function VIPWhaleIntensityChart({
   const {
     confirmedDominant,
     confirmedConfidence,
-  } = useConfirmedInstitutionalSignal({
-    rawDominant,
-    rawConfidence,
-  })
+    isPending,
+  } =
+    useConfirmedInstitutionalSignal({
+      rawDominant,
+      rawConfidence,
+    })
 
-  const displayDominant = confirmedDominant
-  const displayConfidence = confirmedConfidence
+  const displayDominant =
+    confirmedDominant
+
+  const displayConfidence =
+    confirmedConfidence
 
   const confidenceColor =
     displayConfidence >= 45
@@ -201,7 +264,8 @@ function VIPWhaleIntensityChart({
       ? '#facc15'
       : '#6b7280'
 
-  const strongSignal = displayConfidence >= 45
+  const strongSignal =
+    displayConfidence >= 45
 
   const flags = useMemo(() => {
 
@@ -218,12 +282,18 @@ function VIPWhaleIntensityChart({
   return (
     <>
       <motion.div
-        animate={strongSignal ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+        animate={
+          strongSignal
+            ? { scale: [1, 1.05, 1] }
+            : { scale: 1 }
+        }
         transition={{ duration: 0.8 }}
         className="rounded-xl border p-5 relative bg-vipCard overflow-hidden"
         style={{
-          borderColor: confidenceColor,
-          boxShadow: `0 0 40px ${confidenceColor}55`,
+          borderColor:
+            confidenceColor,
+          boxShadow:
+            `0 0 40px ${confidenceColor}55`,
         }}
       >
 
@@ -231,10 +301,18 @@ function VIPWhaleIntensityChart({
           {shockwave && (
             <motion.div
               className="absolute inset-0 pointer-events-none"
-              initial={{ opacity: 0.8, scale: 0.6 }}
-              animate={{ opacity: 0, scale: 1.8 }}
+              initial={{
+                opacity: 0.8,
+                scale: 0.6,
+              }}
+              animate={{
+                opacity: 0,
+                scale: 1.8,
+              }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
+              transition={{
+                duration: 0.8,
+              }}
               style={{
                 background:
                   'radial-gradient(circle, rgba(255,0,0,0.6), transparent 65%)',
@@ -245,22 +323,34 @@ function VIPWhaleIntensityChart({
 
         <div className="mb-3">
           <div className="text-sm font-semibold text-white">
-            Analysis of Institutional Fund Flows
+            Institutional Intervention Energy
           </div>
 
           <div className="text-xs text-neutral-400">
-            Institutional whale transaction strength
+            Non-directional institutional intervention energy
           </div>
         </div>
 
         <div className="w-full h-[176px]">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+          >
             <AreaChart data={history}>
 
-              <XAxis dataKey="ts" hide={!showTimeAxis} />
-              <YAxis domain={yDomain} hide />
+              <XAxis
+                dataKey="ts"
+                hide={!showTimeAxis}
+              />
 
-              <Tooltip isAnimationActive={false} />
+              <YAxis
+                domain={yDomain}
+                hide
+              />
+
+              <Tooltip
+                isAnimationActive={false}
+              />
 
               <Line
                 type="natural"
@@ -294,7 +384,6 @@ function VIPWhaleIntensityChart({
             </AreaChart>
           </ResponsiveContainer>
         </div>
-
       </motion.div>
 
       <VIPInstitutionalGuideCard
@@ -303,9 +392,12 @@ function VIPWhaleIntensityChart({
         confidence={displayConfidence}
         dominant={displayDominant}
         intensity={intensityValue}
+        isPending={isPending}
       />
     </>
   )
 }
 
-export default React.memo(VIPWhaleIntensityChart)
+export default React.memo(
+  VIPWhaleIntensityChart,
+)

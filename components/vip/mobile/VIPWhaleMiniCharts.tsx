@@ -1,45 +1,79 @@
 'use client'
 
-import React, { useEffect, useRef, useState, useMemo } from 'react'
-import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-import { vipSound } from '@/lib/sound/vipSoundSystem'
-import VIPSignalCard from './VIPSignalCard'
-import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from 'react'
+
+import {
+  useVIPMarketStore,
+} from '@/lib/market/store/vipMarketStore'
+
+import {
+  vipSound,
+} from '@/lib/sound/vipSoundSystem'
+
+import VIPSignalCard
+  from './VIPSignalCard'
+
+import {
+  getMarketSnapshot,
+} from '@/lib/market/engine/marketSnapshot'
 
 export default function VIPWhaleMiniCharts() {
 
-  /* =========================
-     🔥 React 연결 (핵심)
-  ========================= */
+  const marketTick =
+    useVIPMarketStore(
+      (s) => s.ts,
+    )
 
-  const marketTick = useVIPMarketStore((s) => s.ts)
+  const snapshot =
+    useMemo(() => {
 
-  const snapshot = useMemo(() => {
-    return getMarketSnapshot()
-  }, [marketTick])
+      return getMarketSnapshot()
 
-  /* =========================
-     Snapshot Values
-  ========================= */
+    }, [marketTick])
 
-  const whaleIntensity = snapshot.whaleIntensity ?? 0
-  const whaleNet = (snapshot.whaleNetRatio ?? 0) * 100
+  const whaleIntensity =
+    snapshot.whaleIntensity ?? 0
 
-  const prevIntensity = useRef<number>(0)
-  const prevFlow = useRef<number>(0)
+  const whaleNet =
+    (
+      snapshot.whaleNetRatio ?? 0
+    ) * 100
 
-  const [intensityTrigger, setIntensityTrigger] = useState(0)
-  const [flowTrigger, setFlowTrigger] = useState(0)
+  const prevIntensity =
+    useRef<number>(0)
 
-  /* =========================
-     Derived Values
-  ========================= */
+  const prevFlow =
+    useRef<number>(0)
+
+  const [
+    intensityTrigger,
+    setIntensityTrigger,
+  ] = useState(0)
+
+  const [
+    flowTrigger,
+    setFlowTrigger,
+  ] = useState(0)
 
   const intensityPercent =
-    Math.min(Math.max(whaleIntensity, 0), 100)
+    Math.min(
+      Math.max(
+        whaleIntensity,
+        0,
+      ),
+      100,
+    )
 
   const flowPercent =
-    Math.min(Math.abs(whaleNet), 100)
+    Math.min(
+      Math.abs(whaleNet),
+      100,
+    )
 
   const flowColor =
     whaleNet > 0
@@ -50,14 +84,10 @@ export default function VIPWhaleMiniCharts() {
 
   const directionLabel =
     whaleNet > 0
-      ? 'Buy Pressure'
+      ? 'LONG Pressure'
       : whaleNet < 0
-      ? 'Sell Pressure'
+      ? 'SHORT Pressure'
       : 'Neutral'
-
-  /* =========================
-     🔊 Sound Triggers
-  ========================= */
 
   useEffect(() => {
 
@@ -65,72 +95,121 @@ export default function VIPWhaleMiniCharts() {
       prevIntensity.current < 60 &&
       intensityPercent >= 60
     ) {
+
       vipSound.play('signal')
-      setIntensityTrigger(Date.now())
+
+      setIntensityTrigger(
+        Date.now(),
+      )
     }
 
     if (
       prevIntensity.current < 80 &&
       intensityPercent >= 80
     ) {
+
       vipSound.play('signal')
-      setIntensityTrigger(Date.now())
+
+      setIntensityTrigger(
+        Date.now(),
+      )
     }
 
-    prevIntensity.current = intensityPercent
+    prevIntensity.current =
+      intensityPercent
 
   }, [intensityPercent])
-
 
   useEffect(() => {
 
     if (
-      Math.abs(prevFlow.current) < 40 &&
+      Math.abs(
+        prevFlow.current,
+      ) < 40 &&
       Math.abs(whaleNet) >= 40
     ) {
+
       vipSound.play('signal')
-      setFlowTrigger(Date.now())
+
+      setFlowTrigger(
+        Date.now(),
+      )
     }
 
-    prevFlow.current = whaleNet
+    prevFlow.current =
+      whaleNet
 
   }, [whaleNet])
 
-
-  /* =========================
-     Render
-  ========================= */
-
   return (
+
     <div className="space-y-4">
 
-      {/* Whale Intensity */}
-      <VIPSignalCard trigger={intensityTrigger}>
+      <VIPSignalCard
+        trigger={intensityTrigger}
+      >
+
         <div className="text-xs mx-4">
 
-          <div className="flex justify-between text-zinc-400 mb-1">
-            <span>Whale Intensity(기관급 고래체결강도)</span>
-            <span>{intensityPercent.toFixed(1)}%</span>
+          <div
+            className="
+              flex
+              justify-between
+              text-zinc-400
+              mb-1
+            "
+          >
+
+            <span>
+              Institutional Intervention Energy
+            </span>
+
+            <span>
+              {intensityPercent.toFixed(1)}%
+            </span>
+
           </div>
 
           <div className="h-2 bg-zinc-800 rounded overflow-hidden">
+
             <div
-              className="h-full bg-yellow-400 transition-all duration-300"
-              style={{ width: `${intensityPercent}%` }}
+              className="
+                h-full
+                bg-yellow-400
+                transition-all
+                duration-300
+              "
+              style={{
+                width:
+                  `${intensityPercent}%`,
+              }}
             />
+
           </div>
 
         </div>
+
       </VIPSignalCard>
 
-      {/* Whale Flow */}
-      <VIPSignalCard trigger={flowTrigger}>
+      <VIPSignalCard
+        trigger={flowTrigger}
+      >
+
         <div className="text-xs mx-4">
 
-          <div className="flex justify-between text-zinc-400 mb-1">
+          <div
+            className="
+              flex
+              justify-between
+              text-zinc-400
+              mb-1
+            "
+          >
 
             <span>
-              Whale Flow(기관급 자금흐름) ({directionLabel})
+              Directional Pressure
+              {' '}
+              ({directionLabel})
             </span>
 
             <span>
@@ -140,13 +219,24 @@ export default function VIPWhaleMiniCharts() {
           </div>
 
           <div className="h-2 bg-zinc-800 rounded overflow-hidden">
+
             <div
-              className={`h-full ${flowColor} transition-all duration-300`}
-              style={{ width: `${flowPercent}%` }}
+              className={`
+                h-full
+                ${flowColor}
+                transition-all
+                duration-300
+              `}
+              style={{
+                width:
+                  `${flowPercent}%`,
+              }}
             />
+
           </div>
 
         </div>
+
       </VIPSignalCard>
 
     </div>

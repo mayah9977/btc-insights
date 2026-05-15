@@ -1,86 +1,110 @@
 /* =========================================================
- Numeric Narrative Builder (FINAL - STRUCTURED REALTIME)
+ Numeric Narrative Builder
+ FINALIZED SNAPSHOT OWNERSHIP SAFE
 ========================================================= */
 
 import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 import { MarketSignal } from '@/lib/market/signalEngine'
 
-/* =========================================================
- Utils
-========================================================= */
+type FinalizedMetricSnapshot = Partial<MarketSnapshot> & {
+  oiDeltaAccum?: number
+  fundingAverage?: number
+  volumeRatioAverage?: number
+  whaleNetRatioAverage?: number
+}
 
 function safeNum(n?: number, digits = 2): string {
   if (n === undefined || n === null || isNaN(n)) return '--'
   return n.toFixed(digits)
 }
 
-function sign(n?: number): string {
+function sign(n?: number, digits = 2): string {
   if (n === undefined || n === null || isNaN(n)) return '--'
   if (n === 0) return '0'
-  if (n > 0) return `+${safeNum(n)}`
-  return safeNum(n)
+  if (n > 0) return `+${safeNum(n, digits)}`
+  return safeNum(n, digits)
 }
 
-/* 🔥 핵심 수정 (지수표기 제거) */
 function safeFunding(n?: number): string {
   if (n === undefined || n === null || isNaN(n)) return '--'
-
   return `${(n * 100).toFixed(4)}%`
 }
 
-/* =========================================================
- 0️⃣ Situation (raw data view)
-========================================================= */
-export function buildSituation(snapshot: MarketSnapshot): string {
+function getFinalizedMetrics(snapshot: FinalizedMetricSnapshot) {
+  return {
+    oiDelta:
+      snapshot.oiDeltaAccum ??
+      snapshot.oiDelta ??
+      0,
+
+    fundingRate:
+      snapshot.fundingAverage ??
+      snapshot.fundingRate ??
+      0,
+
+    volumeRatio:
+      snapshot.volumeRatioAverage ??
+      snapshot.volumeRatio ??
+      1,
+
+    whaleNetRatio:
+      snapshot.whaleNetRatioAverage ??
+      snapshot.whaleNetRatio ??
+      0,
+  }
+}
+
+export function buildSituation(
+  snapshot: FinalizedMetricSnapshot,
+): string {
+  const metrics = getFinalizedMetrics(snapshot)
+
   return [
-    `OI ${sign(snapshot.oiDelta)}`,
-    `Vol ${safeNum(snapshot.volumeRatio)}x`,
-    `Funding ${safeFunding(snapshot.fundingRate)}`,
-    `Whale ${safeNum(snapshot.whaleNetRatio, 3)}`,
+    `OI ${sign(metrics.oiDelta)}`,
+    `Vol ${safeNum(metrics.volumeRatio)}x`,
+    `Funding ${safeFunding(metrics.fundingRate)}`,
+    `Whale ${safeNum(metrics.whaleNetRatio, 3)}`,
   ].join(' / ')
 }
 
-/* =========================================================
- 1️⃣ Cause
-========================================================= */
 export function buildCause(params: {
-  snapshot: MarketSnapshot
+  snapshot: FinalizedMetricSnapshot
   causeSignals: any[]
 }): string {
-
   const { snapshot, causeSignals } = params
+  const metrics = getFinalizedMetrics(snapshot)
 
   const stateParts: string[] = []
   const signalParts: string[] = []
 
-  if (snapshot.oiDelta > 0) {
-    stateParts.push(`OI 증가(${safeNum(snapshot.oiDelta)})`)
-  } else if (snapshot.oiDelta < 0) {
-    stateParts.push(`OI 감소(${safeNum(snapshot.oiDelta)})`)
+  if (metrics.oiDelta > 0) {
+    stateParts.push(`OI 증가(${safeNum(metrics.oiDelta)})`)
+  } else if (metrics.oiDelta < 0) {
+    stateParts.push(`OI 감소(${safeNum(metrics.oiDelta)})`)
   } else {
     stateParts.push(`OI 정체(0)`)
   }
 
-  if (snapshot.fundingRate > 0) {
-    stateParts.push(`Funding 양수(${safeFunding(snapshot.fundingRate)})`)
-  } else if (snapshot.fundingRate < 0) {
-    stateParts.push(`Funding 음수(${safeFunding(snapshot.fundingRate)})`)
+  if (metrics.fundingRate > 0) {
+    stateParts.push(`Funding 양수(${safeFunding(metrics.fundingRate)})`)
+  } else if (metrics.fundingRate < 0) {
+    stateParts.push(`Funding 음수(${safeFunding(metrics.fundingRate)})`)
   } else {
-    stateParts.push(`Funding 중립(0.0000)`)
+    stateParts.push(`Funding 중립(0.0000%)`)
   }
 
-  if (snapshot.volumeRatio > 1) {
-    stateParts.push(`거래량 증가(${safeNum(snapshot.volumeRatio)}x)`)
-  } else if (snapshot.volumeRatio < 1) {
-    stateParts.push(`거래량 감소(${safeNum(snapshot.volumeRatio)}x)`)
+  if (metrics.volumeRatio > 1) {
+    stateParts.push(`거래량 증가(${safeNum(metrics.volumeRatio)}x)`)
+  } else if (metrics.volumeRatio < 1) {
+    stateParts.push(`거래량 감소(${safeNum(metrics.volumeRatio)}x)`)
   } else {
     stateParts.push(`거래량 정체(1.00x)`)
   }
 
-  if (snapshot.whaleNetRatio > 0) {
-    stateParts.push(`Whale 매집(${safeNum(snapshot.whaleNetRatio, 3)})`)
-  } else if (snapshot.whaleNetRatio < 0) {
-    stateParts.push(`Whale 분할매도(${safeNum(snapshot.whaleNetRatio, 3)})`)
+  if (metrics.whaleNetRatio > 0) {
+    stateParts.push(`Whale 매집(${safeNum(metrics.whaleNetRatio, 3)})`)
+  } else if (metrics.whaleNetRatio < 0) {
+    stateParts.push(`Whale 분할매도(${safeNum(metrics.whaleNetRatio, 3)})`)
   } else {
     stateParts.push(`Whale 중립(0.000)`)
   }
@@ -106,38 +130,36 @@ export function buildCause(params: {
   return base
 }
 
-/* =========================================================
- 3️⃣ Risk
-========================================================= */
 export function buildRisk(params: {
-  snapshot: MarketSnapshot
+  snapshot: FinalizedMetricSnapshot
   signal: MarketSignal
 }): string {
-
   const { snapshot, signal } = params
+  const metrics = getFinalizedMetrics(snapshot)
 
   const parts: string[] = []
 
   parts.push(`Risk ${signal.riskLevel.toUpperCase()}`)
 
-  if (snapshot.volumeRatio > 1.1) {
+  if (metrics.volumeRatio > 1.1) {
     parts.push(`Volatile`)
   }
 
-  if (snapshot.volumeRatio > 1.2 && snapshot.oiDelta < 0) {
+  if (metrics.volumeRatio > 1.2 && metrics.oiDelta < 0) {
     parts.push(`Liquidation`)
   }
 
   return parts.join(' / ')
 }
 
-/* =========================================================
- 4️⃣ Compact Summary
-========================================================= */
-export function buildCompactSummary(snapshot: MarketSnapshot): string {
+export function buildCompactSummary(
+  snapshot: FinalizedMetricSnapshot,
+): string {
+  const metrics = getFinalizedMetrics(snapshot)
+
   return [
-    `OI ${sign(snapshot.oiDelta)}`,
-    `Vol ${safeNum(snapshot.volumeRatio)}x`,
-    `Funding ${safeFunding(snapshot.fundingRate)}`
+    `OI ${sign(metrics.oiDelta)}`,
+    `Vol ${safeNum(metrics.volumeRatio)}x`,
+    `Funding ${safeFunding(metrics.fundingRate)}`,
   ].join(' / ')
 }

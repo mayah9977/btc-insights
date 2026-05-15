@@ -5,6 +5,7 @@ import {
   getLastOI,
   getLastVolume,
   getPrevVolume,
+  getRecentVolumes,
   getLastFundingRate,
   getLastBollingerSignal,
   getLastMACD,
@@ -34,6 +35,14 @@ import { calculateWhaleIntensityV2 } from '@/lib/market/whaleIntensityV2'
 /* ======================================================= */
 
 const lastSnapshotOIMap = new Map<string, number>()
+const lastSnapshotOITsMap = new Map<string, number>()
+
+const OI_DELTA_WINDOW_MS = 15000
+
+const oiDeltaHistoryMap = new Map<string, number[]>()
+const volatilityHistoryMap = new Map<string, number[]>()
+
+const MAX_FEATURE_HISTORY = 60
 
 /* ======================================================= */
 
@@ -91,33 +100,96 @@ export async function buildRiskInputFromRealtime(
       ? volatilityRaw
       : 0
 
+  const volatilityHistory =
+    volatilityHistoryMap.get(symbol) ?? []
+
+  volatilityHistory.push(volatility)
+
+  if (volatilityHistory.length > MAX_FEATURE_HISTORY) {
+    volatilityHistory.shift()
+  }
+
+  volatilityHistoryMap.set(symbol, volatilityHistory)
+
+  const rollingVolatilityAvg =
+    volatilityHistory.length > 1
+      ? volatilityHistory
+          .slice(0, -1)
+          .reduce((a, b) => a + b, 0) /
+        Math.max(volatilityHistory.length - 1, 1)
+      : 0
+
+  const volatilityShock =
+    rollingVolatilityAvg > 0
+      ? volatility / rollingVolatilityAvg
+      : 0
+
   /* ================= OI ================= */
 
   const openInterest = getLastOI(symbol) ?? 0
+
+  const nowForOI = Date.now()
 
   const prevSnapshotOI =
     lastSnapshotOIMap.get(symbol) ?? openInterest
 
   const oiDelta = openInterest - prevSnapshotOI
 
-  const oiDeltaRatio =
-    prevSnapshotOI !== 0
-      ? oiDelta / prevSnapshotOI
+  const oiDeltaHistory =
+    oiDeltaHistoryMap.get(symbol) ?? []
+
+  oiDeltaHistory.push(Math.abs(oiDelta))
+
+  if (oiDeltaHistory.length > MAX_FEATURE_HISTORY) {
+    oiDeltaHistory.shift()
+  }
+
+  oiDeltaHistoryMap.set(symbol, oiDeltaHistory)
+
+  const rollingAbsOIDeltaAvg =
+    oiDeltaHistory.length > 1
+      ? oiDeltaHistory
+          .slice(0, -1)
+          .reduce((a, b) => a + b, 0) /
+        Math.max(oiDeltaHistory.length - 1, 1)
       : 0
 
-  lastSnapshotOIMap.set(symbol, openInterest)
+  const oiDeltaRatio =
+    rollingAbsOIDeltaAvg > 0
+      ? Math.abs(oiDelta) / rollingAbsOIDeltaAvg
+      : 0
+
+  const lastOITs =
+    lastSnapshotOITsMap.get(symbol) ?? 0
+
+  if (nowForOI - lastOITs >= OI_DELTA_WINDOW_MS) {
+    lastSnapshotOIMap.set(symbol, openInterest)
+    lastSnapshotOITsMap.set(symbol, nowForOI)
+  }
 
   /* ================= Volume ================= */
 
   const lastVolume = getLastVolume(symbol) ?? 0
   const prevVolume = getPrevVolume(symbol)
 
+  const recentVolumes = getRecentVolumes(symbol, 20)
+
+  const rollingVolumeAvg =
+    recentVolumes.length > 1
+      ? recentVolumes
+          .slice(0, -1)
+          .reduce((a, b) => a + b, 0) /
+        Math.max(recentVolumes.length - 1, 1)
+      : 0
+
   const safePrevVolume =
-    prevVolume != null &&
-    Number.isFinite(prevVolume) &&
-    prevVolume !== 0
-      ? prevVolume
-      : lastVolume || 1
+    rollingVolumeAvg > 0
+      ? rollingVolumeAvg
+      : prevVolume != null &&
+        Number.isFinite(prevVolume) &&
+        prevVolume !== 0
+        ? prevVolume
+        : lastVolume || 1
 
   const volumeRatio =
     safePrevVolume !== 0
@@ -147,9 +219,40 @@ export async function buildRiskInputFromRealtime(
     calculateWhaleIntensityV2({
       oiDeltaRatio,
       volumeRatio,
-      volatility,
+      volatility: volatilityShock,
       drift,
     })
+
+  console.log(
+    '[RealtimeRiskSnapshot]',
+    {
+      symbol,
+
+      openInterest,
+      prevSnapshotOI,
+
+      oiDelta,
+      oiDeltaRatio,
+      rollingAbsOIDeltaAvg,
+
+      lastVolume,
+      prevVolume,
+      recentVolumes,
+      rollingVolumeAvg,
+      volumeRatio,
+
+      volatilityRaw,
+      volatility,
+      volatilityShock,
+      rollingVolatilityAvg,
+
+      rollingMean,
+      rollingStd,
+      drift,
+
+      whaleIntensity,
+    },
+  )
 
   /* ================= Trade Flow ================= */
 

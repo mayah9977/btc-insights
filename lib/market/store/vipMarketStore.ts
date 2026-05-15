@@ -1,7 +1,10 @@
+// lib/market/store/vipMarketStore.ts
+
 'use client'
 
 import { create } from 'zustand'
-import { FinalNarrativeReport } from '@/lib/market/narrative/types' // ✅ added
+import { FinalNarrativeReport } from '@/lib/market/narrative/types'
+import { accumulateInstitutionalEvidence } from '@/lib/market/institutional/institutionalEvidenceAccumulator'
 
 export type ActionGateState = 'OBSERVE' | 'CAUTION' | 'IGNORE'
 
@@ -29,7 +32,18 @@ type VIPMarketState = {
   /* =========================
      Whale
   ========================= */
+
+  /**
+   * 🔥 whaleIntensity SSOT = 0~100
+   *
+   * Redis history = 0~100
+   * SSE = 0~100
+   * VIP store = 0~100
+   * chart bridge = 0~100
+   * UI 계산에서만 /100 normalize
+   */
   whaleIntensity: number
+
   whaleRatio: number
   whaleNet: number
   whaleNetRatio: number
@@ -59,8 +73,8 @@ type VIPMarketState = {
   /* =========================
      Narrative (NEW)
   ========================= */
-  narrative: FinalNarrativeReport | null // ✅ modified
-  lastMetaKey: string // ✅ modified
+  narrative: FinalNarrativeReport | null
+  lastMetaKey: string
 
   /* =========================
      Decision Stabilization
@@ -72,15 +86,15 @@ type VIPMarketState = {
   ========================= */
   update: (data: Partial<VIPMarketState>) => void
 
-  setNarrative: ( // ✅ modified
+  setNarrative: (
     signalType: string,
     newNarrative: FinalNarrativeReport,
-    metaKey: string
+    metaKey: string,
   ) => void
 }
 
 export const useVIPMarketStore =
-  create<VIPMarketState>((set, get) => ({ // ✅ modified
+  create<VIPMarketState>((set, get) => ({
     /* =========================
        Core Market
     ========================= */
@@ -99,7 +113,12 @@ export const useVIPMarketStore =
     /* =========================
        Whale
     ========================= */
+
+    /**
+     * 🔥 whaleIntensity SSOT = 0~100
+     */
     whaleIntensity: 0,
+
     whaleRatio: 0,
     whaleNet: 0,
     whaleNetRatio: 0,
@@ -129,8 +148,8 @@ export const useVIPMarketStore =
     /* =========================
        Narrative (NEW)
     ========================= */
-    narrative: null, // ✅ modified
-    lastMetaKey: '', // ✅ modified
+    narrative: null,
+    lastMetaKey: '',
 
     /* =========================
        Decision Stabilization
@@ -168,6 +187,7 @@ export const useVIPMarketStore =
                 if (now - state.lastDecisionTs < 300) {
                   continue
                 }
+
                 ;(next as any)[k] = value
                 next.lastDecisionTs = now
                 changed = true
@@ -195,7 +215,7 @@ export const useVIPMarketStore =
     setNarrative: (
       signalType: string,
       newNarrative: FinalNarrativeReport,
-      metaKey: string
+      metaKey: string,
     ) => {
       const current = get().narrative
 
@@ -205,9 +225,12 @@ export const useVIPMarketStore =
       // 🔥 2차 차단: 의미 동일 → 스킵
       if (
         current &&
-        current.tendency === newNarrative.tendency &&
-        current.summary === newNarrative.summary &&
-        current.risk === newNarrative.risk
+        current.tendency ===
+          newNarrative.tendency &&
+        current.summary ===
+          newNarrative.summary &&
+        current.risk ===
+          newNarrative.risk
       ) {
         return
       }
@@ -231,6 +254,17 @@ const UPDATE_INTERVAL = 50
 
 let lastFlush = 0
 
+/* =========================================================
+   Institutional Accumulation Throttle
+   - tick accumulation 금지
+   - 30초 aggregation accumulation만 허용
+========================================================= */
+
+let lastAccumulationTs = 0
+
+const INSTITUTIONAL_ACCUMULATION_INTERVAL =
+  30000
+
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
@@ -251,6 +285,29 @@ export function scheduleVIPMarketUpdate(
   setTimeout(() => {
     if (Object.keys(pending).length > 0) {
       useVIPMarketStore.getState().update(pending)
+
+      /**
+       * 🔥 institutional accumulation throttle
+       *
+       * SSE tick마다 accumulation 하지 않고
+       * 30초 aggregation 기반으로만 누적합니다.
+       *
+       * 목적:
+       * - sampleCount 안정화
+       * - micro noise 제거
+       * - 30분 freeze snapshot 품질 향상
+       * - ENUM / DecisionEngine / ActionGate 변경 없음
+       */
+      const nowTs = Date.now()
+
+      if (
+        nowTs - lastAccumulationTs >=
+        INSTITUTIONAL_ACCUMULATION_INTERVAL
+      ) {
+        accumulateInstitutionalEvidence()
+
+        lastAccumulationTs = nowTs
+      }
     }
 
     pending = {}

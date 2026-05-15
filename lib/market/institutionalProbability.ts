@@ -1,5 +1,5 @@
 /* =========================================================
-   📊 Institutional Directional Probability Engine
+   📊 Institutional Directional Conviction Engine
 ========================================================= */
 
 export type InstitutionalDirection =
@@ -15,17 +15,17 @@ export interface DirectionalProbabilityResult {
 }
 
 /* =========================================================
-   🔥 Directional Probability 계산
+   🔥 Directional Conviction 계산
 ========================================================= */
 
 export function calculateInstitutionalProbability({
-  whaleRatio,
+  institutionalEnergy,
   netRatio,
   oiDelta,
   isSpike,
   fundingBias,
 }: {
-  whaleRatio: number
+  institutionalEnergy: number
   netRatio: number
   oiDelta: number
   isSpike: boolean
@@ -36,42 +36,79 @@ export function calculateInstitutionalProbability({
   let shortScore = 0
 
   /* =======================================================
-     1️⃣ Whale Energy
+     1️⃣ Energy Filter
   ======================================================= */
 
-  const whaleEnergy = Math.min(30, whaleRatio * 40)
-
-  if (netRatio > 0 || oiDelta > 0) {
-    longScore += whaleEnergy
-  } else if (netRatio < 0 || oiDelta < 0) {
-    shortScore += whaleEnergy
-  } else {
-    longScore += whaleEnergy * 0.5
-    shortScore += whaleEnergy * 0.5
-  }
+  const energyMagnitude =
+    Math.min(45, institutionalEnergy * 45)
 
   /* =======================================================
-     2️⃣ Net Pressure
+     2️⃣ Directional Alignment
   ======================================================= */
+
+  const alignmentStrength =
+    Math.min(
+      35,
+      Math.abs(netRatio) * 320,
+    )
 
   if (netRatio > 0) {
-    longScore += Math.min(25, netRatio * 80)
-  } else if (netRatio < 0) {
-    shortScore += Math.min(25, Math.abs(netRatio) * 80)
+    longScore += alignmentStrength
+  }
+  else if (netRatio < 0) {
+    shortScore += alignmentStrength
   }
 
   /* =======================================================
-     3️⃣ OI 방향성
+     3️⃣ OI Direction Consistency
   ======================================================= */
 
-  if (oiDelta > 0) {
-    longScore += 15
-  } else if (oiDelta < 0) {
-    shortScore += 15
+  let consistencyScore = 0
+
+  if (
+    netRatio > 0 &&
+    oiDelta > 0
+  ) {
+    consistencyScore = 15
+    longScore += consistencyScore
+  }
+
+  else if (
+    netRatio < 0 &&
+    oiDelta < 0
+  ) {
+    consistencyScore = 15
+    shortScore += consistencyScore
+  }
+
+  else {
+    consistencyScore = 4
+
+    if (netRatio > 0) {
+      longScore += consistencyScore
+    }
+    else if (netRatio < 0) {
+      shortScore += consistencyScore
+    }
   }
 
   /* =======================================================
-     4️⃣ Funding Bias
+     4️⃣ Energy Injection
+  ======================================================= */
+
+  if (longScore > shortScore) {
+    longScore += energyMagnitude
+  }
+  else if (shortScore > longScore) {
+    shortScore += energyMagnitude
+  }
+  else {
+    longScore += energyMagnitude * 0.5
+    shortScore += energyMagnitude * 0.5
+  }
+
+  /* =======================================================
+     5️⃣ Funding Bias
   ======================================================= */
 
   if (fundingBias === 'LONG_HEAVY') {
@@ -83,22 +120,24 @@ export function calculateInstitutionalProbability({
   }
 
   /* =======================================================
-     5️⃣ Spike 보정
+     6️⃣ Spike Confirmation
   ======================================================= */
 
   if (isSpike) {
     if (longScore > shortScore) {
       longScore += 5
-    } else if (shortScore > longScore) {
+    }
+    else if (shortScore > longScore) {
       shortScore += 5
     }
   }
 
   /* =======================================================
-     6️⃣ Normalize
+     7️⃣ Normalize
   ======================================================= */
 
-  const total = longScore + shortScore || 1
+  const total =
+    longScore + shortScore || 1
 
   const longProbability =
     (longScore / total) * 100
@@ -106,11 +145,26 @@ export function calculateInstitutionalProbability({
   const shortProbability =
     (shortScore / total) * 100
 
+  /* =======================================================
+     8️⃣ Directional Conviction
+  ======================================================= */
+
+  const directionalAlignment =
+    Math.abs(netRatio)
+
+  const convictionStrength =
+    institutionalEnergy *
+    directionalAlignment *
+    (consistencyScore / 15)
+
   const confidence =
-    Math.abs(longProbability - shortProbability)
+    Math.pow(
+      convictionStrength * 100,
+      1.02,
+    )
 
   /* =======================================================
-     7️⃣ Dominant
+     9️⃣ Dominant
   ======================================================= */
 
   let dominant: InstitutionalDirection = 'NONE'
@@ -134,6 +188,13 @@ export function calculateInstitutionalProbability({
    Utility
 ========================================================= */
 
-function clamp(value: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, value))
+function clamp(
+  value: number,
+  min = 0,
+  max = 100,
+) {
+  return Math.max(
+    min,
+    Math.min(max, value),
+  )
 }

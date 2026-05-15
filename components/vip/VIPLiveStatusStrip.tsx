@@ -1,3 +1,5 @@
+// components/vip/VIPLiveStatusStrip.tsx
+
 'use client'
 
 import React, { useEffect, useMemo, useState, useRef } from 'react'
@@ -15,7 +17,6 @@ type MarketState = {
 }
 
 function VIPLiveStatusStripComponent() {
-
   const marketRef = useRef<MarketState>({
     oi: null,
     oiDelta: null,
@@ -40,11 +41,9 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   useEffect(() => {
-
     chartRealtimeBridge.register(
       'liveStatus_desktop',
       (data: Partial<MarketState>) => {
-
         marketRef.current = {
           ...marketRef.current,
           ...data,
@@ -56,14 +55,12 @@ function VIPLiveStatusStripComponent() {
           setRenderState({ ...marketRef.current })
           lastRenderRef.current = now
         }
-
-      }
+      },
     )
 
     return () => {
       chartRealtimeBridge.unregister('liveStatus_desktop')
     }
-
   }, [])
 
   const {
@@ -79,15 +76,12 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   useEffect(() => {
-
     if (volume == null) return
 
     if (prevVolumeRef.current != null) {
-
       const diff = volume - prevVolumeRef.current
 
       if (diff !== 0) {
-
         setVolumeFlash(diff > 0 ? 'UP' : 'DOWN')
 
         const t = setTimeout(() => {
@@ -101,7 +95,6 @@ function VIPLiveStatusStripComponent() {
     }
 
     prevVolumeRef.current = volume
-
   }, [volume])
 
   /* ===============================
@@ -109,9 +102,13 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   const normalized = useMemo(() => {
-
     const volScore = volume ? Math.log10(volume + 1) / 6 : 0
-    const whaleScore = whaleIntensity ?? 0
+
+    /**
+     * 🔥 whaleIntensity SSOT = 0~100
+     * UI composite score 계산에서만 /100 normalize합니다.
+     */
+    const whaleScore = (whaleIntensity ?? 0) / 100
 
     const oiScore =
       oiDelta && Math.abs(oiDelta) > 0
@@ -120,11 +117,10 @@ function VIPLiveStatusStripComponent() {
 
     return Math.min(
       volScore * 0.5 +
-      whaleScore * 0.3 +
-      oiScore * 0.2,
-      1
+        whaleScore * 0.3 +
+        oiScore * 0.2,
+      1,
     )
-
   }, [volume, whaleIntensity, oiDelta])
 
   const isExtreme = normalized > 0.9
@@ -134,12 +130,10 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   const aiLevel = useMemo(() => {
-
     if (normalized > 0.85) return 'CRITICAL'
     if (normalized > 0.65) return 'WARNING'
     if (normalized > 0.4) return 'WATCH'
     return 'STABLE'
-
   }, [normalized])
 
   const AI_COLOR: Record<string, string> = {
@@ -154,13 +148,17 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   const squeezeType = useMemo(() => {
-
     if (!oi || !oiDelta || !volume || !whaleIntensity)
       return null
 
     const oiRatio = oiDelta / oi
     const volCondition = volume > 600000
-    const whaleCondition = whaleIntensity > 0.7
+
+    /**
+     * 🔥 whaleIntensity SSOT = 0~100
+     * 기존 0.7 threshold를 70 기준으로 변경합니다.
+     */
+    const whaleCondition = whaleIntensity > 70
 
     if (oiRatio > 0.015 && volCondition && whaleCondition)
       return 'SHORT SQUEEZE'
@@ -169,7 +167,6 @@ function VIPLiveStatusStripComponent() {
       return 'LONG SQUEEZE'
 
     return null
-
   }, [oi, oiDelta, volume, whaleIntensity])
 
   /* ===============================
@@ -177,19 +174,16 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   useEffect(() => {
-
     if (whaleSpike || normalized > 0.85) {
-
       setPulse(true)
 
       const t = setTimeout(
         () => setPulse(false),
-        800
+        800,
       )
 
       return () => clearTimeout(t)
     }
-
   }, [whaleSpike, normalized])
 
   /* ===============================
@@ -197,30 +191,31 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   useEffect(() => {
-
     if (isExtreme) {
-
       setFlash(true)
 
       const t = setTimeout(
         () => setFlash(false),
-        300
+        300,
       )
 
       return () => clearTimeout(t)
     }
-
   }, [isExtreme])
 
   const shake =
     isExtreme
       ? { x: [0, -3, 3, -3, 3, 0] }
       : pulse
-      ? { x: [0, -1.5, 1.5, -1.5, 1.5, 0] }
-      : { x: 0 }
+        ? { x: [0, -1.5, 1.5, -1.5, 1.5, 0] }
+        : { x: 0 }
 
+  /**
+   * 🔥 whaleIntensity SSOT = 0~100
+   * opacity 계산에서만 /100 normalize합니다.
+   */
   const whaleOverlayOpacity = Math.min(
-    (whaleIntensity ?? 0) * 0.85,
+    ((whaleIntensity ?? 0) / 100) * 0.85,
     0.85,
   )
 
@@ -228,11 +223,10 @@ function VIPLiveStatusStripComponent() {
     volumeFlash === 'UP'
       ? 'volume-flash-up'
       : volumeFlash === 'DOWN'
-      ? 'volume-flash-down'
-      : ''
+        ? 'volume-flash-down'
+        : ''
 
   return (
-
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0, ...shake }}
@@ -249,7 +243,6 @@ function VIPLiveStatusStripComponent() {
           : 'rgba(15,5,5,0.92)',
       }}
     >
-
       <AnimatePresence>
         {flash && (
           <motion.div
@@ -283,7 +276,6 @@ function VIPLiveStatusStripComponent() {
       />
 
       <div className="relative max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-8 gap-y-1 text-sm">
-
         <div className={`font-semibold ${AI_COLOR[aiLevel]}`}>
           AI is observing the market in real time : {aiLevel}
         </div>
@@ -297,9 +289,9 @@ function VIPLiveStatusStripComponent() {
         </div>
 
         <div className="text-yellow-300">
-          Whale intensity (고래급기관 체결강도) {whaleIntensity?.toFixed(2) ?? '--'}
+          Whale intensity (고래급기관 체결강도){' '}
+          {whaleIntensity?.toFixed(2) ?? '--'}
         </div>
-
       </div>
 
       <motion.div
@@ -316,7 +308,6 @@ function VIPLiveStatusStripComponent() {
           boxShadow: `0 0 ${15 + normalized * 30}px rgba(255,0,0,0.9)`,
         }}
       />
-
     </motion.div>
   )
 }

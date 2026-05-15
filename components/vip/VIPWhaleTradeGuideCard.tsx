@@ -30,45 +30,45 @@ export default function VIPWhaleTradeGuideCard({
   const mediumFlow = ratio >= 0.55
 
   /* =====================================================
-     Institutional Flow 해석
+     Trade Participation 해석
   ===================================================== */
 
-  let phase = 'Institutional Flow 모니터링'
-  let interpretation = '대형 자금 흐름을 추적 중입니다.'
-  let status = '기관급 자금의 흐름 탐지중'
+  let phase = 'Trade Participation 모니터링'
+  let interpretation = '대형 체결 참여 비중과 방향 압력을 추적 중입니다.'
+  let status = '대형 체결 참여 흐름 관찰중'
 
   if (strongFlow && net > 0.2) {
-    phase = 'Institutional Accumulation'
+    phase = 'High Participation + Buy Pressure'
     interpretation =
-      '기관급 자금이 적극적으로 매수 포지션을 구축하고 있습니다. 상승 추세가 시작될 가능성이 높습니다.'
-    status = 'Strong Buy Pressure'
+      '대형 체결 참여 비중이 높고 매수 방향 압력이 우세합니다. 다만 이는 체결 참여와 방향 압력이며, 최종 방향 확신도는 Institutional Conviction Engine에서 확인해야 합니다.'
+    status = 'Strong Buy-side Participation'
   }
 
   else if (strongFlow && net < -0.2) {
-    phase = 'Institutional Distribution'
+    phase = 'High Participation + Sell Pressure'
     interpretation =
-      '기관급 자금이 매도 포지션을 구축하고 있습니다. 시장에 하락 압력이 형성되고 있습니다.'
-    status = 'Strong Sell Pressure'
+      '대형 체결 참여 비중이 높고 매도 방향 압력이 우세합니다. 다만 이는 체결 참여와 방향 압력이며, 최종 방향 확신도는 Institutional Conviction Engine에서 확인해야 합니다.'
+    status = 'Strong Sell-side Participation'
   }
 
   else if (mediumFlow && Math.abs(net) < 0.1) {
-    phase = 'Liquidity Build-up'
+    phase = 'High Participation / Neutral Pressure'
     interpretation =
-      '대형 체결은 증가하고 있지만 방향성은 아직 정렬되지 않았습니다. 세력이 유동성을 축적하는 단계일 가능성이 있습니다.'
-    status = 'Energy Building'
+      '대형 체결 참여는 증가하고 있지만 방향 압력은 아직 정렬되지 않았습니다. 유동성 축적 또는 방향성 대기 구간일 수 있습니다.'
+    status = 'Participation Building'
   }
 
   else if (net > 0.15) {
     phase = 'Buy Pressure Dominant'
     interpretation =
-      '기관 순매수 압력이 점진적으로 증가하고 있습니다.'
+      '대형 체결 흐름에서 매수 방향 압력이 점진적으로 증가하고 있습니다.'
     status = 'Buy Pressure'
   }
 
   else if (net < -0.15) {
     phase = 'Sell Pressure Dominant'
     interpretation =
-      '기관 순매도 압력이 점진적으로 증가하고 있습니다.'
+      '대형 체결 흐름에서 매도 방향 압력이 점진적으로 증가하고 있습니다.'
     status = 'Sell Pressure'
   }
 
@@ -95,11 +95,11 @@ export default function VIPWhaleTradeGuideCard({
 
         <div>
           <div className="font-semibold text-white text-base">
-            🐋 Institutional Flow(기관급 자금(Whale / Large Player)의 매수·매도 흐름을 관찰중.)
+            🐋 Trade Participation & Directional Pressure
           </div>
 
           <div className="text-xs text-neutral-400">
-            (기관급 자금 흐름 분석)
+            (대형 체결 참여 비중과 방향 압력 분석)
           </div>
         </div>
 
@@ -115,7 +115,7 @@ export default function VIPWhaleTradeGuideCard({
       {/* 핵심 데이터 */}
       <div className="mb-4 text-xs text-neutral-400">
 
-        Whale Trade Ratio (시장 거래 중에서 대형 고래 체결이 차지하는 비율)
+        Whale Trade Ratio (시장 거래 중 대형 체결이 차지하는 실제 비중)
 
         <span className="text-yellow-400 font-semibold ml-1">
           {ratioPercent}%
@@ -123,7 +123,7 @@ export default function VIPWhaleTradeGuideCard({
 
         <span className="mx-3 text-neutral-600">|</span>
 
-        Whale Net Pressure (큰 자금이 지금 매수 우위인지 매도 우위인지를 보여주는 값)
+        Whale Net Pressure (대형 체결 흐름의 매수·매도 방향 압력)
 
         <span
           style={{ color: levelColor }}
@@ -145,18 +145,18 @@ export default function VIPWhaleTradeGuideCard({
       {/* 트레이딩 가이드 */}
       <div className="text-xs text-neutral-500 leading-relaxed space-y-1">
 
-        <div>• Whale Trade Ratio → 대형 체결 비중</div>
-        <div>• Net Pressure → 고래 순매수 / 순매도 방향</div>
-        <div>• Ratio + Net 상승 → 기관 매집 가능성 증가</div>
-        <div>• Ratio 상승 + Net 하락 → 기관 분배 가능성</div>
-        <div>• Sweep → 유동성 스탑 헌팅 가능성</div>
-        <div>• Absorption → 고래 물량 흡수 패턴</div>
+        <div>• Whale Trade Ratio → 실제 대형 체결 참여 비중</div>
+        <div>• Net Pressure → 대형 체결의 순매수 / 순매도 방향 압력</div>
+        <div>• Ratio 상승 + Net 상승 → 매수 방향 체결 참여 증가</div>
+        <div>• Ratio 상승 + Net 하락 → 매도 방향 체결 참여 증가</div>
+        <div>• Trade Participation은 Institutional Energy와 별도 layer입니다.</div>
+        <div>• 최종 방향 확신도는 energy × directional alignment × consistency로 판단됩니다.</div>
 
       </div>
 
       {/* 상태 */}
       <div className="mt-5 text-center text-xs font-semibold text-white">
-        Observing the flow of institutional funds : {status}
+        Observing trade participation and directional pressure : {status}
       </div>
 
     </motion.div>

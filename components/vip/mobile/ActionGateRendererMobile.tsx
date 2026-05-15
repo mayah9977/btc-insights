@@ -1,3 +1,5 @@
+// components/vip/mobile/ActionGateRendererMobile.tsx
+
 'use client'
 
 import React, { useState, useCallback } from 'react'
@@ -7,6 +9,8 @@ import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
+
+import { MobileFinalizedInstitutionalNumbers } from '@/components/vip/mobile/MobileFinalizedInstitutionalNumbers'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -26,42 +30,33 @@ export default function ActionGateRendererMobile({
 }: Props) {
   const title = 'Whales dominate the market.'
 
-  const description =
-    '현재 실시간데이터(고래움직임/체결량/온체인데이터/ Open Interest/Funding rate 등)를 기반으로 시장상황을 관찰중에 있습니다.'
-
   const bg =
     gate === 'OBSERVE'
       ? 'bg-emerald-900/20 border-emerald-600/30'
       : gate === 'CAUTION'
-      ? 'bg-yellow-900/20 border-yellow-600/30'
-      : 'bg-red-900/20 border-red-600/30'
+        ? 'bg-yellow-900/20 border-yellow-600/30'
+        : 'bg-red-900/20 border-red-600/30'
 
-  /* =========================
-     🔥 기존 glow 유지
-  ========================= */
   const stateGlow =
     gate === 'OBSERVE'
       ? 'shadow-[0_0_24px_rgba(16,185,129,0.18)] hover:shadow-[0_0_32px_rgba(16,185,129,0.26)]'
       : gate === 'CAUTION'
-      ? 'shadow-[0_0_28px_rgba(245,158,11,0.22)] hover:shadow-[0_0_36px_rgba(245,158,11,0.30)]'
-      : 'shadow-[0_0_32px_rgba(239,68,68,0.28)] hover:shadow-[0_0_42px_rgba(239,68,68,0.38)]'
+        ? 'shadow-[0_0_28px_rgba(245,158,11,0.22)] hover:shadow-[0_0_36px_rgba(245,158,11,0.30)]'
+        : 'shadow-[0_0_32px_rgba(239,68,68,0.28)] hover:shadow-[0_0_42px_rgba(239,68,68,0.38)]'
 
-  /* =========================
-     🔥 NEW: SystemRiskBadge 스타일 (핵심)
-  ========================= */
   const stateGlowStrong =
     gate === 'OBSERVE'
       ? 'shadow-[0_0_28px_rgba(16,185,129,0.22)]'
       : gate === 'CAUTION'
-      ? 'shadow-[0_0_36px_rgba(245,158,11,0.26)]'
-      : 'shadow-[0_0_48px_rgba(239,68,68,0.32)]'
+        ? 'shadow-[0_0_36px_rgba(245,158,11,0.26)]'
+        : 'shadow-[0_0_48px_rgba(239,68,68,0.32)]'
 
   const statePulse =
     gate === 'OBSERVE'
-      ? '' // ❌ pulse 없음
+      ? ''
       : gate === 'CAUTION'
-      ? 'animate-[pulse_3.2s_ease-in-out_infinite] opacity-80'
-      : '' // ❌ IGNORE pulse 제거 (조건 반영)
+        ? 'animate-[pulse_3.2s_ease-in-out_infinite] opacity-80'
+        : ''
 
   const [open, setOpen] = useState(false)
   const toggle = useCallback(() => setOpen(prev => !prev), [])
@@ -71,17 +66,23 @@ export default function ActionGateRendererMobile({
 
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
-    10
+    10,
   )
 
+  const descriptionText = Array.isArray(
+    sentence?.description,
+  )
+    ? sentence?.description.join('\n')
+    : sentence?.description ?? ''
+
   const typedDescription = useTypewriter(
-    sentence?.description ?? '',
-    8
+    descriptionText,
+    8,
   )
 
   const typedTendency = useTypewriter(
     sentence?.tendency ?? '',
-    12
+    12,
   )
 
   const teaser =
@@ -111,12 +112,10 @@ export default function ActionGateRendererMobile({
           transition-all
           duration-300
           ${bg}
-          ${stateGlow} ${stateGlowStrong}   // 🔥 NEW 적용
+          ${stateGlow}
+          ${stateGlowStrong}
         `}
       >
-        {/* =========================
-           🔥 기존 gradient flow 유지
-        ========================= */}
         <motion.div
           aria-hidden
           initial={{ x: '-20%' }}
@@ -146,9 +145,6 @@ export default function ActionGateRendererMobile({
           />
         </motion.div>
 
-        {/* =========================
-           🔥 FIX: pulse를 background에만 적용
-        ========================= */}
         <div
           aria-hidden
           className={`
@@ -156,7 +152,7 @@ export default function ActionGateRendererMobile({
             absolute
             inset-0
             rounded-xl
-            ${statePulse}   // 🔥 NEW
+            ${statePulse}
           `}
         >
           <div
@@ -276,13 +272,15 @@ export default function ActionGateRendererMobile({
               {typedSummary}
             </div>
 
-            <div className="text-gray-300 text-xs leading-relaxed">
+            <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-line">
               {typedDescription}
             </div>
 
             <div className="text-gray-500 text-xs">
               {typedTendency}
             </div>
+
+            <MobileFinalizedInstitutionalNumbers />
           </div>
         </div>
       )}

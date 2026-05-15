@@ -1,5 +1,7 @@
+// lib/market/narrative/finalNarrativeComposer.ts
+
 /* =========================================================
- AI Narrative Final Composer (FINAL - CLEAN)
+AI Narrative Final Composer (FINAL - REALTIME STRUCTURED)
 ========================================================= */
 
 import {
@@ -12,12 +14,17 @@ import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 import {
   buildCause,
   buildRisk,
+  buildSituation,
 } from '@/lib/market/narrative/numericNarrativeBuilder'
 
 import { MarketSignal } from '@/lib/market/signalEngine'
 
+import type {
+  InstitutionalEvidenceSnapshot,
+} from '@/lib/market/institutional/institutionalEvidenceSnapshot'
+
 /* =========================================================
- 🔥 causeSignals 안전 정규화
+🔥 causeSignals 안전 정규화
 ========================================================= */
 function normalizeSignals(arr: any[]): string[] {
   if (!arr?.length) return []
@@ -25,27 +32,32 @@ function normalizeSignals(arr: any[]): string[] {
   return arr
     .map((s) => {
       if (!s) return null
+
       if (typeof s === 'string') return s
+
       if (typeof s === 'object') {
         return s.text || s.label || s.type || null
       }
+
       return null
     })
     .filter(Boolean)
 }
 
 /* =========================================================
- Compose Final Narrative Report
+Compose Final Narrative Report
 ========================================================= */
 export function composeFinalNarrativeReport(params: {
   summary: string
   tendency: string
   baseDescription: string
-  sections: NarrativeSectionMap
-  signal: MarketSignal
-  snapshot: MarketSnapshot
+  sections: NarrativeSectionMap | any
+  signal: MarketSignal | any
+  snapshot: MarketSnapshot | any
+  institutionalSnapshot?:
+    | InstitutionalEvidenceSnapshot
+    | null
 }): FinalNarrativeReport {
-
   const {
     summary,
     tendency,
@@ -55,66 +67,25 @@ export function composeFinalNarrativeReport(params: {
     snapshot,
   } = params
 
-  /* =========================================================
-   🔥 1️⃣ Situation 제거 (핵심)
-  ========================================================= */
-  const situation = ''
-
-  /* =========================================================
-   🔥 2️⃣ Cause (핵심)
-  ========================================================= */
-  const normalizedCauseSignals = normalizeSignals(
-    sections?.cause ?? [],
-  )
-
-  const cause = buildCause({
+  // 1. 기존의 정밀한 buildCause 호출
+  const indicators = buildCause({
     snapshot,
-    causeSignals: normalizedCauseSignals,
+    causeSignals:
+      normalizeSignals(sections?.cause ?? []),
   })
 
-  /* =========================================================
-   3️⃣ Risk
-  ========================================================= */
-  const risk = buildRisk({
-    snapshot,
-    signal,
-  })
-
-  /* =========================================================
-   4️⃣ Strategy
-  ========================================================= */
-  const strategyParts: string[] = []
-
-  if (baseDescription) {
-    strategyParts.push(baseDescription)
-  }
-
-  if (sections?.strategy?.length) {
-    const normalizedStrategy = normalizeSignals(
-      sections.strategy,
-    )
-    strategyParts.push(...normalizedStrategy)
-  }
-
-  const strategy =
-    strategyParts.length > 0
-      ? strategyParts.join(' ')
-      : '관망 또는 리스크 관리 중심 대응 권장'
-
-  /* =========================================================
-   🔥 Final Description (situation 제거)
-  ========================================================= */
-  const description = [cause, risk, strategy]
-    .filter(Boolean)
-    .join(' ')
+  // 2. 조립 (정밀 데이터 + 전략)
+  // Compact narrative flow without verbose connector wording
+  const description =
+    `${indicators}. ${baseDescription}`
 
   return {
     summary,
     tendency,
-    situation, // 빈값 유지 (구조 호환)
-    cause,
-    risk,
-    strategy,
+    situation: buildSituation(snapshot),
+    cause: indicators,
+    risk: buildRisk({ snapshot, signal }),
+    strategy: baseDescription,
     description,
   }
 }

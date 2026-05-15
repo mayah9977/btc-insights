@@ -24,7 +24,7 @@ function amplify(signal: string): string {
       return '⚠️ OI 감소'
 
     case 'VOLUME_SPIKE':
-      return '⚡ Vol 확장'
+      return '⚡ Vol 증가'
     case 'VOLUME_DROP':
       return '🧊 Vol 감소'
 

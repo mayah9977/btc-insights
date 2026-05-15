@@ -1,5 +1,6 @@
 /* =========================================================
    🐋 Whale Intensity v2 Engine
+
    목적
    - 기관 자금 에너지 감지
    - 0~100 scale 출력
@@ -46,13 +47,16 @@ export function calculateWhaleIntensityV2(
   ========================= */
 
   const oiEnergy =
-    Math.min(1, Math.abs(oiDeltaRatio) * 22)
+    Math.min(1, Math.abs(oiDeltaRatio))
 
   const volumeEnergy =
-    Math.min(1, Math.log(volumeRatio + 1) * 2.2)
+    Math.min(
+      1,
+      Math.log(volumeRatio + 1) / Math.log(12),
+    )
 
   const volatilityEnergy =
-    Math.min(1, volatility * 1.6)
+    Math.min(1, volatility)
 
   const driftEnergy =
     Math.min(1, drift * 0.9)
@@ -67,6 +71,27 @@ export function calculateWhaleIntensityV2(
       0.20 * volatilityEnergy +
       0.10 * driftEnergy
 
+  console.log(
+    '[WhaleIntensityV2]',
+    {
+      oiDeltaRatio,
+      volumeRatio,
+      volatility,
+      drift,
+
+      oiEnergy,
+      volumeEnergy,
+      volatilityEnergy,
+      driftEnergy,
+
+      rawIntensity,
+      intensity: rawIntensity * 100,
+    },
+  )
+
+  /**
+   * 🔥 SSOT = 0~100
+   */
   const intensity = clamp(rawIntensity * 100)
 
   /* =========================

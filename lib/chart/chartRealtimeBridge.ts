@@ -1,7 +1,8 @@
+// lib/chart/chartRealtimeBridge.ts
+
 type ChartUpdater = (data: any) => void
 
 class ChartRealtimeBridge {
-
   private static instance: ChartRealtimeBridge
 
   private charts = new Map<string, ChartUpdater>()
@@ -10,6 +11,7 @@ class ChartRealtimeBridge {
     if (!this.instance) {
       this.instance = new ChartRealtimeBridge()
     }
+
     return this.instance
   }
 
@@ -23,11 +25,13 @@ class ChartRealtimeBridge {
 
   update(id: string, data: any) {
     const chart = this.charts.get(id)
+
     if (chart) {
       chart(data)
     }
   }
-
 }
 
-export const chartRealtimeBridge = ChartRealtimeBridge.getInstance()
+export const chartRealtimeBridge =
+  ChartRealtimeBridge.getInstance()
+  

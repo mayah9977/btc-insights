@@ -56,7 +56,7 @@ export const BOLLINGER_SENTENCE_MAP: Record<
   [BollingerSignalType.INSIDE_UPPER_BREAK_AND_DEVIATE]: {
     summary: 'Finalized Data Analysis  ( 확정된 분석 )',
     description: [
-      '고래 차익실현으로 상승하던 가격이 급락이 있을수 있으니 주의하시길바랍니다.',
+      '차익실현으로 상승하던 가격이 급락이 있을수 있으니 주의하시길바랍니다.',
     ],
     tendency:
       'Keyword : 과열 극단 차익실현 경계 (Caution against overheating and extreme profit-taking)',

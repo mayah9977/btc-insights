@@ -1,3 +1,5 @@
+// lib/market/narrative/generateNarrative.ts
+
 import { ActionGateSentence } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { pickSentence } from '@/lib/market/narrative/sentenceVariation'
 
@@ -17,77 +19,189 @@ import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { runInterpreterEngine } from '@/lib/market/engine/interpreterEngine'
 import { buildSignal } from '@/lib/market/signalEngine'
 
-/* 🔥 핵심 */
-import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 
-/* =========================================================
-   Sentence Cache
-========================================================= */
+import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
+import { buildInstitutionalNarrative } from '@/lib/market/institutional/institutionalNarrativeEnhancer'
+
+import type {
+  InstitutionalEvidenceSnapshot,
+} from '@/lib/market/institutional/institutionalEvidenceSnapshot'
+
 const sentenceCache: Record<string, string> = {}
 
-/* 🔥 ultra fast cache */
-let lastTs = 0
+let lastEvidenceEndTs = 0
+let lastEvidenceCandleTs = 0
+let lastEvidenceSignalType = ''
 let lastResult: FinalNarrativeReport | null = null
 
-/* =========================================================
-   Narrative Engine
-========================================================= */
+function createEmptyReport(
+  base: ActionGateSentence,
+): FinalNarrativeReport {
+  return {
+    summary: base.summary,
+    tendency: base.tendency,
+    description: base.description[0] ?? '',
+    situation: '',
+    cause: '',
+    risk: '',
+    strategy: '',
+  }
+}
+
+function createFrozenMarketSnapshot(
+  snapshot: InstitutionalEvidenceSnapshot,
+  signalType: BollingerSignalType,
+) {
+  return {
+    ...snapshot,
+
+    signalType,
+
+    ts: snapshot.confirmedCandleTs,
+
+    oiDelta: snapshot.oiDeltaAccum,
+    oiDeltaRatio: snapshot.oiDeltaAverage,
+
+    fundingRate: snapshot.fundingAverage,
+
+    volumeRatio: snapshot.volumeRatioAverage,
+
+    whaleIntensity: snapshot.whaleIntensityAverage,
+    whaleRatio: snapshot.whaleRatioAverage,
+    whaleNetRatio: snapshot.whaleNetRatioAverage,
+
+    fmai: snapshot.fmaiAverage,
+    absorption: snapshot.absorptionAverage,
+    sweep: snapshot.sweepAverage,
+
+    __institutionalConfirmedSignalType:
+      snapshot.confirmedSignalType,
+
+    __institutionalEvidenceEndTs:
+      snapshot.endTs,
+
+    __institutionalConfirmedCandleTs:
+      snapshot.confirmedCandleTs,
+  }
+}
+
+function createSentenceKey(
+  snapshot: InstitutionalEvidenceSnapshot,
+  signalType: BollingerSignalType,
+): string {
+  return [
+    signalType,
+    snapshot.confirmedSignalType ?? '',
+    snapshot.confirmedCandleTs,
+    snapshot.endTs,
+  ].join('|')
+}
+
 export function generateNarrative(
   base: ActionGateSentence,
   signalType: BollingerSignalType,
 ): FinalNarrativeReport {
-  /* =========================================================
-     Snapshot
-  ========================================================= */
-  const snapshot = getMarketSnapshot()
+  const snapshot =
+    useInstitutionalEvidenceStore
+      .getState()
+      .snapshot
 
-  /* 🔥 ultra fast cache */
-  if (snapshot.ts === lastTs && lastResult) {
+  if (
+    !snapshot ||
+    snapshot.sampleCount === 0
+  ) {
+    return createEmptyReport(base)
+  }
+
+  return generateNarrativeFromSnapshot(
+    snapshot,
+    signalType,
+  )
+}
+
+export function generateNarrativeFromSnapshot(
+  snapshot: InstitutionalEvidenceSnapshot,
+  signalType: BollingerSignalType,
+): FinalNarrativeReport {
+  const base =
+    BOLLINGER_SENTENCE_MAP[signalType] ||
+    BOLLINGER_SENTENCE_MAP[
+      BollingerSignalType.INSIDE_CENTER
+    ]
+
+  if (
+    !snapshot ||
+    snapshot.sampleCount === 0
+  ) {
+    return createEmptyReport(base)
+  }
+
+  const evidenceEndTs =
+    snapshot.endTs ?? 0
+
+  const evidenceCandleTs =
+    snapshot.confirmedCandleTs ?? 0
+
+  const evidenceSignalType =
+    snapshot.confirmedSignalType ?? ''
+
+  if (
+    evidenceEndTs === lastEvidenceEndTs &&
+    evidenceCandleTs === lastEvidenceCandleTs &&
+    evidenceSignalType === lastEvidenceSignalType &&
+    lastResult
+  ) {
     return lastResult
   }
 
-  /* 🔥 기존 캐시 */
-  const cachePayload = {
-    ...snapshot,
-    signalType,
-    __ts: snapshot.ts,
+  const frozenSnapshot =
+    createFrozenMarketSnapshot(
+      snapshot,
+      signalType,
+    )
+
+  const cached =
+    getCachedNarrative(frozenSnapshot as any)
+
+  if (cached) {
+    lastEvidenceEndTs = evidenceEndTs
+    lastEvidenceCandleTs = evidenceCandleTs
+    lastEvidenceSignalType = evidenceSignalType
+    lastResult = cached
+
+    return cached
   }
 
-  const cached = getCachedNarrative(cachePayload as any)
-  if (cached) return cached
-
-  /* =========================================================
-     Strategy Base
-  ========================================================= */
-  const sentenceKey = `${signalType}_${snapshot.ts}`
+  const sentenceKey =
+    createSentenceKey(
+      snapshot,
+      signalType,
+    )
 
   if (!sentenceCache[sentenceKey]) {
     sentenceCache[sentenceKey] =
-      pickSentence(base.description, signalType)
+      pickSentence(
+        base.description,
+        signalType,
+      )
   }
 
-  const strategyBase = sentenceCache[sentenceKey]
+  const strategyBase =
+    sentenceCache[sentenceKey]
 
-  /* =========================================================
-     Interpreter (🔥 제한 실행)
-  ========================================================= */
-  const shouldRunHeavy =
-    Math.abs(snapshot.oiDelta ?? 0) > 0.01 ||
-    Math.abs(snapshot.whaleNetRatio ?? 0) > 0.003 ||
-    Math.abs(snapshot.fundingRate ?? 0) > 0.00001
+  const institutionalLines =
+    buildInstitutionalNarrative(snapshot)
 
-  const interpreterResult = shouldRunHeavy
-    ? runInterpreterEngine(snapshot)
-    : {
-        structureSignals: [],
-        liquidationSignals: [],
-        whaleSignals: [],
-        regimeSignals: [],
-        pressureSignals: [],
-        liquidationMapSignals: [],
-        allSignals: [],
-      }
+  const reinforcedStrategyBase = [
+    strategyBase,
+    ...institutionalLines,
+  ].join(' ')
+
+  const interpreterResult =
+    runInterpreterEngine(
+      frozenSnapshot as any,
+    )
 
   const {
     structureSignals,
@@ -98,112 +212,54 @@ export function generateNarrative(
     liquidationMapSignals,
   } = interpreterResult
 
-  /* =========================================================
-     🔥 signal 없으면 즉시 종료
-  ========================================================= */
-  if (
-    !structureSignals.length &&
-    !liquidationSignals.length &&
-    !whaleSignals.length &&
-    !regimeSignals.length &&
-    !pressureSignals.length &&
-    !liquidationMapSignals.length
-  ) {
-    const empty: FinalNarrativeReport = {
+  const signal =
+    buildSignal({
+      ...interpreterResult,
+      snapshot: frozenSnapshot as any,
+    })
+
+  const prioritized =
+    applySignalPriority({
+      liquidationSignals: [
+        ...liquidationSignals.map((s) => s.type),
+        ...liquidationMapSignals.map((s) => s.type),
+      ],
+      whaleSignals:
+        whaleSignals.map((s) => s.type),
+      pressureSignals:
+        pressureSignals.map((s) => s.type),
+      structureSignals:
+        structureSignals.map((s) => s.type),
+      regimeSignals:
+        regimeSignals.map((s) => s.type),
+    })
+
+  const sections =
+    mapSignalsToNarrativeSections(
+      prioritized,
+    )
+
+  const report =
+    composeFinalNarrativeReport({
       summary: base.summary,
       tendency: base.tendency,
-      description: strategyBase,
-      situation: '',
-      cause: '',
-      risk: '',
-      strategy: '',
-    }
+      baseDescription:
+        reinforcedStrategyBase,
+      sections,
+      signal,
+      snapshot: frozenSnapshot as any,
+      institutionalSnapshot: snapshot,
+    })
 
-    lastTs = snapshot.ts
-    lastResult = empty
-
-    return empty
-  }
-
-  /* =========================================================
-     Signal
-  ========================================================= */
-  const signal = buildSignal({
-    ...interpreterResult,
-    snapshot,
-  })
-
-  /* =========================================================
-     🔥 Priority (한 번만 계산)
-  ========================================================= */
-  const prioritized = applySignalPriority({
-    liquidationSignals: [
-      ...liquidationSignals.map((s) => s.type),
-      ...liquidationMapSignals.map((s) => s.type),
-    ],
-    whaleSignals: whaleSignals.map((s) => s.type),
-    pressureSignals: pressureSignals.map((s) => s.type),
-    structureSignals: structureSignals.map((s) => s.type),
-    regimeSignals: regimeSignals.map((s) => s.type),
-  })
-
-  /* =========================================================
-     🔥 Mapper (경량화된 구조)
-  ========================================================= */
-  const sections = mapSignalsToNarrativeSections(
-    prioritized,
+  setCachedNarrative(
+    frozenSnapshot as any,
+    report,
   )
 
-  /* =========================================================
-     Final Composer
-  ========================================================= */
-  const report = composeFinalNarrativeReport({
-    summary: base.summary,
-    tendency: base.tendency,
-    baseDescription: strategyBase,
-    sections,
-    signal,
-    snapshot,
-  })
-
-  /* =========================================================
-     Cache Save
-  ========================================================= */
-  setCachedNarrative(cachePayload as any, report)
-
-  lastTs = snapshot.ts
+  lastEvidenceEndTs = evidenceEndTs
+  lastEvidenceCandleTs = evidenceCandleTs
+  lastEvidenceSignalType = evidenceSignalType
   lastResult = report
 
   return report
-}
-
-export function generateNarrativeFromSnapshot(
-  snapshot: any,
-  signalType: BollingerSignalType
-) {
-  const base =
-    BOLLINGER_SENTENCE_MAP[signalType] ||
-    BOLLINGER_SENTENCE_MAP[BollingerSignalType.INSIDE_CENTER]
-
-  return composeFinalNarrativeReport({
-    summary: base.summary,
-    tendency: base.tendency,
-    baseDescription: base.description[0],
-
-    sections: {
-      cause: [],
-      situation: [],
-      risk: [],
-      strategy: [],
-    },
-
-    snapshot,
-    signal: {
-  direction: 'neutral',
-  strength: 0,
-  dominant: 'none',
-  riskLevel: 'low',
-  tags: [],
-},
-  })
 }

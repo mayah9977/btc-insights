@@ -42,34 +42,34 @@ export default function VIPInstitutionalGuideCard({
      2️⃣ 상태 해석
   ===================================================== */
 
-  let phase = '에너지 축적 구간'
-  let message = 'AI is currently monitoring the market situation.'
-  let action = '기관급 고래의 자금 흐름을 모니터링 중입니다.'
+  let phase = '기관 개입 에너지 축적 구간'
+  let message = 'AI is currently monitoring institutional intervention energy and directional conviction.'
+  let action = '기관 개입 에너지와 방향성 정렬을 모니터링 중입니다.'
 
   if (isPending) {
-    phase = '기관급 고래 체결 감지중'
-    message = '기관급 체결이 감지되었으며 방향성 여부를 확인 중입니다.'
-    action = '기관급 고래 체결 감지됨'
+    phase = '기관 개입 신호 감지중'
+    message = '기관 개입 에너지가 감지되었으며 방향성 확정 여부를 확인 중입니다.'
+    action = '기관 개입 신호 감지'
   }
   else if (confidence >= 45 && dominant === 'LONG') {
-    phase = '강한 매수 압력 우세'
-    message = '기관 자금이 매수 방향으로 강화되고 있습니다.'
-    action = '강한 매수 압력'
+    phase = '강한 기관 매수 방향성 확정'
+    message = '기관 개입 에너지와 매수 방향 압력이 함께 정렬되고 있습니다.'
+    action = '강한 기관 매수 Conviction'
   }
   else if (confidence >= 45 && dominant === 'SHORT') {
-    phase = '강한 매도 압력 우세'
-    message = '기관 자금이 매도 방향으로 강화되고 있습니다.'
-    action = '강한 매도 압력'
+    phase = '강한 기관 매도 방향성 확정'
+    message = '기관 개입 에너지와 매도 방향 압력이 함께 정렬되고 있습니다.'
+    action = '강한 기관 매도 Conviction'
   }
   else if (confidence >= 30 && dominant === 'LONG') {
-    phase = '매수 압력 우세'
-    message = '기관 순매수 압력이 점진적으로 형성되고 있습니다.'
-    action = '매수 우위'
+    phase = '기관 매수 방향성 형성'
+    message = '기관 개입 에너지 위에서 매수 방향 압력이 점진적으로 형성되고 있습니다.'
+    action = '기관 매수 방향성 관찰'
   }
   else if (confidence >= 30 && dominant === 'SHORT') {
-    phase = '매도 압력 우세'
-    message = '기관 순매도 압력이 점진적으로 형성되고 있습니다.'
-    action = '매도 우위'
+    phase = '기관 매도 방향성 형성'
+    message = '기관 개입 에너지 위에서 매도 방향 압력이 점진적으로 형성되고 있습니다.'
+    action = '기관 매도 방향성 관찰'
   }
 
   /* =====================================================
@@ -87,14 +87,14 @@ export default function VIPInstitutionalGuideCard({
     if (isPending)
       return (
         <div className="px-3 py-1 text-xs rounded bg-yellow-500 text-black font-semibold">
-          ⏳ 기관급 고래 체결 감지중.
+          ⏳ 기관 개입 신호 감지중
         </div>
       )
 
     if (confidence < 15)
       return (
         <div className="px-3 py-1 text-xs rounded bg-zinc-600 text-white">
-          기관급 고래 체결 감지중.
+          기관 개입 에너지 모니터링
         </div>
       )
 
@@ -104,7 +104,7 @@ export default function VIPInstitutionalGuideCard({
           className="px-3 py-1 text-xs rounded font-bold text-black"
           style={{ backgroundColor: levelColor }}
         >
-          🔥 기관급 고래 실시간 체결중.
+          🔥 기관 방향성 확정
         </div>
       )
 
@@ -113,7 +113,7 @@ export default function VIPInstitutionalGuideCard({
         className="px-3 py-1 text-xs rounded text-black"
         style={{ backgroundColor: levelColor }}
       >
-        기관급 고래 체결중.
+        기관 개입 활성화
       </div>
     )
   }
@@ -179,11 +179,11 @@ export default function VIPInstitutionalGuideCard({
             transition={{ duration: 0.4 }}
             className="font-semibold text-white text-base"
           >
-            🧠 기관급 고래의 체결 강도에 따른 리포트
+            🧠 기관 개입 에너지와 방향성 확신도 리포트
           </motion.div>
 
           <div className="text-xs text-neutral-400">
-            (기관급 고래체결 강도상태 분석)
+            (Institutional Intervention Energy + Directional Conviction)
           </div>
         </div>
 
@@ -194,15 +194,15 @@ export default function VIPInstitutionalGuideCard({
       {/* 압력 요약 */}
 
       <div className="mb-4 text-xs text-neutral-400 relative z-10">
-        기관 순매수 압력 {long.toFixed(0)}%
+        기관 매수 방향 압력 {long.toFixed(0)}%
         <span className="mx-2 text-neutral-600">|</span>
-        기관 순매도 압력 {short.toFixed(0)}%
+        기관 매도 방향 압력 {short.toFixed(0)}%
       </div>
 
-      {/* Whale Intensity */}
+      {/* Institutional Energy */}
 
       <div className="mb-4 text-xs text-neutral-400 relative z-10">
-        기관급 고래 체결강도 {intensity.toFixed(1)}%
+        기관 개입 에너지 {intensity.toFixed(1)}%
       </div>
 
       {/* 게이지 */}
@@ -210,7 +210,7 @@ export default function VIPInstitutionalGuideCard({
       <div className="mb-6 relative z-10">
 
         <div className="text-xs text-neutral-500 mb-1">
-          기관 방향성 신뢰도
+          기관 방향성 확신도
         </div>
 
         <div className="w-full h-2 bg-zinc-800 rounded overflow-hidden relative">
@@ -234,7 +234,6 @@ export default function VIPInstitutionalGuideCard({
           )}
 
         </div>
-
       </div>
 
       {/* 상태 */}
@@ -270,13 +269,13 @@ export default function VIPInstitutionalGuideCard({
           >
             ─────────────────────────
             <br />
-            • 45% 이상 → 강한 고래체결 확정 (추세 시작)
+            • 45% 이상 → 강한 기관 방향성 확정
             <br />
-            • 30~44% → 방향 형성 단계
+            • 30~44% → 방향성 형성 단계
             <br />
-            • 15~29% → 준비 구간
+            • 15~29% → 기관 개입 준비 구간
             <br />
-            • 15% 미만 → 에너지 축적 단계
+            • 15% 미만 → 기관 개입 에너지 축적 단계
             <br />
             • 신호는 최소 3초 이상 유지 시 확정됩니다.
             <br />

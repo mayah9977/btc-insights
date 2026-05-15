@@ -1,3 +1,5 @@
+// components/vip/mobile/VIPLiveStatusStripMobile.tsx
+
 'use client'
 
 import React, { useRef } from 'react'
@@ -13,7 +15,7 @@ export default function VIPLiveStatusStripMobile({
   const {
     oi,
     volume,
-    whaleIntensity
+    whaleIntensity,
   } = useRealtimeMarketComposite(symbol)
 
   const prevVolumeRef = useRef<number | null>(null)
@@ -60,7 +62,7 @@ export default function VIPLiveStatusStripMobile({
       <div className="flex flex-col">
         <span className="text-gray-400">WHALE</span>
         <span className="text-yellow-400 font-semibold">
-          {(whaleIntensity ?? 0).toFixed(2)}
+          {Math.round(whaleIntensity ?? 0)}
         </span>
       </div>
     </div>

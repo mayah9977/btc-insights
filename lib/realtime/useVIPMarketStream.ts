@@ -1,3 +1,5 @@
+// lib/realtime/useVIPMarketStream.ts
+
 'use client'
 
 import { useEffect, useRef } from 'react'
@@ -20,6 +22,27 @@ import { chartController } from '@/lib/chart/chartController'
 
 type VIPMarketStreamOptions = {
   throttle?: number
+}
+
+/**
+ * 🔥 whaleIntensity SSOT = 0~100
+ *
+ * SSE 구버전 호환:
+ * - 0~1 legacy value는 자동으로 0~100으로 승격
+ * - 1 초과 값은 이미 0~100으로 보고 그대로 사용
+ */
+function normalizeWhaleIntensityScale(
+  value: unknown,
+): number | undefined {
+  const n = Number(value)
+
+  if (!Number.isFinite(n)) return undefined
+
+  if (n <= 1) {
+    return Math.max(0, Math.min(100, n * 100))
+  }
+
+  return Math.max(0, Math.min(100, n))
 }
 
 export function useVIPMarketStream(
@@ -176,9 +199,13 @@ export function useVIPMarketStream(
         if (!shouldUpdate('whaleIntensity')) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
+        /**
+         * 🔥 whaleIntensity SSOT = 0~100
+         * legacy 0~1 SSE payload는 여기서 자동 승격합니다.
+         */
         const intensity =
           msg.intensity !== undefined
-            ? msg.intensity
+            ? normalizeWhaleIntensityScale(msg.intensity)
             : undefined
 
         scheduleVIPMarketUpdate({

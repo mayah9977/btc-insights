@@ -56,6 +56,9 @@ const prevOI = new Map<string, number>()
 const lastVolume = new Map<string, number>()
 const prevVolume = new Map<string, number>()
 
+const recentVolumeMap = new Map<string, number[]>()
+const MAX_VOLUME_BUFFER = 60
+
 export function setLastOI(symbol: string, oi: number) {
   if (!isValidNumber(oi)) return
   const key = normalize(symbol)
@@ -72,12 +75,31 @@ export function getPrevOI(symbol: string) {
   return prevOI.get(normalize(symbol))
 }
 
+export function pushRecentVolume(symbol: string, volume: number) {
+  if (!isValidNumber(volume)) return
+  const key = normalize(symbol)
+  let arr = recentVolumeMap.get(key)
+  if (!arr) {
+    arr = []
+    recentVolumeMap.set(key, arr)
+  }
+  arr.push(volume)
+  if (arr.length > MAX_VOLUME_BUFFER) arr.shift()
+}
+
+export function getRecentVolumes(symbol: string, n: number): number[] {
+  const arr = recentVolumeMap.get(normalize(symbol))
+  if (!arr || arr.length < n) return []
+  return arr.slice(-n)
+}
+
 export function setLastVolume(symbol: string, volume: number) {
   if (!isValidNumber(volume)) return
   const key = normalize(symbol)
   const last = lastVolume.get(key)
   if (isValidNumber(last)) prevVolume.set(key, last)
   lastVolume.set(key, volume)
+  pushRecentVolume(symbol, volume)
 }
 
 export function getLastVolume(symbol: string) {

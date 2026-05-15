@@ -1,6 +1,9 @@
+// lib/realtime/useRealtimeMarketComposite.ts
+
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+
 import {
   subscribeOpenInterest,
   subscribeMarketVolume,
@@ -14,8 +17,16 @@ type CompositeState = {
 
   volume: number | null
 
+  /**
+   * 🔥 whaleIntensity SSOT = 0~100
+   */
   whaleIntensity: number | null
+
+  /**
+   * 🔥 whaleAvg SSOT = 0~100
+   */
   whaleAvg: number | null
+
   whaleTrend: 'UP' | 'DOWN' | 'FLAT' | null
   whaleSpike: boolean
 
@@ -43,8 +54,48 @@ const INITIAL: CompositeState = {
   lastUpdatedAt: null,
 }
 
-export function useRealtimeMarketComposite(symbol: string) {
-  const [state, setState] = useState<CompositeState>(INITIAL)
+/* =========================================================
+   🔥 whaleIntensity SSOT normalize utility
+   - legacy 0~1 자동 승격
+   - 0~100 clamp
+========================================================= */
+
+function normalizeWhaleIntensityScale(
+  value: unknown,
+): number | null {
+  const n = Number(value)
+
+  if (!Number.isFinite(n)) {
+    return null
+  }
+
+  /**
+   * legacy 0~1 payload
+   * ex:
+   * 0.72 -> 72
+   * 0.91 -> 91
+   */
+  if (n <= 1) {
+    return Math.max(
+      0,
+      Math.min(100, n * 100),
+    )
+  }
+
+  /**
+   * already 0~100 scale
+   */
+  return Math.max(
+    0,
+    Math.min(100, n),
+  )
+}
+
+export function useRealtimeMarketComposite(
+  symbol: string,
+) {
+  const [state, setState] =
+    useState<CompositeState>(INITIAL)
 
   // 연결 상태 추적용
   const connectionRef = useRef(false)
@@ -57,18 +108,25 @@ export function useRealtimeMarketComposite(symbol: string) {
     /* =========================
        OI
     ========================= */
+
     const unsubOI = subscribeOpenInterest(
       upper,
-      (openInterest, delta, direction, ts) => {
+      (
+        openInterest,
+        delta,
+        direction,
+        ts,
+      ) => {
         connectionRef.current = true
 
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           oi: openInterest,
           oiDelta: delta,
           oiDirection: direction,
           connected: true,
-          lastUpdatedAt: ts ?? Date.now(),
+          lastUpdatedAt:
+            ts ?? Date.now(),
         }))
       },
     )
@@ -76,16 +134,18 @@ export function useRealtimeMarketComposite(symbol: string) {
     /* =========================
        Volume
     ========================= */
+
     const unsubVol = subscribeMarketVolume(
       upper,
       (volume, ts) => {
         connectionRef.current = true
 
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           volume,
           connected: true,
-          lastUpdatedAt: ts ?? Date.now(),
+          lastUpdatedAt:
+            ts ?? Date.now(),
         }))
       },
     )
@@ -93,29 +153,65 @@ export function useRealtimeMarketComposite(symbol: string) {
     /* =========================
        Whale Intensity
     ========================= */
-    const unsubWhale = subscribeWhaleIntensity(
-      upper,
-      (intensity, avg, trend, isSpike, ts) => {
-        connectionRef.current = true
 
-        setState(prev => ({
-          ...prev,
-          whaleIntensity: intensity,
-          whaleAvg: avg,
-          whaleTrend: trend,
-          whaleSpike: isSpike,
-          connected: true,
-          lastUpdatedAt: ts ?? Date.now(),
-        }))
-      },
-    )
+    const unsubWhale =
+      subscribeWhaleIntensity(
+        upper,
+        (
+          intensity,
+          avg,
+          trend,
+          isSpike,
+          ts,
+        ) => {
+          connectionRef.current = true
+
+          /**
+           * 🔥 whaleIntensity SSOT = 0~100
+           *
+           * legacy 0~1 payload 자동 승격
+           * 이미 0~100이면 그대로 유지
+           */
+          const normalizedIntensity =
+            normalizeWhaleIntensityScale(
+              intensity,
+            )
+
+          /**
+           * 🔥 whaleAvg SSOT = 0~100
+           *
+           * Redis history legacy 값 자동 승격
+           */
+          const normalizedAvg =
+            normalizeWhaleIntensityScale(
+              avg,
+            )
+
+          setState((prev) => ({
+            ...prev,
+
+            whaleIntensity:
+              normalizedIntensity,
+
+            whaleAvg: normalizedAvg,
+
+            whaleTrend: trend,
+            whaleSpike: isSpike,
+
+            connected: true,
+
+            lastUpdatedAt:
+              ts ?? Date.now(),
+          }))
+        },
+      )
 
     return () => {
       unsubOI()
       unsubVol()
       unsubWhale()
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         connected: false,
       }))

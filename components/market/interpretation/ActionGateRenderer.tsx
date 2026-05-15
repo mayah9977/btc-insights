@@ -1,29 +1,27 @@
+// components/market/interpretation/ActionGateRenderer.tsx
+
 'use client'
 
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-import { RiskNumericPanel } from './numeric/RiskNumericPanel'
-import { RiskLimitedPanel } from './limited/RiskLimitedPanel'
-import { RiskFullPanel } from './full/RiskFullPanel'
 import { ActionGateCopy } from './ActionGateCopy'
 
 import { LiveBollingerCommentaryBanner } from '@/components/realtime/LiveBollingerCommentaryBanner'
-import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 
-/* Narrative Engine */
 import { generateNarrativeFromSnapshot } from '@/lib/market/narrative/generateNarrative'
 
-/* Store */
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
-/* Hero */
 import { ActionGateDescriptionHero } from './ActionGateDescriptionHero'
 
 import { buildMetaKey } from '@/lib/market/narrative/metaKeyBuilder'
-import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 import { useEffect, useRef } from 'react'
+
+import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
+
+import { FinalizedInstitutionalNumbers } from '@/components/market/interpretation/finalized/FinalizedInstitutionalNumbers'
 
 interface ActionGateRendererProps {
   signalType?: BollingerSignalType
@@ -32,87 +30,63 @@ interface ActionGateRendererProps {
 export const ActionGateRenderer: React.FC<
   ActionGateRendererProps
 > = ({ signalType }) => {
-  /* ======================================================
-     🔥 selector 기반 최소 구독 (핵심)
-  ====================================================== */
-
   const gate = useVIPMarketStore((s) => s.actionGateState)
   const sentence = useVIPMarketStore((s) => s.narrative)
   const setNarrative = useVIPMarketStore((s) => s.setNarrative)
-  const marketTick = useVIPMarketStore((s) => s.ts)
 
-  const isReady = useVIPMarketStore((s) => {
-    return (
-      s.ts > 0 &&
-      (s.oiDelta !== 0 ||
-        s.volumeRatio !== 1 ||
-        s.fundingRate !== 0 ||
-        s.whaleNetRatio !== 0)
+  const institutionalSnapshot =
+    useInstitutionalEvidenceStore(
+      (s) => s.snapshot,
     )
-  })
 
   const prevMetaKeyRef = useRef<string>('')
-
-  /* ======================================================
-     🔥 useEffect 기반 엔진 트리거
-  ====================================================== */
 
   useEffect(() => {
     if (!signalType) return
 
+    if (!institutionalSnapshot) return
+
     try {
-      const snapshot = getMarketSnapshot()
+      const snapshot = institutionalSnapshot
 
       if (
         !snapshot ||
-        snapshot.ts === 0 ||
-        (
-          snapshot.oiDelta === 0 &&
-          snapshot.volumeRatio === 1 &&
-          snapshot.fundingRate === 0 &&
-          snapshot.whaleNetRatio === 0
-        )
+        snapshot.sampleCount === 0
       ) {
         return
       }
 
-      const metaKey = buildMetaKey(snapshot)
+      const metaKey = buildMetaKey(snapshot as any)
 
       if (metaKey === prevMetaKeyRef.current) return
 
       prevMetaKeyRef.current = metaKey
 
       const newNarrative = generateNarrativeFromSnapshot(
-        snapshot,
-        signalType
+        snapshot as any,
+        signalType,
       )
 
       setNarrative(signalType, newNarrative, metaKey)
     } catch (err) {
       console.error('Narrative Flow Error:', err)
     }
-  }, [marketTick, signalType])
+  }, [institutionalSnapshot, signalType, setNarrative])
 
-  /* ======================================================
-     Container tone
-  ====================================================== */
   const containerClass =
     gate === 'OBSERVE'
       ? 'from-emerald-900/40 to-teal-900/20 border-emerald-700/40 text-emerald-200 shadow-[0_0_40px_rgba(16,185,129,0.15)]'
       : gate === 'CAUTION'
-      ? 'from-amber-900/30 to-yellow-900/20 border-amber-700/40 text-amber-200 shadow-[0_0_40px_rgba(245,158,11,0.15)]'
-      : 'from-slate-900/60 to-neutral-900/40 border-slate-700/40 text-slate-300 shadow-[0_0_30px_rgba(100,116,139,0.12)]'
+        ? 'from-amber-900/30 to-yellow-900/20 border-amber-700/40 text-amber-200 shadow-[0_0_40px_rgba(245,158,11,0.15)]'
+        : 'from-slate-900/60 to-neutral-900/40 border-slate-700/40 text-slate-300 shadow-[0_0_30px_rgba(100,116,139,0.12)]'
 
   const railClass =
     gate === 'OBSERVE'
       ? 'bg-emerald-400/40'
       : gate === 'CAUTION'
-      ? 'bg-amber-400/40'
-      : 'bg-slate-400/30'
+        ? 'bg-amber-400/40'
+        : 'bg-slate-400/30'
 
-  /* ======================================================
-     Background animation
-  ====================================================== */
   const bgMotionClass = {
     OBSERVE: 'ag-bg-observe',
     CAUTION: 'ag-bg-caution',
@@ -135,7 +109,6 @@ export const ActionGateRenderer: React.FC<
         ${densityClass[gate]}
       `}
     >
-      {/* Animated Background */}
       <div
         aria-hidden
         className={`
@@ -145,16 +118,13 @@ export const ActionGateRenderer: React.FC<
         `}
       />
 
-      {/* Left Rail */}
       <div
         className={`relative z-10 w-[4px] shrink-0 ${railClass}`}
       />
 
       <div className="relative z-10 mx-auto max-w-7xl px-6 w-full flex flex-col justify-center py-6">
-        {/* Header */}
         <ActionGateCopy gate={gate} />
 
-        {/* HERO DESCRIPTION */}
         <AnimatePresence mode="wait">
           {sentence && (
             <motion.div
@@ -165,7 +135,6 @@ export const ActionGateRenderer: React.FC<
               transition={{ duration: 0.45 }}
               className="mt-8"
             >
-              {/* SUMMARY */}
               <motion.div
                 className="
                   text-lg md:text-xl
@@ -182,7 +151,6 @@ export const ActionGateRenderer: React.FC<
                 {sentence.summary}
               </motion.div>
 
-              {/* DESCRIPTION */}
               <div className="mt-6">
                 <ActionGateDescriptionHero
                   description={sentence.description}
@@ -190,7 +158,6 @@ export const ActionGateRenderer: React.FC<
                 />
               </div>
 
-              {/* TENDENCY */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -204,20 +171,14 @@ export const ActionGateRenderer: React.FC<
               >
                 {sentence.tendency}
               </motion.div>
+
+              <FinalizedInstitutionalNumbers />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Live Commentary */}
         <LiveBollingerCommentaryBanner />
-
-        {/* Panels */}
-        <div className="mt-4">
-          {gate === 'IGNORE' && <RiskNumericPanel />}
-          {gate === 'CAUTION' && <RiskLimitedPanel />}
-          {gate === 'OBSERVE' && <RiskFullPanel />}
-        </div>
       </div>
     </div>
   )
-}    
+}
