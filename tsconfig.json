@@ -16,23 +16,27 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
 
-    // 🔥 여기 수정
+    // 🔥 FIX:
+    // Next.js 16 + 최신 TypeScript 환경 대응
+    // 기존 "5.0" 값은 invalid 처리됨
     "ignoreDeprecations": "6.0",
 
-    // 🔥 구조 유지 (삭제 안함)
+    // 🔥 구조 유지
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }
   },
+
   "include": [
     "next-env.d.ts",
-    "global.d.ts", // 🔥 추가
+    "global.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
+
   "exclude": [
     "node_modules",
     "scripts",
