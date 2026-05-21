@@ -16,12 +16,6 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
 
-    // 🔥 FIX:
-    // Next.js 16 + 최신 TypeScript 환경 대응
-    // 기존 "5.0" 값은 invalid 처리됨
-    "ignoreDeprecations": "6.0",
-
-    // 🔥 구조 유지
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
