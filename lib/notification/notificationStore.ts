@@ -3,7 +3,11 @@
 
 import { create } from 'zustand'
 
-export type NotificationType = 'NOTICE' | 'BTC_ALERT' | 'INDICATOR'
+export type NotificationType =
+  | 'NOTICE'
+  | 'BTC_ALERT'
+  | 'INDICATOR'
+  | 'INSTITUTIONAL_PATTERN'
 
 export type NotificationViewItem = {
   id: string
@@ -28,11 +32,22 @@ type NotificationStore = {
     authenticated?: boolean
   }) => void
 
-  pushIncoming: (item: NotificationViewItem) => void
+  pushIncoming: (
+    item: NotificationViewItem,
+  ) => void
+
   loadUnreadCount: () => Promise<void>
-  markOneRead: (id: string) => Promise<void>
+
+  markOneRead: (
+    id: string,
+  ) => Promise<void>
+
   markAllRead: () => Promise<void>
-  deleteOne: (id: string) => Promise<void>
+
+  deleteOne: (
+    id: string,
+  ) => Promise<void>
+
   deleteAll: () => Promise<void>
 }
 
@@ -40,7 +55,10 @@ function mergeNotifications(
   current: NotificationViewItem[],
   incoming: NotificationViewItem[],
 ) {
-  const map = new Map<string, NotificationViewItem>()
+  const map = new Map<
+    string,
+    NotificationViewItem
+  >()
 
   for (const item of current) {
     map.set(item.id, item)
@@ -50,10 +68,16 @@ function mergeNotifications(
     map.set(item.id, item)
   }
 
-  return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt)
+  return Array.from(map.values()).sort(
+    (a, b) =>
+      b.createdAt - a.createdAt,
+  )
 }
 
-async function safeFetch(input: RequestInfo | URL, init?: RequestInit) {
+async function safeFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
   return fetch(input, {
     ...init,
     cache: 'no-store',
@@ -64,218 +88,383 @@ async function safeFetch(input: RequestInfo | URL, init?: RequestInit) {
   })
 }
 
-export const useNotificationStore = create<NotificationStore>((set, get) => ({
-  notifications: [],
-  unreadCount: 0,
-  isVIP: false,
-  initialized: false,
-  authenticated: false,
-
-  setServerSnapshot: ({ notifications, unreadCount, isVIP, authenticated }) => {
-    const merged = mergeNotifications(get().notifications, notifications)
-
-    set({
-      notifications: merged,
-      unreadCount,
-      isVIP,
-      authenticated: authenticated ?? true,
-      initialized: true,
-    })
-  },
-
-  pushIncoming: item => {
-    const { isVIP, notifications, unreadCount, authenticated } = get()
-
-    if (!authenticated) return
-
-    if (!isVIP && item.type !== 'NOTICE') {
-      return
-    }
-
-    const existsById = notifications.some(n => n.id === item.id)
-    if (existsById) return
-
-    const existsByContent = notifications.some(
-      n =>
-        n.type === item.type &&
-        n.title === item.title &&
-        n.createdAt === item.createdAt,
-    )
-    if (existsByContent) return
-
-    set({
-      notifications: [item, ...notifications],
-      unreadCount: unreadCount + (item.read ? 0 : 1),
-    })
-  },
-
-  loadUnreadCount: async () => {
-    try {
-      const res = await safeFetch('/api/notification?mode=badge')
-
-      if (!res.ok) {
-        set({
-          authenticated: false,
-          unreadCount: 0,
-          isVIP: false,
-          initialized: true,
-        })
-        return
-      }
-
-      const data = await res.json()
-
-      set({
-        unreadCount: data.unreadCount ?? 0,
-        isVIP: data.isVIP ?? false,
-        authenticated: data.authenticated ?? false,
-        initialized: true,
-      })
-    } catch (error) {
-      console.error('[NOTIFICATION_LOAD_UNREAD]', error)
-
-      set({
-        authenticated: false,
-        unreadCount: 0,
-        isVIP: false,
-        initialized: true,
-      })
-    }
-  },
-
-  markOneRead: async id => {
-    const { authenticated } = get()
-    if (!authenticated) return
-
-    const current = get().notifications
-    const target = current.find(item => item.id === id)
-
-    if (!target || target.read) return
-
-    const prevNotifications = current
-    const prevUnreadCount = get().unreadCount
-
-    set({
-      notifications: current.map(item =>
-        item.id === id ? { ...item, read: true } : item,
-      ),
-      unreadCount: Math.max(0, prevUnreadCount - 1),
-    })
-
-    const res = await safeFetch('/api/notification/read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id] }),
-    })
-
-    if (!res.ok) {
-      set({
-        notifications: prevNotifications,
-        unreadCount: prevUnreadCount,
-      })
-      return
-    }
-
-    const data = await res.json()
-
-    set({
-      unreadCount: data.unreadCount ?? get().unreadCount,
-    })
-  },
-
-  markAllRead: async () => {
-    const { authenticated } = get()
-    if (!authenticated) return
-
-    const current = get().notifications
-    const prevUnreadCount = get().unreadCount
-
-    set({
-      notifications: current.map(item => ({
-        ...item,
-        read: true,
-      })),
-      unreadCount: 0,
-    })
-
-    const res = await safeFetch('/api/notification/read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-
-    if (!res.ok) {
-      set({
-        notifications: current,
-        unreadCount: prevUnreadCount,
-      })
-      return
-    }
-
-    const data = await res.json()
-
-    set({
-      unreadCount: data.unreadCount ?? 0,
-    })
-  },
-
-  deleteOne: async id => {
-    const { authenticated } = get()
-    if (!authenticated) return
-
-    const current = get().notifications
-    const target = current.find(item => item.id === id)
-
-    if (!target) return
-
-    const prevNotifications = current
-    const prevUnreadCount = get().unreadCount
-
-    set({
-      notifications: current.filter(item => item.id !== id),
-      unreadCount: Math.max(
-        0,
-        prevUnreadCount - (target.read ? 0 : 1),
-      ),
-    })
-
-    const res = await safeFetch('/api/notification/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
-
-    if (!res.ok) {
-      set({
-        notifications: prevNotifications,
-        unreadCount: prevUnreadCount,
-      })
-    }
-  },
-
-  deleteAll: async () => {
-    const { authenticated } = get()
-    if (!authenticated) return
-
-    const current = get().notifications
-    const prevUnreadCount = get().unreadCount
-
-    set({
+export const useNotificationStore =
+  create<NotificationStore>(
+    (set, get) => ({
       notifications: [],
       unreadCount: 0,
-    })
+      isVIP: false,
+      initialized: false,
+      authenticated: false,
 
-    const res = await safeFetch('/api/notification/delete-all', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
+      setServerSnapshot: ({
+        notifications,
+        unreadCount,
+        isVIP,
+        authenticated,
+      }) => {
+        const merged =
+          mergeNotifications(
+            get().notifications,
+            notifications,
+          )
 
-    if (!res.ok) {
-      set({
-        notifications: current,
-        unreadCount: prevUnreadCount,
-      })
-    }
-  },
-}))
+        set({
+          notifications: merged,
+          unreadCount,
+          isVIP,
+          authenticated:
+            authenticated ?? true,
+          initialized: true,
+        })
+      },
+
+      pushIncoming: item => {
+        const {
+          isVIP,
+          notifications,
+          unreadCount,
+          authenticated,
+        } = get()
+
+        if (!authenticated) {
+          return
+        }
+
+        /**
+         * VIP gating 유지
+         *
+         * NOTICE 만 일반 사용자 허용
+         * 나머지 alert 계열은 VIP 전용
+         */
+        if (
+          !isVIP &&
+          item.type !== 'NOTICE'
+        ) {
+          return
+        }
+
+        const existsById =
+          notifications.some(
+            n => n.id === item.id,
+          )
+
+        if (existsById) {
+          return
+        }
+
+        const existsByContent =
+          notifications.some(
+            n =>
+              n.type === item.type &&
+              n.title === item.title &&
+              n.createdAt ===
+                item.createdAt,
+          )
+
+        if (existsByContent) {
+          return
+        }
+
+        set({
+          notifications: [
+            item,
+            ...notifications,
+          ],
+
+          unreadCount:
+            unreadCount +
+            (item.read ? 0 : 1),
+        })
+      },
+
+      loadUnreadCount: async () => {
+        try {
+          const res =
+            await safeFetch(
+              '/api/notification?mode=badge',
+            )
+
+          if (!res.ok) {
+            set({
+              authenticated: false,
+              unreadCount: 0,
+              isVIP: false,
+              initialized: true,
+            })
+
+            return
+          }
+
+          const data = await res.json()
+
+          set({
+            unreadCount:
+              data.unreadCount ?? 0,
+
+            isVIP:
+              data.isVIP ?? false,
+
+            authenticated:
+              data.authenticated ??
+              false,
+
+            initialized: true,
+          })
+        } catch (error) {
+          console.error(
+            '[NOTIFICATION_LOAD_UNREAD]',
+            error,
+          )
+
+          set({
+            authenticated: false,
+            unreadCount: 0,
+            isVIP: false,
+            initialized: true,
+          })
+        }
+      },
+
+      markOneRead: async id => {
+        const { authenticated } =
+          get()
+
+        if (!authenticated) {
+          return
+        }
+
+        const current =
+          get().notifications
+
+        const target = current.find(
+          item => item.id === id,
+        )
+
+        if (
+          !target ||
+          target.read
+        ) {
+          return
+        }
+
+        const prevNotifications =
+          current
+
+        const prevUnreadCount =
+          get().unreadCount
+
+        set({
+          notifications: current.map(
+            item =>
+              item.id === id
+                ? {
+                    ...item,
+                    read: true,
+                  }
+                : item,
+          ),
+
+          unreadCount: Math.max(
+            0,
+            prevUnreadCount - 1,
+          ),
+        })
+
+        const res = await safeFetch(
+          '/api/notification/read',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              ids: [id],
+            }),
+          },
+        )
+
+        if (!res.ok) {
+          set({
+            notifications:
+              prevNotifications,
+
+            unreadCount:
+              prevUnreadCount,
+          })
+
+          return
+        }
+
+        const data =
+          await res.json()
+
+        set({
+          unreadCount:
+            data.unreadCount ??
+            get().unreadCount,
+        })
+      },
+
+      markAllRead: async () => {
+        const { authenticated } =
+          get()
+
+        if (!authenticated) {
+          return
+        }
+
+        const current =
+          get().notifications
+
+        const prevUnreadCount =
+          get().unreadCount
+
+        set({
+          notifications: current.map(
+            item => ({
+              ...item,
+              read: true,
+            }),
+          ),
+
+          unreadCount: 0,
+        })
+
+        const res = await safeFetch(
+          '/api/notification/read',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({}),
+          },
+        )
+
+        if (!res.ok) {
+          set({
+            notifications: current,
+            unreadCount:
+              prevUnreadCount,
+          })
+
+          return
+        }
+
+        const data =
+          await res.json()
+
+        set({
+          unreadCount:
+            data.unreadCount ?? 0,
+        })
+      },
+
+      deleteOne: async id => {
+        const { authenticated } =
+          get()
+
+        if (!authenticated) {
+          return
+        }
+
+        const current =
+          get().notifications
+
+        const target = current.find(
+          item => item.id === id,
+        )
+
+        if (!target) {
+          return
+        }
+
+        const prevNotifications =
+          current
+
+        const prevUnreadCount =
+          get().unreadCount
+
+        set({
+          notifications:
+            current.filter(
+              item => item.id !== id,
+            ),
+
+          unreadCount: Math.max(
+            0,
+            prevUnreadCount -
+              (target.read ? 0 : 1),
+          ),
+        })
+
+        const res = await safeFetch(
+          '/api/notification/delete',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              id,
+            }),
+          },
+        )
+
+        if (!res.ok) {
+          set({
+            notifications:
+              prevNotifications,
+
+            unreadCount:
+              prevUnreadCount,
+          })
+        }
+      },
+
+      deleteAll: async () => {
+        const { authenticated } =
+          get()
+
+        if (!authenticated) {
+          return
+        }
+
+        const current =
+          get().notifications
+
+        const prevUnreadCount =
+          get().unreadCount
+
+        set({
+          notifications: [],
+          unreadCount: 0,
+        })
+
+        const res = await safeFetch(
+          '/api/notification/delete-all',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({}),
+          },
+        )
+
+        if (!res.ok) {
+          set({
+            notifications: current,
+            unreadCount:
+              prevUnreadCount,
+          })
+        }
+      },
+    }),
+  )
+  

@@ -1,7 +1,11 @@
 // lib/market/institutional/institutionalEvidenceStore.ts
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import {
+  createJSONStorage,
+  persist,
+  type StateStorage,
+} from 'zustand/middleware'
 
 import type {
   InstitutionalEvidenceSnapshot,
@@ -15,6 +19,33 @@ type State = {
   ) => void
 
   clearSnapshot: () => void
+}
+
+/**
+ * Next.js App Router safe storage.
+ *
+ * Server evaluation 시점에는 localStorage 가 없기 때문에
+ * zustand persist hydration 에서 storage.getItem 오류가 발생할 수 있습니다.
+ *
+ * persist 자체는 유지하되, server runtime 에서는 noop storage 를 제공해
+ * getItem / setItem / removeItem shape 을 항상 보장합니다.
+ */
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+}
+
+function getInstitutionalSnapshotStorage(): StateStorage {
+  if (typeof window === 'undefined') {
+    return noopStorage
+  }
+
+  try {
+    return window.localStorage
+  } catch {
+    return noopStorage
+  }
 }
 
 export const useInstitutionalEvidenceStore =
@@ -108,7 +139,8 @@ export const useInstitutionalEvidenceStore =
                   snapshot.fundingAccum,
 
                 existingVolumeRatioAccum:
-                  existingSnapshot.volumeRatioAccum,
+                  existingSnapshot
+                    .volumeRatioAccum,
 
                 newVolumeRatioAccum:
                   snapshot.volumeRatioAccum,
@@ -138,6 +170,10 @@ export const useInstitutionalEvidenceStore =
       {
         name:
           'institutional-evidence-snapshot',
+
+        storage: createJSONStorage(
+          getInstitutionalSnapshotStorage,
+        ),
 
         partialize: (state) => ({
           snapshot: state.snapshot,

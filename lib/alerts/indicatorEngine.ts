@@ -1,7 +1,12 @@
-// /lib/alerts/indicatorEngine.ts
+// lib/alerts/indicatorEngine.ts
+
 import { redis } from '../redis'
 import { pushIndicatorTriggered } from '@/lib/push/pushOnAlert'
 import { getAllUserIds } from '@/lib/push/getAllUserIds'
+
+type Timeframe = '15m' | '1h'
+
+type IndicatorType = 'RSI' | 'MACD' | 'EMA'
 
 type Kline = {
   close: number
@@ -9,26 +14,31 @@ type Kline = {
   closeTime: number
 }
 
-type IndicatorEnabled = {
-  RSI: boolean
-  MACD: boolean
-  EMA: boolean
-}
+type IndicatorEnabled = Record<
+  IndicatorType,
+  Record<Timeframe, boolean>
+>
 
 type IndicatorEvent = {
   type: 'INDICATOR_SIGNAL'
-  indicator: 'RSI' | 'MACD' | 'EMA'
+  indicator: IndicatorType
   signal: string
   symbol: string
-  timeframe: '15m'
+  timeframe: Timeframe
   value: number
   ts: number
+  eventCandleTs: number
 }
 
 type SignalState = {
   rsiZone: 'OVERSOLD' | 'NEUTRAL' | 'OVERBOUGHT'
   macdTrend: 'ABOVE' | 'BELOW' | 'EQUAL'
   emaTrend: 'ABOVE' | 'BELOW' | 'EQUAL'
+  emaStructure:
+    | 'BULLISH'
+    | 'BEARISH'
+    | 'COMPRESSION'
+    | 'NEUTRAL'
 }
 
 type MACDSeriesPoint = {
@@ -49,16 +59,29 @@ type MACDResult = {
 }
 
 type EMASetResult = {
-  ema7: number
   ema20: number
-  prevEma7: number
+  ema50: number
+  ema100: number | null
+  ema200: number | null
+
   prevEma20: number
+  prevEma50: number
+  prevEma100: number | null
+  prevEma200: number | null
+
+  close: number
+  prevClose: number
 }
 
 type FetchCache = {
   klines: Kline[]
   lastFetchAt: number
 }
+
+const SUPPORTED_TIMEFRAMES: Timeframe[] = [
+  '15m',
+  '1h',
+]
 
 const fetchCache: Record<string, FetchCache> = {}
 
@@ -73,14 +96,30 @@ const lastSignals: Record<
 
 const signalStateMap: Record<string, SignalState> = {}
 
+const lastProcessedCandleMap: Record<string, number> = {}
+
 /* =========================
  * 🔥 indicatorEnabled (Redis 기반)
  * ========================= */
-let indicatorEnabled: IndicatorEnabled = {
-  RSI: true,
-  MACD: true,
-  EMA: true,
+const DEFAULT_INDICATOR_ENABLED: IndicatorEnabled = {
+  RSI: {
+    '15m': true,
+    '1h': true,
+  },
+  MACD: {
+    '15m': true,
+    '1h': true,
+  },
+  EMA: {
+    '15m': true,
+    '1h': true,
+  },
 }
+
+let indicatorEnabled: IndicatorEnabled =
+  normalizeIndicatorEnabled(
+    DEFAULT_INDICATOR_ENABLED,
+  )
 
 /* =========================
  * 🔥 Redis Key
@@ -98,8 +137,107 @@ const BINANCE_FUTURES_KLINES_URL =
  * ========================= */
 const KLINE_CACHE_TTL_MS = 15_000
 
-export function setIndicatorEnabled(v: IndicatorEnabled) {
-  indicatorEnabled = v
+const EMA_SPREAD_MIN_RATIO = 0.00035
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean'
+}
+
+function normalizeTimeframeEnabled(
+  value: unknown,
+  fallback: Record<Timeframe, boolean>,
+): Record<Timeframe, boolean> {
+  /**
+   * Legacy migration-safe guard:
+   *
+   * 기존 Redis schema:
+   * indicatorEnabled.RSI = true | false
+   *
+   * 신규 schema:
+   * indicatorEnabled.RSI = {
+   *   '15m': boolean,
+   *   '1h': boolean,
+   * }
+   */
+  if (isBoolean(value)) {
+    return {
+      '15m': value,
+      '1h': value,
+    }
+  }
+
+  if (!value || typeof value !== 'object') {
+    return {
+      ...fallback,
+    }
+  }
+
+  const candidate =
+    value as Partial<Record<Timeframe, unknown>>
+
+  return {
+    '15m': isBoolean(candidate['15m'])
+      ? candidate['15m']
+      : fallback['15m'],
+
+    '1h': isBoolean(candidate['1h'])
+      ? candidate['1h']
+      : fallback['1h'],
+  }
+}
+
+function normalizeIndicatorEnabled(
+  value: unknown,
+): IndicatorEnabled {
+  const fallback = DEFAULT_INDICATOR_ENABLED
+
+  if (!value || typeof value !== 'object') {
+    return {
+      RSI: {
+        ...fallback.RSI,
+      },
+      MACD: {
+        ...fallback.MACD,
+      },
+      EMA: {
+        ...fallback.EMA,
+      },
+    }
+  }
+
+  const candidate =
+    value as Partial<Record<IndicatorType, unknown>>
+
+  return {
+    RSI: normalizeTimeframeEnabled(
+      candidate.RSI,
+      fallback.RSI,
+    ),
+
+    MACD: normalizeTimeframeEnabled(
+      candidate.MACD,
+      fallback.MACD,
+    ),
+
+    EMA: normalizeTimeframeEnabled(
+      candidate.EMA,
+      fallback.EMA,
+    ),
+  }
+}
+
+function isIndicatorEnabled(
+  indicator: IndicatorType,
+  timeframe: Timeframe,
+) {
+  return (
+    indicatorEnabled[indicator]?.[timeframe] !==
+    false
+  )
+}
+
+export function setIndicatorEnabled(v: unknown) {
+  indicatorEnabled = normalizeIndicatorEnabled(v)
 }
 
 async function initIndicatorSettings() {
@@ -107,47 +245,84 @@ async function initIndicatorSettings() {
     const raw = await redis.get(REDIS_KEY)
 
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<IndicatorEnabled>
+      const parsed = JSON.parse(raw)
 
-      indicatorEnabled = {
-        RSI: !!parsed.RSI,
-        MACD: !!parsed.MACD,
-        EMA: !!parsed.EMA,
+      indicatorEnabled =
+        normalizeIndicatorEnabled(parsed)
+
+      console.log(
+        '[indicatorEngine][Redis Loaded]',
+        indicatorEnabled,
+      )
+
+      /**
+       * Migration-safe writeback.
+       *
+       * Redis 에 legacy boolean schema 가 남아있으면
+       * timeframe-aware schema 로 자동 보정합니다.
+       */
+      try {
+        await redis.set(
+          REDIS_KEY,
+          JSON.stringify(indicatorEnabled),
+        )
+      } catch (err) {
+        console.error(
+          '[indicatorEngine][Migration Save Error]',
+          err,
+        )
       }
 
-      console.log('[indicatorEngine][Redis Loaded]', indicatorEnabled)
       return
     }
 
-    const fallback: IndicatorEnabled = {
-      RSI: true,
-      MACD: true,
-      EMA: true,
-    }
+    const fallback =
+      normalizeIndicatorEnabled(
+        DEFAULT_INDICATOR_ENABLED,
+      )
 
     indicatorEnabled = fallback
 
     try {
-      await redis.set(REDIS_KEY, JSON.stringify(fallback))
-      console.log('[indicatorEngine][Fallback Saved to Redis]')
+      await redis.set(
+        REDIS_KEY,
+        JSON.stringify(fallback),
+      )
+      console.log(
+        '[indicatorEngine][Fallback Saved to Redis]',
+      )
     } catch (err) {
-      console.error('[indicatorEngine][Fallback Save Error]', err)
+      console.error(
+        '[indicatorEngine][Fallback Save Error]',
+        err,
+      )
     }
   } catch (e) {
     console.error('[indicatorEngine init error]', e)
 
-    indicatorEnabled = {
-      RSI: true,
-      MACD: true,
-      EMA: true,
-    }
+    indicatorEnabled =
+      normalizeIndicatorEnabled(
+        DEFAULT_INDICATOR_ENABLED,
+      )
   }
 }
 
 void initIndicatorSettings()
 
+function buildTimeframeKey(
+  symbol: string,
+  timeframe: Timeframe,
+) {
+  return `${symbol}:${timeframe}`
+}
+
 function getCloses(klines: Kline[]) {
   return klines.map(k => k.close)
+}
+
+function getLastClosedCandleTs(klines: Kline[]) {
+  const last = klines[klines.length - 1]
+  return last?.closeTime ?? Date.now()
 }
 
 /* =========================
@@ -157,7 +332,9 @@ export function calculateEMAFull(
   values: Array<number | null>,
   period: number,
 ): (number | null)[] {
-  const result: (number | null)[] = Array(values.length).fill(null)
+  const result: (number | null)[] = Array(
+    values.length,
+  ).fill(null)
 
   if (!values.length) return result
 
@@ -166,7 +343,12 @@ export function calculateEMAFull(
 
   for (let i = 0; i < values.length; i++) {
     const value = values[i]
-    if (typeof value !== 'number' || !Number.isFinite(value)) continue
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value)
+    ) {
+      continue
+    }
 
     if (seedStart === -1) seedStart = i
     seedValues.push(value)
@@ -174,7 +356,10 @@ export function calculateEMAFull(
     if (seedValues.length === period) break
   }
 
-  if (seedStart === -1 || seedValues.length < period) {
+  if (
+    seedStart === -1 ||
+    seedValues.length < period
+  ) {
     return result
   }
 
@@ -187,15 +372,25 @@ export function calculateEMAFull(
   let prevEma = sma / period
   result[seedIndex] = prevEma
 
-  for (let i = seedIndex + 1; i < values.length; i++) {
+  for (
+    let i = seedIndex + 1;
+    i < values.length;
+    i++
+  ) {
     const value = values[i]
 
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value)
+    ) {
       result[i] = null
       continue
     }
 
-    const ema = value * multiplier + prevEma * (1 - multiplier)
+    const ema =
+      value * multiplier +
+      prevEma * (1 - multiplier)
+
     result[i] = ema
     prevEma = ema
   }
@@ -229,11 +424,14 @@ export function calculateRSI(
     const gain = change > 0 ? change : 0
     const loss = change < 0 ? Math.abs(change) : 0
 
-    avgGain = (avgGain * (length - 1) + gain) / length
-    avgLoss = (avgLoss * (length - 1) + loss) / length
+    avgGain =
+      (avgGain * (length - 1) + gain) / length
+    avgLoss =
+      (avgLoss * (length - 1) + loss) / length
   }
 
   if (avgLoss === 0) return 100
+
   const rs = avgGain / avgLoss
   return 100 - 100 / (1 + rs)
 }
@@ -249,10 +447,18 @@ export function buildMACDSeries(
 ): MACDSeriesPoint[] {
   const source = closes.map(v => v as number | null)
 
-  const emaFast = calculateEMAFull(source, fastPeriod)
-  const emaSlow = calculateEMAFull(source, slowPeriod)
+  const emaFast = calculateEMAFull(
+    source,
+    fastPeriod,
+  )
+  const emaSlow = calculateEMAFull(
+    source,
+    slowPeriod,
+  )
 
-  const macdLine: (number | null)[] = Array(closes.length).fill(null)
+  const macdLine: (number | null)[] = Array(
+    closes.length,
+  ).fill(null)
 
   for (let i = 0; i < closes.length; i++) {
     const fast = emaFast[i]
@@ -268,7 +474,10 @@ export function buildMACDSeries(
     }
   }
 
-  const signalLine = calculateEMAFull(macdLine, signalPeriod)
+  const signalLine = calculateEMAFull(
+    macdLine,
+    signalPeriod,
+  )
 
   const series: MACDSeriesPoint[] = []
 
@@ -328,10 +537,12 @@ export function calculateMACD(
   }
 
   const crossedUp =
-    prev.macd <= prev.signal && current.macd > current.signal
+    prev.macd <= prev.signal &&
+    current.macd > current.signal
 
   const crossedDown =
-    prev.macd >= prev.signal && current.macd < current.signal
+    prev.macd >= prev.signal &&
+    current.macd < current.signal
 
   return {
     macd: current.macd,
@@ -350,36 +561,147 @@ export function calculateMACD(
 export function calculateEMASet(
   closes: number[],
 ): EMASetResult | null {
-  if (closes.length < 20) return null
+  if (closes.length < 50) return null
 
   const source = closes.map(v => v as number | null)
-  const ema7Series = calculateEMAFull(source, 7)
-  const ema20Series = calculateEMAFull(source, 20)
 
-  const ema7 = ema7Series[ema7Series.length - 1]
-  const ema20 = ema20Series[ema20Series.length - 1]
-  const prevEma7 = ema7Series[ema7Series.length - 2]
-  const prevEma20 = ema20Series[ema20Series.length - 2]
+  const ema20Series = calculateEMAFull(source, 20)
+  const ema50Series = calculateEMAFull(source, 50)
+  const ema100Series = calculateEMAFull(source, 100)
+  const ema200Series = calculateEMAFull(source, 200)
+
+  const lastIndex = closes.length - 1
+  const prevIndex = closes.length - 2
+
+  const ema20 = ema20Series[lastIndex]
+  const ema50 = ema50Series[lastIndex]
+  const prevEma20 = ema20Series[prevIndex]
+  const prevEma50 = ema50Series[prevIndex]
+
+  const ema100 = ema100Series[lastIndex]
+  const prevEma100 = ema100Series[prevIndex]
+
+  const ema200 = ema200Series[lastIndex]
+  const prevEma200 = ema200Series[prevIndex]
 
   if (
-    typeof ema7 !== 'number' ||
     typeof ema20 !== 'number' ||
-    typeof prevEma7 !== 'number' ||
+    typeof ema50 !== 'number' ||
     typeof prevEma20 !== 'number' ||
-    !Number.isFinite(ema7) ||
+    typeof prevEma50 !== 'number' ||
     !Number.isFinite(ema20) ||
-    !Number.isFinite(prevEma7) ||
-    !Number.isFinite(prevEma20)
+    !Number.isFinite(ema50) ||
+    !Number.isFinite(prevEma20) ||
+    !Number.isFinite(prevEma50)
   ) {
     return null
   }
 
   return {
-    ema7,
     ema20,
-    prevEma7,
+    ema50,
+
+    ema100:
+      typeof ema100 === 'number' &&
+      Number.isFinite(ema100)
+        ? ema100
+        : null,
+
+    ema200:
+      typeof ema200 === 'number' &&
+      Number.isFinite(ema200)
+        ? ema200
+        : null,
+
     prevEma20,
+    prevEma50,
+
+    prevEma100:
+      typeof prevEma100 === 'number' &&
+      Number.isFinite(prevEma100)
+        ? prevEma100
+        : null,
+
+    prevEma200:
+      typeof prevEma200 === 'number' &&
+      Number.isFinite(prevEma200)
+        ? prevEma200
+        : null,
+
+    close: closes[lastIndex],
+    prevClose: closes[prevIndex],
   }
+}
+
+function isEmaSpreadCompressed(
+  basePrice: number,
+  first: number,
+  second: number,
+) {
+  if (
+    !Number.isFinite(basePrice) ||
+    basePrice <= 0
+  ) {
+    return true
+  }
+
+  return (
+    Math.abs(first - second) / basePrice <
+    EMA_SPREAD_MIN_RATIO
+  )
+}
+
+function getEmaStructureState(
+  ema: EMASetResult,
+): SignalState['emaStructure'] {
+  const compressed20_50 = isEmaSpreadCompressed(
+    ema.close,
+    ema.ema20,
+    ema.ema50,
+  )
+
+  if (compressed20_50) {
+    return 'COMPRESSION'
+  }
+
+  if (
+    typeof ema.ema100 !== 'number' ||
+    typeof ema.prevEma100 !== 'number'
+  ) {
+    return 'NEUTRAL'
+  }
+
+  const compressed50_100 = isEmaSpreadCompressed(
+    ema.close,
+    ema.ema50,
+    ema.ema100,
+  )
+
+  if (compressed50_100) {
+    return 'COMPRESSION'
+  }
+
+  const ema20Slope = ema.ema20 - ema.prevEma20
+  const ema50Slope = ema.ema50 - ema.prevEma50
+
+  const bullish =
+    ema.ema20 > ema.ema50 &&
+    ema.ema50 > ema.ema100 &&
+    ema.close > ema.ema20 &&
+    ema20Slope > 0 &&
+    ema50Slope >= 0
+
+  const bearish =
+    ema.ema20 < ema.ema50 &&
+    ema.ema50 < ema.ema100 &&
+    ema.close < ema.ema20 &&
+    ema20Slope < 0 &&
+    ema50Slope <= 0
+
+  if (bullish) return 'BULLISH'
+  if (bearish) return 'BEARISH'
+
+  return 'NEUTRAL'
 }
 
 /* =========================
@@ -387,19 +709,33 @@ export function calculateEMASet(
  * ========================= */
 export async function fetchKlines(
   symbol: string,
+  timeframe: Timeframe = '15m',
 ): Promise<Kline[]> {
-  const normalizedSymbol = String(symbol || 'BTCUSDT').toUpperCase()
-  const now = Date.now()
-  const cached = fetchCache[normalizedSymbol]
+  const normalizedSymbol = String(
+    symbol || 'BTCUSDT',
+  ).toUpperCase()
 
-  if (cached && now - cached.lastFetchAt < KLINE_CACHE_TTL_MS) {
+  const now = Date.now()
+  const cacheKey = buildTimeframeKey(
+    normalizedSymbol,
+    timeframe,
+  )
+
+  const cached = fetchCache[cacheKey]
+
+  if (
+    cached &&
+    now - cached.lastFetchAt <
+      KLINE_CACHE_TTL_MS
+  ) {
     return cached.klines
   }
 
   const url = new URL(BINANCE_FUTURES_KLINES_URL)
+
   url.searchParams.set('symbol', normalizedSymbol)
-  url.searchParams.set('interval', '15m')
-  url.searchParams.set('limit', '100')
+  url.searchParams.set('interval', timeframe)
+  url.searchParams.set('limit', '250')
 
   const res = await fetch(url.toString(), {
     method: 'GET',
@@ -407,7 +743,9 @@ export async function fetchKlines(
   })
 
   if (!res.ok) {
-    throw new Error(`Binance Futures klines fetch failed: ${res.status}`)
+    throw new Error(
+      `Binance Futures klines fetch failed: ${res.status}`,
+    )
   }
 
   const rows = await res.json()
@@ -421,9 +759,11 @@ export async function fetchKlines(
     : []
 
   const klines =
-    allKlines.length > 1 ? allKlines.slice(0, -1) : allKlines
+    allKlines.length > 1
+      ? allKlines.slice(0, -1)
+      : allKlines
 
-  fetchCache[normalizedSymbol] = {
+  fetchCache[cacheKey] = {
     klines,
     lastFetchAt: now,
   }
@@ -436,30 +776,46 @@ export async function fetchKlines(
  * ========================= */
 export function detectSignals(args: {
   symbol: string
+  timeframe?: Timeframe
+  eventCandleTs?: number
   rsi: number | null
   macd: MACDResult | null
   ema: ReturnType<typeof calculateEMASet>
 }): IndicatorEvent[] {
-  const { symbol, rsi, macd, ema } = args
-  const ts = Date.now()
+  const {
+    symbol,
+    timeframe = '15m',
+    eventCandleTs = Date.now(),
+    rsi,
+    macd,
+    ema,
+  } = args
 
-  if (!signalStateMap[symbol]) {
-    signalStateMap[symbol] = {
+  const ts = Date.now()
+  const stateKey = buildTimeframeKey(symbol, timeframe)
+
+  if (!signalStateMap[stateKey]) {
+    signalStateMap[stateKey] = {
       rsiZone: 'NEUTRAL',
       macdTrend: 'EQUAL',
       emaTrend: 'EQUAL',
+      emaStructure: 'NEUTRAL',
     }
   }
 
-  if (!lastSignals[symbol]) {
-    lastSignals[symbol] = {}
+  if (!lastSignals[stateKey]) {
+    lastSignals[stateKey] = {}
   }
 
-  const prevState = signalStateMap[symbol]
+  const prevState = signalStateMap[stateKey]
   const events: IndicatorEvent[] = []
 
-  if (indicatorEnabled.RSI && typeof rsi === 'number') {
-    let nextZone: SignalState['rsiZone'] = 'NEUTRAL'
+  if (
+    isIndicatorEnabled('RSI', timeframe) &&
+    typeof rsi === 'number'
+  ) {
+    let nextZone: SignalState['rsiZone'] =
+      'NEUTRAL'
 
     if (rsi >= 70) nextZone = 'OVERBOUGHT'
     else if (rsi <= 30) nextZone = 'OVERSOLD'
@@ -467,147 +823,244 @@ export function detectSignals(args: {
     if (
       prevState.rsiZone !== nextZone &&
       nextZone === 'OVERBOUGHT' &&
-      lastSignals[symbol].RSI !== 'RSI_OVERBOUGHT'
+      lastSignals[stateKey].RSI !==
+        'RSI_OVERBOUGHT'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'RSI',
         signal: 'RSI_OVERBOUGHT',
         symbol,
-        timeframe: '15m',
+        timeframe,
         value: rsi,
         ts,
+        eventCandleTs,
       })
-      lastSignals[symbol].RSI = 'RSI_OVERBOUGHT'
+
+      lastSignals[stateKey].RSI =
+        'RSI_OVERBOUGHT'
     }
 
     if (
       prevState.rsiZone !== nextZone &&
       nextZone === 'OVERSOLD' &&
-      lastSignals[symbol].RSI !== 'RSI_OVERSOLD'
+      lastSignals[stateKey].RSI !==
+        'RSI_OVERSOLD'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'RSI',
         signal: 'RSI_OVERSOLD',
         symbol,
-        timeframe: '15m',
+        timeframe,
         value: rsi,
         ts,
+        eventCandleTs,
       })
-      lastSignals[symbol].RSI = 'RSI_OVERSOLD'
+
+      lastSignals[stateKey].RSI =
+        'RSI_OVERSOLD'
     }
 
     prevState.rsiZone = nextZone
   }
 
   if (
-    indicatorEnabled.MACD &&
+    isIndicatorEnabled('MACD', timeframe) &&
     macd &&
     Number.isFinite(macd.macd) &&
     Number.isFinite(macd.signal) &&
     Number.isFinite(macd.prevMacd) &&
     Number.isFinite(macd.prevSignal)
   ) {
-    let nextTrend: SignalState['macdTrend'] = 'EQUAL'
+    let nextTrend: SignalState['macdTrend'] =
+      'EQUAL'
 
-    if (macd.macd > macd.signal) nextTrend = 'ABOVE'
-    else if (macd.macd < macd.signal) nextTrend = 'BELOW'
+    if (macd.macd > macd.signal) {
+      nextTrend = 'ABOVE'
+    } else if (macd.macd < macd.signal) {
+      nextTrend = 'BELOW'
+    }
 
     if (
       prevState.macdTrend !== nextTrend &&
       macd.crossedUp &&
-      lastSignals[symbol].MACD !== 'GOLDEN_CROSS'
+      lastSignals[stateKey].MACD !==
+        'GOLDEN_CROSS'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'MACD',
         signal: 'GOLDEN_CROSS',
         symbol,
-        timeframe: '15m',
+        timeframe,
         value: macd.macd,
         ts,
+        eventCandleTs,
       })
-      lastSignals[symbol].MACD = 'GOLDEN_CROSS'
+
+      lastSignals[stateKey].MACD =
+        'GOLDEN_CROSS'
     }
 
     if (
       prevState.macdTrend !== nextTrend &&
       macd.crossedDown &&
-      lastSignals[symbol].MACD !== 'DEAD_CROSS'
+      lastSignals[stateKey].MACD !==
+        'DEAD_CROSS'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'MACD',
         signal: 'DEAD_CROSS',
         symbol,
-        timeframe: '15m',
+        timeframe,
         value: macd.macd,
         ts,
+        eventCandleTs,
       })
-      lastSignals[symbol].MACD = 'DEAD_CROSS'
+
+      lastSignals[stateKey].MACD =
+        'DEAD_CROSS'
     }
 
     prevState.macdTrend = nextTrend
   }
 
   if (
-    indicatorEnabled.EMA &&
-    ema &&
-    typeof ema.ema7 === 'number' &&
-    typeof ema.ema20 === 'number' &&
-    typeof ema.prevEma7 === 'number' &&
-    typeof ema.prevEma20 === 'number' &&
-    Number.isFinite(ema.ema7) &&
-    Number.isFinite(ema.ema20) &&
-    Number.isFinite(ema.prevEma7) &&
-    Number.isFinite(ema.prevEma20)
+    isIndicatorEnabled('EMA', timeframe) &&
+    ema
   ) {
-    let nextTrend: SignalState['emaTrend'] = 'EQUAL'
+    if (timeframe === '15m') {
+      let nextTrend: SignalState['emaTrend'] =
+        'EQUAL'
 
-    if (ema.ema7 > ema.ema20) nextTrend = 'ABOVE'
-    else if (ema.ema7 < ema.ema20) nextTrend = 'BELOW'
+      if (ema.ema20 > ema.ema50) {
+        nextTrend = 'ABOVE'
+      } else if (ema.ema20 < ema.ema50) {
+        nextTrend = 'BELOW'
+      }
 
-    const crossedUp =
-      ema.prevEma7 <= ema.prevEma20 && ema.ema7 > ema.ema20
-    const crossedDown =
-      ema.prevEma7 >= ema.prevEma20 && ema.ema7 < ema.ema20
+      const ema20Slope =
+        ema.ema20 - ema.prevEma20
 
-    if (
-      prevState.emaTrend !== nextTrend &&
-      crossedUp &&
-      lastSignals[symbol].EMA !== 'BULLISH_TREND'
-    ) {
-      events.push({
-        type: 'INDICATOR_SIGNAL',
-        indicator: 'EMA',
-        signal: 'BULLISH_TREND',
-        symbol,
-        timeframe: '15m',
-        value: ema.ema7,
-        ts,
-      })
-      lastSignals[symbol].EMA = 'BULLISH_TREND'
+      const spreadOk =
+        !isEmaSpreadCompressed(
+          ema.close,
+          ema.ema20,
+          ema.ema50,
+        )
+
+      const crossedUp =
+        ema.prevEma20 <= ema.prevEma50 &&
+        ema.ema20 > ema.ema50 &&
+        ema.close > ema.ema20 &&
+        ema20Slope > 0 &&
+        spreadOk
+
+      const crossedDown =
+        ema.prevEma20 >= ema.prevEma50 &&
+        ema.ema20 < ema.ema50 &&
+        ema.close < ema.ema20 &&
+        ema20Slope < 0 &&
+        spreadOk
+
+      if (
+        prevState.emaTrend !== nextTrend &&
+        crossedUp &&
+        lastSignals[stateKey].EMA !==
+          'BULLISH_TREND'
+      ) {
+        events.push({
+          type: 'INDICATOR_SIGNAL',
+          indicator: 'EMA',
+          signal: 'BULLISH_TREND',
+          symbol,
+          timeframe,
+          value: ema.ema20,
+          ts,
+          eventCandleTs,
+        })
+
+        lastSignals[stateKey].EMA =
+          'BULLISH_TREND'
+      }
+
+      if (
+        prevState.emaTrend !== nextTrend &&
+        crossedDown &&
+        lastSignals[stateKey].EMA !==
+          'BEARISH_TREND'
+      ) {
+        events.push({
+          type: 'INDICATOR_SIGNAL',
+          indicator: 'EMA',
+          signal: 'BEARISH_TREND',
+          symbol,
+          timeframe,
+          value: ema.ema20,
+          ts,
+          eventCandleTs,
+        })
+
+        lastSignals[stateKey].EMA =
+          'BEARISH_TREND'
+      }
+
+      prevState.emaTrend = nextTrend
     }
 
-    if (
-      prevState.emaTrend !== nextTrend &&
-      crossedDown &&
-      lastSignals[symbol].EMA !== 'BEARISH_TREND'
-    ) {
-      events.push({
-        type: 'INDICATOR_SIGNAL',
-        indicator: 'EMA',
-        signal: 'BEARISH_TREND',
-        symbol,
-        timeframe: '15m',
-        value: ema.ema7,
-        ts,
-      })
-      lastSignals[symbol].EMA = 'BEARISH_TREND'
-    }
+    if (timeframe === '1h') {
+      const nextStructure =
+        getEmaStructureState(ema)
 
-    prevState.emaTrend = nextTrend
+      if (
+        nextStructure === 'BULLISH' &&
+        prevState.emaStructure !==
+          'BULLISH' &&
+        lastSignals[stateKey].EMA !==
+          'BULLISH_TREND'
+      ) {
+        events.push({
+          type: 'INDICATOR_SIGNAL',
+          indicator: 'EMA',
+          signal: 'BULLISH_TREND',
+          symbol,
+          timeframe,
+          value: ema.ema20,
+          ts,
+          eventCandleTs,
+        })
+
+        lastSignals[stateKey].EMA =
+          'BULLISH_TREND'
+      }
+
+      if (
+        nextStructure === 'BEARISH' &&
+        prevState.emaStructure !==
+          'BEARISH' &&
+        lastSignals[stateKey].EMA !==
+          'BEARISH_TREND'
+      ) {
+        events.push({
+          type: 'INDICATOR_SIGNAL',
+          indicator: 'EMA',
+          signal: 'BEARISH_TREND',
+          symbol,
+          timeframe,
+          value: ema.ema20,
+          ts,
+          eventCandleTs,
+        })
+
+        lastSignals[stateKey].EMA =
+          'BEARISH_TREND'
+      }
+
+      prevState.emaStructure =
+        nextStructure
+    }
   }
 
   return events
@@ -621,23 +1074,64 @@ export async function handleIndicatorTick(
   price: number,
 ) {
   try {
-    const normalizedSymbol = String(symbol || 'BTCUSDT').toUpperCase()
+    void price
 
-    const klines = await fetchKlines(normalizedSymbol)
-    if (klines.length < 50) return
+    const normalizedSymbol = String(
+      symbol || 'BTCUSDT',
+    ).toUpperCase()
 
-    const closes = getCloses(klines)
+    const signals: IndicatorEvent[] = []
 
-    const rsi = calculateRSI(closes, 14)
-    const macd = calculateMACD(closes, 12, 26, 9)
-    const ema = calculateEMASet(closes)
+    for (const timeframe of SUPPORTED_TIMEFRAMES) {
+      const stateKey = buildTimeframeKey(
+        normalizedSymbol,
+        timeframe,
+      )
 
-    const signals = detectSignals({
-      symbol: normalizedSymbol,
-      rsi,
-      macd,
-      ema,
-    })
+      const klines = await fetchKlines(
+        normalizedSymbol,
+        timeframe,
+      )
+
+      if (klines.length < 50) {
+        continue
+      }
+
+      const eventCandleTs =
+        getLastClosedCandleTs(klines)
+
+      if (
+        lastProcessedCandleMap[stateKey] ===
+        eventCandleTs
+      ) {
+        continue
+      }
+
+      lastProcessedCandleMap[stateKey] =
+        eventCandleTs
+
+      const closes = getCloses(klines)
+
+      const rsi = calculateRSI(closes, 14)
+      const macd = calculateMACD(
+        closes,
+        12,
+        26,
+        9,
+      )
+      const ema = calculateEMASet(closes)
+
+      const timeframeSignals = detectSignals({
+        symbol: normalizedSymbol,
+        timeframe,
+        eventCandleTs,
+        rsi,
+        macd,
+        ema,
+      })
+
+      signals.push(...timeframeSignals)
+    }
 
     if (!signals.length) return
 
@@ -661,6 +1155,9 @@ export async function handleIndicatorTick(
             symbol: payload.symbol,
             value: payload.value,
             ts: payload.ts,
+            timeframe: payload.timeframe,
+            eventCandleTs:
+              payload.eventCandleTs,
           }),
         ),
       )

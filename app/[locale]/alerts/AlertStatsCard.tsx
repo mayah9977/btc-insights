@@ -1,3 +1,5 @@
+//app/[locale]/alerts/AlertStatsCard.tsx
+
 'use client'
 
 import clsx from 'clsx'

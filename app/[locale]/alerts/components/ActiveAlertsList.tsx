@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/ActiveAlertsList.tsx
+
 'use client'
 
 import { memo, useMemo } from 'react'

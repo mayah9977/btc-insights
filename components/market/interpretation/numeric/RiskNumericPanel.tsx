@@ -8,4 +8,4 @@ export const RiskNumericPanel = () => {
       <div>Funding Rate: 0.031%</div>
     </section>
   )
-}
+} 

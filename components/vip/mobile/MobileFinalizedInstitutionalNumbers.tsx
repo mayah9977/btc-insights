@@ -1,3 +1,5 @@
+//components/vip/mobile/MobileFinalizedInstitutionalNumbers.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -277,4 +279,4 @@ export function MobileFinalizedInstitutionalNumbers() {
       />
     </section>
   )
-}
+} 

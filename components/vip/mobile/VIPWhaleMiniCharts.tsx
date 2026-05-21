@@ -161,7 +161,7 @@ export default function VIPWhaleMiniCharts() {
           >
 
             <span>
-              Institutional Intervention Energy
+              Institutional Intervention Energy(고래 개입 강도)
             </span>
 
             <span>
@@ -207,7 +207,7 @@ export default function VIPWhaleMiniCharts() {
           >
 
             <span>
-              Directional Pressure
+              Directional Pressure(시장 방향 압력)
               {' '}
               ({directionLabel})
             </span>

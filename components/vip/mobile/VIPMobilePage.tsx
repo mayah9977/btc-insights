@@ -1,3 +1,5 @@
+//components/vip/mobile/VIPMobilePage.tsx
+
 'use client'
 
 import dynamic from 'next/dynamic'

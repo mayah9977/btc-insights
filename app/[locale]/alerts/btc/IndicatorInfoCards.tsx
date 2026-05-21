@@ -1,4 +1,5 @@
-// /app/[locale]/alerts/btc/IndicatorInfoCards.tsx
+// app/[locale]/alerts/btc/IndicatorInfoCards.tsx
+
 'use client'
 
 import { useMemo, useState } from 'react'
@@ -7,11 +8,16 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Activity,
   ChevronDown,
+  Landmark,
   TrendingUp,
   Waves,
 } from 'lucide-react'
 
-type IndicatorKey = 'RSI' | 'MACD' | 'EMA'
+type IndicatorKey =
+  | 'RSI'
+  | 'MACD'
+  | 'EMA'
+  | 'INSTITUTIONAL_FLOW'
 
 type InfoCard = {
   key: IndicatorKey
@@ -28,96 +34,170 @@ type InfoCard = {
 const cards: InfoCard[] = [
   {
     key: 'RSI',
+
+    // MODIFIED: timeframe-aware subtitle
     title: 'RSI 설명',
-    subtitle: '과매수 / 과매도 강도 체크',
+    subtitle: '15M 모멘텀 과열 / 1H 구조 과매수·과매도 해석',
+
     icon: Activity,
+
     sections: [
       {
+        // MODIFIED: timeframe-aware RSI overview
         title: '지표 개요',
         content: [
-          'RSI는 가격 상승과 하락의 강도를 비교해서 현재 매수세와 매도세가 얼마나 강한지를 나타내는 상대강도지수입니다.',
-          '일반적으로 70 이상이면 과매수, 30 이하이면 과매도로 해석합니다.',
+          'RSI는 가격 상승과 하락 강도를 기반으로 현재 시장의 momentum pressure 상태를 해석하는 상대강도지수입니다.',
+          '현재 알람 구조에서는 15M RSI를 단기 momentum layer로 사용하고, 1H RSI를 상위 structure layer로 함께 해석합니다.',
         ],
       },
+
       {
+        // MODIFIED: actual alert interpretation wording
         title: '핵심 포인트',
         tone: 'point',
         content: [
-          '30 이하 구간은 반등 가능성을 체크하는 구간입니다.',
-          '70 이상 구간은 단기 과열 여부를 확인하는 구간입니다.',
-          '강한 추세장에서는 과매수/과매도 상태가 오래 지속될 수 있습니다.',
+          '15M RSI는 단기 과열 상태와 rebound attempt 발생 여부를 빠르게 감지하는 momentum layer로 사용됩니다.',
+          '1H RSI는 상위 구조 기준에서 과매수 / 과매도 pressure가 유지되는지 확인하는 structure layer 역할을 수행합니다.',
+          '15M 과열 신호가 발생하더라도 1H 구조가 강하게 유지되는 경우에는 momentum exhaustion보다 구조 유지 흐름에 더 무게가 실릴 수 있습니다.',
         ],
       },
+
       {
+        // MODIFIED: safer terminal-grade warning wording
         title: '주의사항',
         tone: 'warning',
         content: [
-          'RSI 하나만 보고 바로 진입하기보다 가격 구조와 추세 방향을 함께 확인해야 합니다.',
-          '횡보장에서는 유용하지만 강한 추세장에서는 속임 신호가 자주 발생할 수 있습니다.',
+          'RSI는 단독 방향 예측 지표가 아니라 현재 momentum pressure 상태를 해석하기 위한 보조 구조 레이어입니다.',
+          '강한 추세 구간에서는 과매수 / 과매도 상태가 장시간 유지될 수 있으므로 15M 반응과 1H 구조를 함께 확인하는 것이 중요합니다.',
         ],
       },
     ],
   },
+
   {
     key: 'MACD',
+
+    // MODIFIED: timeframe-aware subtitle
     title: 'MACD 설명',
-    subtitle: '추세 전환과 모멘텀 변화',
+    subtitle: '15M 모멘텀 전환 / 1H 구조 정렬 상태 해석',
+
     icon: Waves,
+
     sections: [
       {
+        // MODIFIED: structure-aware overview
         title: '지표 개요',
         content: [
-          'MACD는 단기 EMA와 장기 EMA의 차이를 기반으로 만들어지며, 시장의 추세와 모멘텀 변화를 동시에 보여줍니다.',
-          'MACD선과 Signal선의 교차를 통해 골든크로스 / 데드크로스를 해석합니다.',
+          'MACD는 단기 EMA와 장기 EMA의 간격 변화를 기반으로 momentum transition과 trend structure 변화를 함께 읽는 지표입니다.',
+          '현재 알람 구조에서는 15M MACD를 단기 momentum shift 감지 레이어로 사용하고, 1H MACD를 상위 trend alignment 확인 레이어로 해석합니다.',
         ],
       },
+
       {
+        // MODIFIED: alert-linked interpretation
         title: '핵심 포인트',
         tone: 'point',
         content: [
-          'MACD가 Signal 위로 돌파하면 상승 모멘텀이 강화되는 신호로 볼 수 있습니다.',
-          'MACD가 Signal 아래로 이탈하면 하락 모멘텀이 강해질 수 있습니다.',
-          '제로라인 위/아래 위치까지 같이 보면 신호의 질이 더 좋아집니다.',
+          '15M MACD는 단기 momentum 방향이 전환되는 초기 흐름을 감지하는 역할을 수행합니다.',
+          '1H MACD는 상위 timeframe 기준에서 현재 trend structure alignment가 유지되는지 확인하는 구조 레이어입니다.',
+          '15M MACD transition이 발생하더라도 1H 구조 alignment가 유지되지 않으면 단기 noise 가능성을 함께 고려해야 합니다.',
         ],
       },
+
       {
+        // MODIFIED: production-safe warning
         title: '주의사항',
         tone: 'warning',
         content: [
-          '변동성이 매우 작은 구간에서는 크로스가 잦아져 노이즈가 많아질 수 있습니다.',
-          '크로스만 보지 말고 거래량과 가격 구조를 함께 확인하는 것이 좋습니다.',
+          '변동성이 매우 작은 구간에서는 MACD transition이 반복되며 noise가 증가할 수 있습니다.',
+          '단기 cross 반응만 해석하기보다 거래량 확장 여부와 상위 structure alignment를 함께 확인하는 것이 중요합니다.',
         ],
       },
     ],
   },
+
   {
     key: 'EMA',
+
+    // MODIFIED: timeframe-aware subtitle
     title: 'EMA(이동평균선) 설명',
-    subtitle: '단기 / 중기 추세 방향 확인',
+    subtitle: '15M 방향 전환 / 1H 상위 추세 구조 유지 확인',
+
     icon: TrendingUp,
+
     sections: [
       {
+        // MODIFIED: structure-aware EMA overview
         title: '지표 개요',
         content: [
-          'EMA는 최근 가격에 더 큰 가중치를 두는 이동평균선입니다.',
-          '현재 알람 구조에서는 EMA20과 EMA50의 교차를 기준으로 추세 변화를 감지합니다.',
+          'EMA는 최근 가격에 더 높은 가중치를 부여해 현재 시장의 directional pressure를 빠르게 반영하는 이동평균선입니다.',
+          '현재 알람 구조에서는 15M EMA를 단기 방향 변화 감지 layer로 사용하고, 1H EMA를 상위 trend maintenance 확인 layer로 해석합니다.',
+        ],
+      },
+
+      {
+        // MODIFIED: terminal-grade directional wording
+        title: '핵심 포인트',
+        tone: 'point',
+        content: [
+          '15M EMA 구조는 단기 directional momentum 변화와 acceleration 흐름을 빠르게 감지하는 역할을 수행합니다.',
+          '1H EMA 구조는 현재 상위 trend structure가 유지되는지 확인하는 higher timeframe layer로 사용됩니다.',
+          '가격이 EMA 구조 위 또는 아래에서 지속적으로 유지되는지 여부는 현재 시장 directional bias 해석에 중요한 기준이 됩니다.',
+        ],
+      },
+
+      {
+        // MODIFIED: safer warning wording
+        title: '주의사항',
+        tone: 'warning',
+        content: [
+          'EMA는 후행성이 존재하기 때문에 급격한 변동 직후에는 단기 반응보다 늦게 구조 변화가 나타날 수 있습니다.',
+          '횡보 구간에서는 EMA transition이 반복되며 방향성이 불안정해질 수 있으므로 상위 timeframe 구조와 함께 해석해야 합니다.',
+        ],
+      },
+    ],
+  },
+
+  // NEVER MODIFIED — Institutional Flow card preserved exactly as original
+  {
+    key: 'INSTITUTIONAL_FLOW',
+    title: 'Institutional Flow',
+    subtitle: '기관 압력 / 유동성 포지셔닝 구조 해석',
+    icon: Landmark,
+    sections: [
+      {
+        title: '구조 개요',
+        content: [
+          'Institutional Flow는 단순 기술적 지표가 아니라, 현재 시장 안에서 누적되는 기관성 압력과 유동성 포지셔닝을 해석하는 구조 분석 레이어입니다.',
+          '30분 누적 snapshot을 기반으로 OI 압력, Funding 상태, Volume 확장, Whale Flow, 청산 압력, 흡수/스윕 이벤트를 함께 읽습니다.',
         ],
       },
       {
         title: '핵심 포인트',
         tone: 'point',
         content: [
-          'EMA20이 EMA50 위로 올라가면 단기 추세 강화 신호로 해석할 수 있습니다.',
-          'EMA20이 EMA50 아래로 내려가면 단기 약세 전환 가능성을 볼 수 있습니다.',
-          '가격이 이평선 위에서 유지되는지 여부도 함께 보면 더 유용합니다.',
+          'Long Pressure Building은 롱 방향 포지셔닝 압력이 누적되는 구조를 의미합니다.',
+          'Short Pressure Building은 숏 방향 포지셔닝 압력이 우세해지는 흐름을 의미합니다.',
+          'Whale Distribution은 고래 매도 압력과 분산 흐름이 강해지는 구간을 해석합니다.',
+          'Institutional Absorption은 매도/매수 압력을 기관성 흡수 흐름이 받아내는 구조를 추적합니다.',
+          'Liquidity Sweep Risk는 유동성 회수와 청산 압력이 함께 커지는 시장 구조를 확인합니다.',
+        ],
+      },
+      {
+        title: '분석 관점',
+        content: [
+          '이 레이어는 RSI/MACD/EMA처럼 단일 계산식으로 만들어지는 신호가 아니라, 여러 pressure metric을 함께 묶어 시장 구조를 읽습니다.',
+          '핵심은 방향을 맞히는 것이 아니라, 현재 시장에서 어떤 압력이 누적되고 어떤 포지셔닝이 우세한지를 해석하는 것입니다.',
         ],
       },
       {
         title: '주의사항',
         tone: 'warning',
         content: [
-          '급격한 변동 직후에는 후행성이 있어 진입 타이밍이 늦을 수 있습니다.',
-          '횡보 구간에서는 이평선 크로스가 잦아져 신뢰도가 낮아질 수 있습니다.',
+          'Institutional Flow is not a price prediction engine.',
+          'Cumulative positioning and pressure changes in the current market',
+          'This is the structural analysis layer for analysis.',
+          '따라서 이 카드는 매수/매도 추천이 아니라, 현재 시장 압력 구조를 읽기 위한 terminal-style 해석 도구로 사용해야 합니다.',
         ],
       },
     ],
@@ -149,7 +229,7 @@ export default function IndicatorInfoCards() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
       {cards.map(card => {
         const active = openKey === card.key
         const Icon = card.icon
@@ -231,6 +311,7 @@ export default function IndicatorInfoCards() {
                   >
                     {card.title}
                   </div>
+
                   <div
                     className={clsx(
                       'mt-2 text-xs',

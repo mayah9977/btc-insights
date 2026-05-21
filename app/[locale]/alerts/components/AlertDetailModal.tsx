@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/AlertDetailModal.tsx
+
 'use client'
 
 import type { PriceAlert } from '@/lib/alerts/alertTypes'

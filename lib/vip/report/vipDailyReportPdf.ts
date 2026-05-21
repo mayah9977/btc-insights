@@ -1,3 +1,5 @@
+//lib/vip/report/vipDailyReportPdf.ts
+
 import { renderPdfByCloudRun } from '@/lib/pdf/cloudRunPdfClient'
 
 export type VipLevel = 'VIP1' | 'VIP2' | 'VIP3'

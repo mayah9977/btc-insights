@@ -1,3 +1,5 @@
+//app/[locale]/casino/vip/desktop/VIPDesktopPage.tsx
+
 'use client'
 
 import dynamic from 'next/dynamic'

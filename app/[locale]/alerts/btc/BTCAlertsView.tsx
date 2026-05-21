@@ -1,3 +1,5 @@
+//app/[locale]/alerts/btc/BTCAlertsView.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -124,7 +126,7 @@ export default function BTCAlertsView() {
             )}
           >
             {isVIP
-              ? '15분봉 기준 RSI / MACD / EMA 신호 알림'
+              ? '15m/1hour 캔들 기준 RSI / MACD / EMA 신호 알림'
               : '🔒 VIP 전용 기능입니다 · 지금 업그레이드 후 이용 가능'}
           </div>
 
@@ -140,7 +142,7 @@ export default function BTCAlertsView() {
 
       <div className="relative z-10 mx-auto mt-10 w-full max-w-[420px] px-4 sm:max-w-5xl">
         <h2 className="mb-4 text-sm font-extrabold tracking-widest text-cyan-300">
-          RSI + MACD + 이동평균선 설명 카드클릭
+          RSI + MACD + 시장 시그널 & 기관 압력 해석
         </h2>
 
         <IndicatorInfoCards />

@@ -1,3 +1,5 @@
+//app/[locale]/layout.tsx
+
 'use client'
 
 import type { ReactNode } from 'react'
@@ -171,12 +173,17 @@ function BottomTab() {
               navigator.vibrate?.(8)
               router.push(tab.path)
             }}
-            className={`text-[10px] flex flex-col items-center justify-center transition-all duration-150 active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-[2px] text-xs transition-all duration-150 active:scale-95 ${
               active ? 'scale-105 font-semibold text-white' : 'text-gray-400'
             }`}
           >
-            <span>{icon}</span>
-            <span>{tab.label}</span>
+            <span className="text-[16px] leading-none">
+              {icon}
+            </span>
+
+            <span className="leading-none">
+              {tab.label}
+            </span>
           </button>
         )
       })}

@@ -1,3 +1,5 @@
+// app/[locale]/alerts/btc/IndicatorCards.tsx
+
 'use client'
 
 import clsx from 'clsx'
@@ -9,11 +11,18 @@ import {
 } from 'lucide-react'
 import { useAlertsStore } from '../providers/alertsStore.zustand'
 
-export default function IndicatorCards() {
-  const indicatorEnabled = useAlertsStore(s => s.indicatorEnabled)
-  const setIndicatorEnabled = useAlertsStore(s => s.setIndicatorEnabled)
+type IndicatorKey = 'RSI' | 'MACD' | 'EMA'
 
-  const toggle = async (key: 'RSI' | 'MACD' | 'EMA') => {
+export default function IndicatorCards() {
+  const indicatorEnabled = useAlertsStore(
+    s => s.indicatorEnabled,
+  )
+
+  const setIndicatorEnabled = useAlertsStore(
+    s => s.setIndicatorEnabled,
+  )
+
+  const toggle = async (key: IndicatorKey) => {
     const next = {
       ...indicatorEnabled,
       [key]: !indicatorEnabled[key],
@@ -24,7 +33,9 @@ export default function IndicatorCards() {
     try {
       await fetch('/api/alerts/indicator-settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(next),
       })
     } catch (e) {
@@ -33,27 +44,37 @@ export default function IndicatorCards() {
   }
 
   const cards: Array<{
-    key: 'RSI' | 'MACD' | 'EMA'
+    key: IndicatorKey
     label: string
     description: string
+    structureDescription: string
     icon: typeof Activity
   }> = [
     {
       key: 'RSI',
       label: 'RSI 알람',
-      description: 'Overbought(과매수) / Oversold(과매도)',
+      description:
+        'Overbought / Oversold Momentum Zone',
+      structureDescription:
+        '상위 시간대 과열·침체 구조 감지',
       icon: Activity,
     },
     {
       key: 'MACD',
       label: 'MACD 알람',
-      description: 'Golden(골든크로스) / Dead(데드크로스)',
+      description:
+        'Momentum Transition / Cross Shift',
+      structureDescription:
+        '상위 시간대 방향 구조 전환',
       icon: Waves,
     },
     {
       key: 'EMA',
-      label: 'EMA(이평선) 알람 ',
-      description: 'Trend Cross Signal(골든/데드크로스)',
+      label: 'EMA(이평선) 알람',
+      description:
+        'EMA20/50 Momentum Shift',
+      structureDescription:
+        'EMA20/50/100 Structure Alignment',
       icon: TrendingUp,
     },
   ]
@@ -61,7 +82,9 @@ export default function IndicatorCards() {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {cards.map(card => {
-        const active = indicatorEnabled[card.key]
+        const active =
+          indicatorEnabled[card.key]
+
         const Icon = card.icon
 
         return (
@@ -83,7 +106,7 @@ export default function IndicatorCards() {
             }}
             className={clsx(
               'group relative overflow-hidden rounded-[26px] border text-left',
-              'min-h-[140px] p-6 sm:min-h-[160px] sm:p-7',
+              'min-h-[170px] p-6 sm:min-h-[190px] sm:p-7',
               'backdrop-blur-xl transition-all duration-200',
               'focus:outline-none',
               active
@@ -135,11 +158,11 @@ export default function IndicatorCards() {
             )}
 
             <div className="relative z-10 flex h-full flex-col justify-between">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 {/* Icon */}
                 <div
                   className={clsx(
-                    'flex h-14 w-14 items-center justify-center rounded-2xl border transition',
+                    'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition',
                     active
                       ? 'border-white/20 bg-white/15 text-emerald-100 shadow-[0_0_25px_rgba(16,185,129,0.5)]'
                       : 'border-white/10 bg-white/5 text-white/70 group-hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]',
@@ -173,11 +196,44 @@ export default function IndicatorCards() {
 
                 <div
                   className={clsx(
-                    'mt-2 text-xs',
+                    'mt-2 text-xs leading-relaxed',
                     active ? 'text-white/80' : 'text-white/50',
                   )}
                 >
                   {card.description}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span
+                    className={clsx(
+                      'rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.12em]',
+                      active
+                        ? 'border-indigo-300/30 bg-indigo-400/15 text-indigo-100'
+                        : 'border-white/10 bg-white/5 text-white/45',
+                    )}
+                  >
+                    15M Momentum
+                  </span>
+
+                  <span
+                    className={clsx(
+                      'rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.12em]',
+                      active
+                        ? 'border-cyan-300/30 bg-cyan-400/15 text-cyan-100'
+                        : 'border-white/10 bg-white/5 text-white/45',
+                    )}
+                  >
+                    1H Structure
+                  </span>
+                </div>
+
+                <div
+                  className={clsx(
+                    'mt-3 text-[11px] leading-relaxed',
+                    active ? 'text-white/60' : 'text-white/38',
+                  )}
+                >
+                  {card.structureDescription}
                 </div>
               </div>
             </div>

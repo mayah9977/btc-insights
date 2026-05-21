@@ -1,3 +1,5 @@
+//components/vip/mobile/VIPReportDownloadCard.tsx
+
 'use client'
 
 export default function VIPReportDownloadCard() {

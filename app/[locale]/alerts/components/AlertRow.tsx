@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/AlertRow.tsx   
+
 'use client'
 
 import { memo, useCallback, useState, useMemo } from 'react'

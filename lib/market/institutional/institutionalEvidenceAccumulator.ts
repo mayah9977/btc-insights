@@ -8,6 +8,10 @@ import type {
   InstitutionalEvidenceSnapshot,
 } from '@/lib/market/institutional/institutionalEvidenceSnapshot'
 
+import {
+  detectInstitutionalPattern,
+} from '@/lib/market/patterns/detectInstitutionalPattern'
+
 type InstitutionalEventsAccumulator = {
   whaleBurstCount: number
 
@@ -67,6 +71,16 @@ type InternalAccumulator = {
   institutionalEvents: InstitutionalEventsAccumulator
 }
 
+type InstitutionalPatternSignalPayload = {
+  type: 'INSTITUTIONAL_PATTERN_SIGNAL'
+  pattern: string
+  intensity: string
+  risk: string
+  summary: string
+  confirmedCandleTs: number
+  ts: number
+}
+
 let accumulator: InternalAccumulator =
   createEmptyAccumulator()
 
@@ -75,6 +89,9 @@ let lastFrozenSnapshot:
   | null = null
 
 let lastFrozenCandleTs: number | null = null
+
+const emittedInstitutionalPatternKeys =
+  new Set<string>()
 
 function createEmptyAccumulator(): InternalAccumulator {
   return {
@@ -132,6 +149,215 @@ function createEmptyAccumulator(): InternalAccumulator {
 
       volatilityShockCount: 0,
     },
+  }
+}
+
+async function publishInstitutionalPatternSignal(
+  payload: InstitutionalPatternSignalPayload,
+) {
+  if (typeof window === 'undefined') {
+    console.log(
+      '[INSTITUTIONAL_PATTERN_EMIT_SKIPPED]',
+      {
+        reason:
+          'SERVER_RUNTIME_ROUTE_DELEGATION_UNAVAILABLE',
+        pattern: payload.pattern,
+        confirmedCandleTs:
+          payload.confirmedCandleTs,
+      },
+    )
+
+    return
+  }
+
+  try {
+    const response = await fetch(
+      '/api/alerts/institutional-pattern',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    )
+
+    if (!response.ok) {
+      console.error(
+        '[INSTITUTIONAL_PATTERN_EMIT_ROUTE_ERROR]',
+        {
+          status: response.status,
+          pattern: payload.pattern,
+          confirmedCandleTs:
+            payload.confirmedCandleTs,
+        },
+      )
+
+      return
+    }
+
+    console.log(
+      '[INSTITUTIONAL_PATTERN_EMIT_ROUTE_PUBLISHED]',
+      payload,
+    )
+  } catch (error) {
+    console.error(
+      '[INSTITUTIONAL_PATTERN_EMIT_ROUTE_FETCH_ERROR]',
+      error,
+    )
+  }
+}
+
+function emitInstitutionalPatternSignal(
+  snapshot: InstitutionalEvidenceSnapshot,
+) {
+  try {
+    const detectedPattern =
+      detectInstitutionalPattern({
+        snapshotReady: true,
+
+        oiDeltaAverage:
+          snapshot.oiDeltaAverage,
+
+        oiDeltaAccum:
+          snapshot.oiDeltaAccum,
+
+        oiDirectionalPersistenceAverage:
+          snapshot
+            .oiDirectionalPersistenceAverage,
+
+        fundingAverage:
+          snapshot.fundingAverage,
+
+        fundingState:
+          snapshot.fundingState,
+
+        volumeRatioAverage:
+          snapshot.volumeRatioAverage,
+
+        volumeState:
+          snapshot.volumeState,
+
+        whaleIntensityAverage:
+          snapshot.whaleIntensityAverage,
+
+        whaleBias:
+          snapshot.whaleBias,
+
+        whaleBuyPressure:
+          snapshot.whaleBuyPressure,
+
+        whaleSellPressure:
+          snapshot.whaleSellPressure,
+
+        longLiquidationPressure:
+          snapshot.longLiquidationPressure,
+
+        shortLiquidationPressure:
+          snapshot.shortLiquidationPressure,
+
+        dominantFlow:
+          snapshot.dominantFlow,
+
+        oiDirectionalPressure:
+          snapshot.oiDirectionalPressure,
+
+        fmaiDirectionalPressure:
+          snapshot.fmaiDirectionalPressure,
+
+        absorptionAccum:
+          snapshot.absorptionAccum,
+
+        absorptionAverage:
+          snapshot.absorptionAverage,
+
+        sweepAccum:
+          snapshot.sweepAccum,
+
+        sweepAverage:
+          snapshot.sweepAverage,
+
+        institutionalEvents:
+          snapshot.institutionalEvents,
+      })
+
+    if (
+      !detectedPattern ||
+      detectedPattern.type === 'NONE'
+    ) {
+      console.log(
+        '[INSTITUTIONAL_PATTERN_EMIT_SKIPPED]',
+        {
+          reason: 'NONE_PATTERN',
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+        },
+      )
+
+      return
+    }
+
+    const dedupeKey =
+      `${detectedPattern.type}:${snapshot.confirmedCandleTs}`
+
+    if (
+      emittedInstitutionalPatternKeys.has(
+        dedupeKey,
+      )
+    ) {
+      console.log(
+        '[INSTITUTIONAL_PATTERN_EMIT_DEDUPED]',
+        {
+          dedupeKey,
+        },
+      )
+
+      return
+    }
+
+    emittedInstitutionalPatternKeys.add(
+      dedupeKey,
+    )
+
+    const payload: InstitutionalPatternSignalPayload =
+      {
+        type:
+          'INSTITUTIONAL_PATTERN_SIGNAL',
+
+        pattern:
+          detectedPattern.type,
+
+        intensity:
+          detectedPattern.intensity,
+
+        risk:
+          detectedPattern.risk,
+
+        summary:
+          detectedPattern.summary,
+
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+
+        ts: Date.now(),
+      }
+
+    console.log(
+      '[INSTITUTIONAL_PATTERN_EMIT]',
+      {
+        dedupeKey,
+        payload,
+      },
+    )
+
+    void publishInstitutionalPatternSignal(
+      payload,
+    )
+  } catch (error) {
+    console.error(
+      '[INSTITUTIONAL_PATTERN_EMIT_ERROR]',
+      error,
+    )
   }
 }
 
@@ -732,6 +958,8 @@ export function freezeInstitutionalSnapshot(
         snapshot.whaleIntensityAccum,
     },
   )
+
+  emitInstitutionalPatternSignal(snapshot)
 
   console.log(
     '[ACCUMULATOR_RESET]',

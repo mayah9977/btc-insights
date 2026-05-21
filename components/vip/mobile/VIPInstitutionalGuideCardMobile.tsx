@@ -90,7 +90,7 @@ export default function VIPInstitutionalGuideCardMobile({
         <div className="flex justify-between">
 
           <div className="font-semibold text-white">
-            Institutional Conviction
+            Institutional Conviction(기관 방향성)
           </div>
 
           <div
@@ -102,13 +102,13 @@ export default function VIPInstitutionalGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-400">
-          LONG Probability {long.toFixed(0)}%
+          LONG Probability(매수 우세) {long.toFixed(0)}%
           {' | '}
-          SHORT Probability {short.toFixed(0)}%
+          SHORT Probability(매도 우세) {short.toFixed(0)}%
         </div>
 
         <div className="text-xs text-gray-400">
-          Institutional Intervention Energy
+          Institutional Intervention Energy(세력 개입 강도)
           {' '}
           {intensity.toFixed(1)}%
         </div>
@@ -125,7 +125,7 @@ export default function VIPInstitutionalGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-500">
-          Directional Conviction
+          Directional Conviction(추세 확신)
           {' '}
           {confidence.toFixed(1)}%
         </div>

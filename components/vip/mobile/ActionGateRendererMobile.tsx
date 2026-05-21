@@ -2,14 +2,23 @@
 
 'use client'
 
-import React, { useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, {
+  useCallback,
+  useMemo,
+  useState,
+} from 'react'
+import {
+  motion,
+  AnimatePresence,
+} from 'framer-motion'
+
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
+import { MobileInstitutionalPatternAlertCard } from '@/components/vip/mobile/MobileInstitutionalPatternAlertCard'
 import { MobileFinalizedInstitutionalNumbers } from '@/components/vip/mobile/MobileFinalizedInstitutionalNumbers'
 
 export type ActionGateState =
@@ -58,27 +67,40 @@ export default function ActionGateRendererMobile({
         ? 'animate-[pulse_3.2s_ease-in-out_infinite] opacity-80'
         : ''
 
-  const [open, setOpen] = useState(false)
-  const toggle = useCallback(() => setOpen(prev => !prev), [])
+  const [open, setOpen] =
+    useState(false)
 
-  const { flash, pulse, transition } =
-    usePremiumSignalAnimation(signalType)
+  const toggle = useCallback(() => {
+    setOpen((prev) => !prev)
+  }, [])
+
+  const {
+    flash,
+    pulse,
+    transition,
+  } = usePremiumSignalAnimation(
+    signalType,
+  )
 
   const typedSummary = useTypewriter(
     sentence?.summary ?? '',
     10,
   )
 
-  const descriptionText = Array.isArray(
-    sentence?.description,
-  )
-    ? sentence?.description.join('\n')
-    : sentence?.description ?? ''
+  const descriptionText = useMemo(() => {
+    if (!sentence?.description) {
+      return ''
+    }
 
-  const typedDescription = useTypewriter(
-    descriptionText,
-    8,
-  )
+    return Array.isArray(
+      sentence.description,
+    )
+      ? sentence.description.join('\n')
+      : sentence.description
+  }, [sentence?.description])
+
+  const typedDescription =
+    useTypewriter(descriptionText, 8)
 
   const typedTendency = useTypewriter(
     sentence?.tendency ?? '',
@@ -135,12 +157,13 @@ export default function ActionGateRendererMobile({
         >
           <div
             className="
-              w-[160%] h-full
+              h-full
+              w-[160%]
+              skew-x-[-20deg]
               bg-gradient-to-r
               from-transparent
               via-white/20
               to-transparent
-              skew-x-[-20deg]
             "
           />
         </motion.div>
@@ -172,9 +195,13 @@ export default function ActionGateRendererMobile({
             </div>
 
             <motion.div
-              animate={{ rotate: open ? 180 : 0 }}
-              transition={{ duration: 0.25 }}
-              className="text-gray-400 text-xs"
+              animate={{
+                rotate: open ? 180 : 0,
+              }}
+              transition={{
+                duration: 0.25,
+              }}
+              className="text-xs text-gray-400"
             >
               ▼
             </motion.div>
@@ -182,7 +209,7 @@ export default function ActionGateRendererMobile({
 
           {!open && (
             <div>
-              <div className="text-gray-300 leading-relaxed">
+              <div className="leading-relaxed text-gray-300">
                 {teaser}
               </div>
 
@@ -195,10 +222,25 @@ export default function ActionGateRendererMobile({
           <AnimatePresence initial={false}>
             {open && (
               <motion.div
-                initial={{ height: 0, opacity: 0, y: -6 }}
-                animate={{ height: 'auto', opacity: 1, y: 0 }}
-                exit={{ height: 0, opacity: 0, y: -6 }}
-                transition={{ duration: 0.28 }}
+                initial={{
+                  height: 0,
+                  opacity: 0,
+                  y: -6,
+                }}
+                animate={{
+                  height: 'auto',
+                  opacity: 1,
+                  y: 0,
+                }}
+                exit={{
+                  height: 0,
+                  opacity: 0,
+                  y: -6,
+                }}
+                transition={{
+                  duration: 0.28,
+                  ease: 'easeOut',
+                }}
                 className="overflow-hidden"
               >
                 <div className="mt-3 space-y-3 text-xs leading-relaxed">
@@ -249,7 +291,16 @@ export default function ActionGateRendererMobile({
       {sentence && (
         <div className="relative">
           {flash && (
-            <div className="absolute inset-0 bg-yellow-500/20 animate-pulse rounded-xl pointer-events-none" />
+            <div
+              className="
+                pointer-events-none
+                absolute
+                inset-0
+                rounded-xl
+                bg-yellow-500/20
+                animate-pulse
+              "
+            />
           )}
 
           <div
@@ -268,19 +319,30 @@ export default function ActionGateRendererMobile({
               ${transition ? 'scale-[1.02]' : ''}
             `}
           >
-            <div className="text-yellow-400 font-semibold">
+            <div className="font-semibold text-yellow-400">
               {typedSummary}
             </div>
 
-            <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-line">
+            <div
+              className="
+                whitespace-pre-line
+                text-xs
+                leading-relaxed
+                text-gray-300
+              "
+            >
               {typedDescription}
             </div>
 
-            <div className="text-gray-500 text-xs">
+            <div className="text-xs text-gray-500">
               {typedTendency}
             </div>
 
-            <MobileFinalizedInstitutionalNumbers />
+            <div className="space-y-3 pt-1">
+              <MobileInstitutionalPatternAlertCard />
+
+              <MobileFinalizedInstitutionalNumbers />
+            </div>
           </div>
         </div>
       )}

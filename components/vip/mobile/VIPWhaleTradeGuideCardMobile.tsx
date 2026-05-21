@@ -86,7 +86,7 @@ export default function VIPWhaleTradeGuideCardMobile({
         <div className="flex justify-between">
 
           <div className="text-white font-semibold">
-            Trade Participation
+            Trade Participation (시장 참여 비율)
           </div>
 
           <div
@@ -98,13 +98,13 @@ export default function VIPWhaleTradeGuideCardMobile({
         </div>
 
         <div className="text-xs text-gray-400">
-          Large Trade Participation
+          Large Trade Participation (고래 참여 비율)
           {' '}
           {(ratio * 100).toFixed(1)}%
         </div>
 
         <div className="text-xs text-gray-500">
-          Directional Pressure
+          Directional Pressure (방향 압력)
           {' '}
           {safeNet.toFixed(1)}%
         </div>

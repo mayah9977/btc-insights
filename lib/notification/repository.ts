@@ -1,6 +1,12 @@
+// lib/notification/repository.ts
+
 import { redis } from '@/lib/redis'
 
-export type NotificationType = 'NOTICE' | 'BTC_ALERT' | 'INDICATOR'
+export type NotificationType =
+  | 'NOTICE'
+  | 'BTC_ALERT'
+  | 'INDICATOR'
+  | 'INSTITUTIONAL_PATTERN'
 
 export type NotificationItem = {
   id: string
@@ -52,7 +58,8 @@ function isNotificationItem(value: unknown): value is NotificationItem {
     typeof item.id === 'string' &&
     (item.type === 'NOTICE' ||
       item.type === 'BTC_ALERT' ||
-      item.type === 'INDICATOR') &&
+      item.type === 'INDICATOR' ||
+      item.type === 'INSTITUTIONAL_PATTERN') &&
     typeof item.title === 'string' &&
     typeof item.body === 'string' &&
     typeof item.createdAt === 'number'

@@ -1,3 +1,5 @@
+//app/[locale]/components/AlertCreatModal.tsx
+
 'use client'
 
 import { useEffect } from 'react'
