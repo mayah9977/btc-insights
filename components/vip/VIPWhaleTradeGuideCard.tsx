@@ -1,3 +1,5 @@
+//components/vip/VIPWhaleTradeGuideCard.tsx  
+
 'use client'
 
 import { motion } from 'framer-motion'
@@ -78,27 +80,61 @@ export default function VIPWhaleTradeGuideCard({
 
   return (
     <motion.div
+      initial={{
+        opacity: 0,
+        y: 6,
+      }}
+      animate={{
+        opacity: 1,
+        y: 0,
+      }}
+      whileHover={{
+        borderColor: levelColor,
+      }}
+      transition={{
+        duration: 0.35,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className="mt-4 rounded-xl border p-6 text-sm text-neutral-300 relative overflow-hidden"
       style={{
-        borderColor: levelColor,
+        borderColor: strongFlow
+          ? `${levelColor}99`
+          : `${levelColor}55`,
         background:
-          'linear-gradient(145deg, rgba(10,10,10,0.9), rgba(0,0,0,0.95))',
-        boxShadow: `0 0 25px ${levelColor}35`,
-        animation: strongFlow
-          ? 'glow 2.5s ease-in-out infinite alternate'
-          : 'none'
+          'linear-gradient(145deg, rgba(12,12,12,0.96), rgba(3,3,3,0.98))',
+        boxShadow:
+          strongFlow
+            ? `0 18px 44px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.045), 0 0 0 1px ${levelColor}18`
+            : `0 14px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.035)`,
       }}
     >
 
+      {/* premium static surface */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          background:
+            `radial-gradient(circle at top right, ${levelColor}18, transparent 34%)`,
+        }}
+      />
+
+      <div
+        className="pointer-events-none absolute left-6 right-6 top-0 h-px"
+        style={{
+          background:
+            `linear-gradient(90deg, transparent, ${levelColor}66, transparent)`,
+        }}
+      />
+
       {/* 헤더 */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="relative z-10 mb-4 flex items-center justify-between">
 
         <div>
-          <div className="font-semibold text-white text-base">
+          <div className="font-semibold text-white text-base tracking-[0.01em]">
             🐋 Trade Participation & Directional Pressure
           </div>
 
-          <div className="text-xs text-neutral-400">
+          <div className="text-xs text-neutral-500">
             (대형 체결 참여 비중과 방향 압력 분석)
           </div>
         </div>
@@ -113,7 +149,7 @@ export default function VIPWhaleTradeGuideCard({
       </div>
 
       {/* 핵심 데이터 */}
-      <div className="mb-4 text-xs text-neutral-400">
+      <div className="relative z-10 mb-4 text-xs text-neutral-400">
 
         Whale Trade Ratio (시장 거래 중 대형 체결이 차지하는 실제 비중)
 
@@ -136,14 +172,14 @@ export default function VIPWhaleTradeGuideCard({
 
       {/* 해석 */}
       <div
-        className="mb-4 text-sm font-medium"
+        className="relative z-10 mb-4 text-sm font-medium leading-relaxed"
         style={{ color: levelColor }}
       >
         {interpretation}
       </div>
 
       {/* 트레이딩 가이드 */}
-      <div className="text-xs text-neutral-500 leading-relaxed space-y-1">
+      <div className="relative z-10 text-xs text-neutral-500 leading-relaxed space-y-1">
 
         <div>• Whale Trade Ratio → 실제 대형 체결 참여 비중</div>
         <div>• Net Pressure → 대형 체결의 순매수 / 순매도 방향 압력</div>
@@ -155,7 +191,7 @@ export default function VIPWhaleTradeGuideCard({
       </div>
 
       {/* 상태 */}
-      <div className="mt-5 text-center text-xs font-semibold text-white">
+      <div className="relative z-10 mt-5 text-center text-xs font-semibold text-white">
         Observing trade participation and directional pressure : {status}
       </div>
 

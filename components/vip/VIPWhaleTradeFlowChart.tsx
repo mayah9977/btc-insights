@@ -1,3 +1,5 @@
+//components/vip/VIPWhaleTradeFlowChart.tsx
+
 'use client'
 
 import React, { useMemo, useEffect, useState, useRef } from 'react'
@@ -189,12 +191,31 @@ function VIPWhaleTradeFlowChart({
     <>
 
       <motion.div
-        animate={dynamicPulse ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-        transition={{
-          duration: 0.8,
-          repeat: dynamicPulse ? 2 : 0,
+        initial={{
+          opacity: 0,
+          y: 6,
         }}
-        className="rounded-xl border border-vipBorder bg-vipCard p-4"
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{
+          duration: 0.42,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className={`
+          rounded-xl
+          border
+          bg-vipCard
+          p-4
+          transition-colors
+          duration-500
+          ${
+            dynamicPulse
+              ? 'border-yellow-500/25 shadow-[0_18px_42px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]'
+              : 'border-vipBorder shadow-[0_14px_36px_rgba(0,0,0,0.28)]'
+          }
+        `}
       >
 
         <div className="mb-2 flex items-center justify-between">

@@ -1,3 +1,5 @@
+//lib/telegram/sendVipReportPdf.ts
+
 export async function sendVipReportPdf(
   chatId: number,
   pdf: Uint8Array,

@@ -3,7 +3,139 @@
 'use client'
 
 import { toast } from 'react-hot-toast'
+import type { ReactElement } from 'react'
 import AlertToastCard from './AlertToastCard'
+
+const DEFAULT_TOAST_DURATION_MS = 7000
+const LONG_TOAST_DURATION_MS = 8500
+const STALE_GRACE_MS = 1000
+
+type ActiveAlertToast = {
+  id: string
+  createdAt: number
+  durationMs: number
+}
+
+type RenderTrackedAlertToastArgs = {
+  id: string
+  createdAt: number
+  durationMs: number
+  dismiss: () => void
+}
+
+const activeAlertToasts = new Map<
+  string,
+  ActiveAlertToast
+>()
+
+let lifecycleInstalled = false
+
+function createToastId(prefix: string) {
+  return `${prefix}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`
+}
+
+function dismissTrackedToast(id: string) {
+  toast.dismiss(id)
+  activeAlertToasts.delete(id)
+}
+
+function cleanupExpiredAlertToasts() {
+  const now = Date.now()
+
+  for (const [id, item] of activeAlertToasts.entries()) {
+    const expired =
+      now - item.createdAt >=
+      item.durationMs + STALE_GRACE_MS
+
+    if (expired) {
+      dismissTrackedToast(id)
+    }
+  }
+}
+
+function installAlertToastLifecycle() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (lifecycleInstalled) {
+    return
+  }
+
+  lifecycleInstalled = true
+
+  const handleResume = () => {
+    cleanupExpiredAlertToasts()
+  }
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      cleanupExpiredAlertToasts()
+    }
+  }
+
+  document.addEventListener(
+    'visibilitychange',
+    handleVisibilityChange,
+  )
+
+  window.addEventListener(
+    'focus',
+    handleResume,
+  )
+
+  window.addEventListener(
+    'pageshow',
+    handleResume,
+  )
+}
+
+function renderTrackedAlertToast(
+  prefix: string,
+  durationMs: number,
+  render: (
+    args: RenderTrackedAlertToastArgs,
+  ) => ReactElement,
+) {
+  installAlertToastLifecycle()
+
+  cleanupExpiredAlertToasts()
+
+  const id = createToastId(prefix)
+  const createdAt = Date.now()
+
+  activeAlertToasts.set(id, {
+    id,
+    createdAt,
+    durationMs,
+  })
+
+  const dismiss = () => {
+    dismissTrackedToast(id)
+  }
+
+  toast.custom(
+    render({
+      id,
+      createdAt,
+      durationMs,
+      dismiss,
+    }),
+    {
+      id,
+      position: 'bottom-right',
+      duration: durationMs,
+    },
+  )
+
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+      dismissTrackedToast(id)
+    }, durationMs + STALE_GRACE_MS)
+  }
+}
 
 /* =========================
    BTC ALERT
@@ -12,19 +144,28 @@ export function renderAlertToast(payload: {
   symbol: string
   price: number
 }) {
-  toast.custom(
-    t => (
+  renderTrackedAlertToast(
+    'btc-alert-toast',
+    DEFAULT_TOAST_DURATION_MS,
+    ({
+      id,
+      createdAt,
+      durationMs,
+      dismiss,
+    }) => (
       <AlertToastCard
-        t={t}
+        t={{
+          id,
+          visible: true,
+        }}
+        createdAt={createdAt}
+        durationMs={durationMs}
+        onDismiss={dismiss}
         type="BTC"
         symbol={payload.symbol}
         price={payload.price}
       />
     ),
-    {
-      position: 'bottom-right',
-      duration: 7000,
-    },
   )
 }
 
@@ -39,7 +180,8 @@ export function renderIndicatorToast(data: {
   value: number
   timeframe?: '15m' | '1h'
 }) {
-  const timeframe = data.timeframe ?? '15m'
+  const timeframe =
+    data.timeframe ?? '15m'
 
   const timeframeLabel =
     timeframe === '1h'
@@ -51,22 +193,37 @@ export function renderIndicatorToast(data: {
       ? `${data.signal} · Structure Alignment(추세 정렬)`
       : `${data.signal} · Momentum Shift(단기 방향 전환)`
 
-  toast.custom(
-    t => (
+  const durationMs =
+    timeframe === '1h'
+      ? LONG_TOAST_DURATION_MS
+      : DEFAULT_TOAST_DURATION_MS
+
+  renderTrackedAlertToast(
+    'indicator-toast',
+    durationMs,
+    ({
+      id,
+      createdAt,
+      durationMs,
+      dismiss,
+    }) => (
       <AlertToastCard
-        t={t}
+        t={{
+          id,
+          visible: true,
+        }}
+        createdAt={createdAt}
+        durationMs={durationMs}
+        onDismiss={dismiss}
         type="INDICATOR"
         symbol={data.symbol}
         indicator={`${data.indicator} · ${timeframeLabel}`}
         label={data.label}
         signal={signalLabel}
         value={data.value}
+        timeframe={timeframe}
       />
     ),
-    {
-      position: 'bottom-right',
-      duration: timeframe === '1h' ? 8500 : 7000,
-    },
   )
 }
 
@@ -79,7 +236,10 @@ export function renderInstitutionalPatternToast(data: {
   risk: string
   summary: string
 }) {
-  const patternLabelMap: Record<string, string> = {
+  const patternLabelMap: Record<
+    string,
+    string
+  > = {
     LONG_PRESSURE_BUILDING:
       'Long Pressure Building(상승압력증가)',
 
@@ -107,8 +267,13 @@ export function renderInstitutionalPatternToast(data: {
     string
   > = {
     WEAK: 'Weak Pressure(약한 압력)',
-    BUILDING: 'Building Pressure(압력 증가 중)',
-    AGGRESSIVE: 'Aggressive Flow(강한 세력 유입)',
+
+    BUILDING:
+      'Building Pressure(압력 증가 중)',
+
+    AGGRESSIVE:
+      'Aggressive Flow(강한 세력 유입)',
+
     EXTREME:
       'Persistent Institutional Flow(지속적 세력 유입)',
   }
@@ -121,10 +286,23 @@ export function renderInstitutionalPatternToast(data: {
     intensityLabelMap[data.intensity] ??
     data.intensity
 
-  toast.custom(
-    t => (
+  renderTrackedAlertToast(
+    'institutional-toast',
+    LONG_TOAST_DURATION_MS,
+    ({
+      id,
+      createdAt,
+      durationMs,
+      dismiss,
+    }) => (
       <AlertToastCard
-        t={t}
+        t={{
+          id,
+          visible: true,
+        }}
+        createdAt={createdAt}
+        durationMs={durationMs}
+        onDismiss={dismiss}
         type="INSTITUTIONAL"
         symbol="BTCUSDT"
         indicator="INSTITUTIONAL FLOW(세력 흐름 감지)"
@@ -133,9 +311,5 @@ export function renderInstitutionalPatternToast(data: {
         value={undefined}
       />
     ),
-    {
-      position: 'bottom-right',
-      duration: 8500,
-    },
   )
 }

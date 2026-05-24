@@ -289,7 +289,7 @@ function VIPLiveStatusStripComponent() {
         </div>
 
         <div className="text-yellow-300">
-          Whale intensity (고래급기관 체결강도){' '}
+          Whale Energy (고래 개입 강도){' '}
           {whaleIntensity?.toFixed(2) ?? '--'}
         </div>
       </div>

@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/VIPUpgradeModal.tsx
+
 'use client'
 
 import { useRouter } from 'next/navigation' // ✅ added

@@ -1,3 +1,5 @@
+//app/api/cron/send-vip-telegram/route.ts
+
 import { redis } from '@/lib/redis/server'
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { sendVipReportPdf } from '@/lib/telegram/sendVipReportPdf'

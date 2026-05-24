@@ -681,37 +681,37 @@ export const useAlertsSSEStore =
               RSI: {
                 RSI_OVERBOUGHT:
                   timeframe === '1h'
-                    ? 'RSI 상위 시간대 과열 구조'
+                    ? 'RSI 과매수 진입'
                     : 'RSI 과매수 진입',
 
                 RSI_OVERSOLD:
                   timeframe === '1h'
-                    ? 'RSI 상위 시간대 침체 구조'
+                    ? 'RSI 과매도 진입'
                     : 'RSI 과매도 진입',
               },
 
               MACD: {
                 GOLDEN_CROSS:
                   timeframe === '1h'
-                    ? 'MACD 상위 구조 전환'
+                    ? 'MACD 골든크로스'
                     : 'MACD 골든크로스',
 
                 DEAD_CROSS:
                   timeframe === '1h'
-                    ? 'MACD 상위 구조 약화'
+                    ? 'MACD 데드크로스'
                     : 'MACD 데드크로스',
               },
 
               EMA: {
                 BULLISH_TREND:
                   timeframe === '1h'
-                    ? 'EMA 상위 구조 정렬'
-                    : 'EMA 모멘텀 전환',
+                    ? 'EMA 상방 추세 전환'
+                    : 'EMA 상방 추세 전환',
 
                 BEARISH_TREND:
                   timeframe === '1h'
-                    ? 'EMA 상위 구조 약화'
-                    : 'EMA 모멘텀 약화',
+                    ? 'EMA 하방 추세 전환'
+                    : 'EMA 하방 추세 전환',
               },
             }
 
@@ -960,6 +960,7 @@ export const useAlertsSSEStore =
               ),
             )
 
+            // MODIFIED: Institutional notification history ingestion event.
             window.dispatchEvent(
               new CustomEvent(
                 'institutional-pattern:triggered',
@@ -1057,4 +1058,4 @@ export const useAlertsSSEStore =
       },
     }),
   )
-  
+

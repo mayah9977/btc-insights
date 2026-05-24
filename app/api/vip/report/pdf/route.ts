@@ -1,3 +1,5 @@
+//app/api/vip/report/pdf/route.ts
+
 import { NextResponse } from 'next/server'
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { redis } from '@/lib/redis/server'

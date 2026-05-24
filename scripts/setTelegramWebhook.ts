@@ -1,3 +1,5 @@
+//scripts/serTelegramWebhook.ts
+
 import 'dotenv/config'
 
 // Node 18 미만 대비 (tsx/pm2 환경 안전)

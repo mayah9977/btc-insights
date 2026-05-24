@@ -3,6 +3,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import clsx from 'clsx'
+
 import {
   defaultNotificationSettings,
   type IndicatorTimeframe,
@@ -10,10 +12,15 @@ import {
   type NotificationSettings,
   type NotificationSound,
 } from '@/lib/notification/notificationSettings'
+
 import {
   getUserNotificationSettings,
   saveUserNotificationSettings,
 } from '@/lib/notification/settingsStore'
+
+import { getUserVIP } from '@/lib/auth/getUserVIP'
+
+import VIPUpgradeModal from './VIPUpgradeModal'
 
 const SOUND_OPTIONS: Array<{
   value: NotificationSound
@@ -63,6 +70,7 @@ const INDICATOR_ALERT_OPTIONS: Array<{
       },
     ],
   },
+
   {
     indicator: 'MACD',
     title: 'MACD 골든크로스 / 데드크로스',
@@ -81,7 +89,7 @@ const INDICATOR_ALERT_OPTIONS: Array<{
       {
         timeframe: '1h',
         badge: '1H',
-        layer: '골든크로스 / 데드크로스',
+        layer: '골든크스 / 데드크로스',
         title:
           'Structure Alignment Shift',
         description:
@@ -89,6 +97,7 @@ const INDICATOR_ALERT_OPTIONS: Array<{
       },
     ],
   },
+
   {
     indicator: 'EMA',
     title: 'EMA 추세전환 신호알람',
@@ -133,7 +142,11 @@ function getSoundFilePath(
   return map[type]
 }
 
-export default function NotificationSoundSettings() {
+export default function NotificationSoundSettings({
+  isVIP: isVIPProp,
+}: {
+  isVIP?: boolean
+} = {}) {
   const [settings, setSettings] =
     useState<NotificationSettings>(
       defaultNotificationSettings,
@@ -145,10 +158,44 @@ export default function NotificationSoundSettings() {
   const [isPlaying, setIsPlaying] =
     useState(false)
 
+  const [showUpgradeModal, setShowUpgradeModal] =
+    useState(false)
+
+  const [resolvedIsVIP, setResolvedIsVIP] =
+    useState<boolean | null>(
+      typeof isVIPProp === 'boolean'
+        ? isVIPProp
+        : null,
+    )
+
   const audioRef =
     useRef<HTMLAudioElement | null>(
       null,
     )
+
+  const isVIP =
+    typeof isVIPProp === 'boolean'
+      ? isVIPProp
+      : resolvedIsVIP === true
+
+  const vipResolved =
+    typeof isVIPProp === 'boolean' ||
+    resolvedIsVIP !== null
+
+  const vipFeatureLocked =
+    vipResolved && !isVIP
+
+  useEffect(() => {
+    if (typeof isVIPProp === 'boolean') {
+      setResolvedIsVIP(isVIPProp)
+      return
+    }
+
+    ;(async () => {
+      const vip = await getUserVIP()
+      setResolvedIsVIP(vip)
+    })()
+  }, [isVIPProp])
 
   useEffect(() => {
     ;(async () => {
@@ -177,12 +224,35 @@ export default function NotificationSoundSettings() {
     )
   }
 
+  const updateVIPOnlySettings =
+    async (
+      patch: Partial<NotificationSettings>,
+    ) => {
+      if (!isVIP) {
+        if (vipResolved) {
+          setShowUpgradeModal(true)
+        }
+
+        return
+      }
+
+      await updateSettings(patch)
+    }
+
   const updateIndicatorTimeframe =
     async (
       indicator: IndicatorType,
       timeframe: IndicatorTimeframe,
       enabled: boolean,
     ) => {
+      if (!isVIP) {
+        if (vipResolved) {
+          setShowUpgradeModal(true)
+        }
+
+        return
+      }
+
       await updateSettings({
         indicatorEnabled: {
           ...settings.indicatorEnabled,
@@ -197,7 +267,9 @@ export default function NotificationSoundSettings() {
     }
 
   const playPreview = () => {
-    if (!settings.soundEnabled) return
+    if (!settings.soundEnabled) {
+      return
+    }
 
     try {
       if (audioRef.current) {
@@ -294,7 +366,8 @@ export default function NotificationSoundSettings() {
                 </span>
 
                 <span className="text-sm font-semibold text-cyan-100">
-                  Institutional Flow Alert (기관급 고래 압력 알람)
+                  Institutional Flow Alert
+                  (기관급 고래 압력 알람)
                 </span>
               </span>
 
@@ -304,6 +377,20 @@ export default function NotificationSoundSettings() {
                 감지되면 실시간 알림을
                 보냅니다.
               </span>
+
+              {/* 상태 배지 */}
+              <div
+                className={clsx(
+                  'mt-3 inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em]',
+                  settings.institutionalPatternEnabled
+                    ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
+                    : 'border-white/10 bg-white/[0.04] text-white/45',
+                )}
+              >
+                {settings.institutionalPatternEnabled
+                  ? '🟢 실시간 알림 카드 수신중'
+                  : '⚪ 알림 카드 비활성화됨'}
+              </div>
             </span>
 
             <input
@@ -312,11 +399,12 @@ export default function NotificationSoundSettings() {
                 settings.institutionalPatternEnabled
               }
               onChange={e =>
-                updateSettings({
+                updateVIPOnlySettings({
                   institutionalPatternEnabled:
                     e.target.checked,
                 })
               }
+              disabled={vipFeatureLocked}
               className="mt-1 shrink-0"
             />
           </label>
@@ -439,6 +527,20 @@ export default function NotificationSoundSettings() {
                                     row.description
                                   }
                                 </span>
+
+                                {/* 상태 배지 */}
+                                <div
+                                  className={clsx(
+                                    'mt-2 inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold tracking-[0.06em]',
+                                    checked
+                                      ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
+                                      : 'border-white/10 bg-white/[0.04] text-white/45',
+                                  )}
+                                >
+                                  {checked
+                                    ? '🟢 실시간 알림 활성'
+                                    : '⚪ 알림 OFF'}
+                                </div>
                               </span>
 
                               <input
@@ -453,6 +555,9 @@ export default function NotificationSoundSettings() {
                                     e.target
                                       .checked,
                                   )
+                                }
+                                disabled={
+                                  vipFeatureLocked
                                 }
                                 className="mt-1 shrink-0"
                               />
@@ -538,6 +643,14 @@ export default function NotificationSoundSettings() {
             </select>
           </label>
 
+          {vipFeatureLocked && (
+            <div className="text-center text-xs text-white/50 mt-2">
+              Institutional Flow /
+              Indicator Alert 기능은
+              VIP 전용입니다.
+            </div>
+          )}
+
           {!isPlaying && (
             <button
               type="button"
@@ -556,6 +669,14 @@ export default function NotificationSoundSettings() {
             >
               🔕 미리듣기 정지
             </button>
+          )}
+
+          {showUpgradeModal && (
+            <VIPUpgradeModal
+              onClose={() =>
+                setShowUpgradeModal(false)
+              }
+            />
           )}
         </div>
       )}

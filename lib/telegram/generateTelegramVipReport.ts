@@ -1,3 +1,5 @@
+//lib/telegram/generateTelegramVipReport.ts
+
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 
 export async function generateTelegramVipReport() {

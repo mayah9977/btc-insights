@@ -1,3 +1,5 @@
+// lib/vip/report/vipReportCron.ts
+
 /* =========================================================
    VIP Daily Report Cron (RSS-Only Institutional Version)
    - Internal Metrics Engine Removed
@@ -23,27 +25,52 @@ const ONCHAIN_CACHE_KEY = 'vip:onchain:summary'
 const TELEGRAM_USERS_KEY = 'vip:telegram:users'
 
 /* =====================================================
+   ✅ Legacy Telegram Sender Guard
+   - 최신 Telegram sender:
+     /api/cron/send-vip-telegram/route.ts
+   - legacy duplicate Telegram send 방지용
+===================================================== */
+const ENABLE_LEGACY_TELEGRAM_SEND =
+  process.env.ENABLE_LEGACY_TELEGRAM_SEND === 'true'
+
+/* =====================================================
    ✅ KST 날짜 고정
 ===================================================== */
 function getKstDateString(): string {
   const now = new Date()
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000
-  const kst = new Date(utc + 9 * 60 * 60000)
+
+  const utc =
+    now.getTime() +
+    now.getTimezoneOffset() * 60000
+
+  const kst = new Date(
+    utc + 9 * 60 * 60000
+  )
+
   return kst.toISOString().slice(0, 10)
 }
 
 /* =====================================================
    ✅ 48시간 검증
 ===================================================== */
-function isWithin48Hours(dateString?: string | null): boolean {
+function isWithin48Hours(
+  dateString?: string | null,
+): boolean {
   if (!dateString) return false
+
   const pubDate = new Date(dateString)
+
   const diffHours =
-    (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
+    (Date.now() - pubDate.getTime()) /
+    (1000 * 60 * 60)
+
   return diffHours <= 48
 }
 
-export async function runVIPDailyReport(email: string, userId: string) {
+export async function runVIPDailyReport(
+  email: string,
+  userId: string,
+) {
   try {
 
     /* =====================================================
@@ -52,18 +79,29 @@ export async function runVIPDailyReport(email: string, userId: string) {
 
     let newsSummary =
       '오늘의 주요 뉴스 데이터가 아직 생성되지 않았습니다.'
+
     let newsMidLongTerm =
       '구조적 관점에서 변동성 구간을 관찰해야 합니다.'
 
     try {
-      const newsRaw = await redis.get(NEWS_KEY)
+      const newsRaw =
+        await redis.get(NEWS_KEY)
+
       if (newsRaw) {
         const parsed = JSON.parse(newsRaw)
-        newsSummary = parsed?.summary ?? newsSummary
-        newsMidLongTerm = parsed?.midLongTerm ?? newsMidLongTerm
+
+        newsSummary =
+          parsed?.summary ?? newsSummary
+
+        newsMidLongTerm =
+          parsed?.midLongTerm ??
+          newsMidLongTerm
       }
     } catch (err) {
-      console.error('[NEWS PARSE ERROR]', err)
+      console.error(
+        '[NEWS PARSE ERROR]',
+        err,
+      )
     }
 
     /* =====================================================
@@ -74,31 +112,48 @@ export async function runVIPDailyReport(email: string, userId: string) {
     let externalOnchainSummary = ''
 
     try {
-      const cachedRaw = await redis.get(ONCHAIN_CACHE_KEY)
+      const cachedRaw =
+        await redis.get(
+          ONCHAIN_CACHE_KEY,
+        )
 
       let cached: any = null
       let useCache = false
 
       if (cachedRaw) {
         cached = JSON.parse(cachedRaw)
-        if (isWithin48Hours(cached?.pubDate)) {
+
+        if (
+          isWithin48Hours(
+            cached?.pubDate,
+          )
+        ) {
           useCache = true
         }
       }
 
       if (useCache && cached) {
 
-        externalOnchainSource = cached.source ?? ''
-        externalOnchainSummary = cached.summary ?? ''
+        externalOnchainSource =
+          cached.source ?? ''
+
+        externalOnchainSummary =
+          cached.summary ?? ''
 
       } else {
 
-        const rssItems = await fetchOnchainMultiList()
+        const rssItems =
+          await fetchOnchainMultiList()
 
-        if (rssItems && rssItems.length > 0) {
+        if (
+          rssItems &&
+          rssItems.length > 0
+        ) {
 
           externalOnchainSummary =
-            await summarizeExternalOnchain(rssItems)
+            await summarizeExternalOnchain(
+              rssItems,
+            )
 
           externalOnchainSource =
             `Institutional On-Chain Research (${rssItems.length} reports aggregated)`
@@ -106,12 +161,16 @@ export async function runVIPDailyReport(email: string, userId: string) {
           await redis.set(
             ONCHAIN_CACHE_KEY,
             JSON.stringify({
-              source: externalOnchainSource,
-              summary: externalOnchainSummary,
-              pubDate: rssItems[0]?.pubDate ?? null,
+              source:
+                externalOnchainSource,
+              summary:
+                externalOnchainSummary,
+              pubDate:
+                rssItems[0]?.pubDate ??
+                null,
             }),
             'EX',
-            60 * 60 * 24
+            60 * 60 * 24,
           )
 
         } else {
@@ -125,76 +184,122 @@ export async function runVIPDailyReport(email: string, userId: string) {
       }
 
     } catch (err) {
-      console.error('[ONCHAIN RSS ERROR]', err)
+      console.error(
+        '[ONCHAIN RSS ERROR]',
+        err,
+      )
     }
 
     /* =====================================================
        3️⃣ Fusion
     ===================================================== */
 
-    const fusion = await generateFusionIntel({
-      newsSummary,
-      newsMidLongTerm,
-      onchainSummary: externalOnchainSummary,
-      whaleIntensity: 0,
-      fundingRate: 0,
-      openInterest: 0,
-      sentimentRegime: 'NEUTRAL',
-    })
+    const fusion =
+      await generateFusionIntel({
+        newsSummary,
+        newsMidLongTerm,
+        onchainSummary:
+          externalOnchainSummary,
+        whaleIntensity: 0,
+        fundingRate: 0,
+        openInterest: 0,
+        sentimentRegime: 'NEUTRAL',
+      })
 
     /* =====================================================
        4️⃣ PDF 생성
     ===================================================== */
 
-    const kstDate = getKstDateString()
+    const kstDate =
+      getKstDateString()
 
-    const pdf = await generateVipDailyReportPdf({
-      date: kstDate,
-      market: 'BTC',
-      vipLevel: 'VIP3',
+    const pdf =
+      await generateVipDailyReportPdf({
+        date: kstDate,
+        market: 'BTC',
+        vipLevel: 'VIP3',
 
-      newsSummary,
-      newsMidLongTerm,
+        newsSummary,
+        newsMidLongTerm,
 
-      externalOnchainSource,
-      externalOnchainSummary,
+        externalOnchainSource,
+        externalOnchainSummary,
 
-      fusionTacticalBias: fusion.tacticalBias,
-      fusionStructuralOutlook: fusion.structuralOutlook,
-      fusionRiskRegime: fusion.riskRegime,
-      fusionPositioningPressure: fusion.positioningPressure,
-    })
+        fusionTacticalBias:
+          fusion.tacticalBias,
+
+        fusionStructuralOutlook:
+          fusion.structuralOutlook,
+
+        fusionRiskRegime:
+          fusion.riskRegime,
+
+        fusionPositioningPressure:
+          fusion.positioningPressure,
+      })
 
     /* =====================================================
        5️⃣ Email 발송
     ===================================================== */
 
     try {
-      await sendVIPReportEmail(email, pdf)
+      await sendVIPReportEmail(
+        email,
+        pdf,
+      )
     } catch (err) {
-      console.error('[VIP REPORT EMAIL FAILED]', err)
+      console.error(
+        '[VIP REPORT EMAIL FAILED]',
+        err,
+      )
     }
 
     /* =====================================================
-       6️⃣ Telegram 발송
+       6️⃣ Legacy Telegram 발송
+       - 최신 authoritative sender:
+         /api/cron/send-vip-telegram/route.ts
+       - duplicate Telegram PDF 방지용 guard
     ===================================================== */
 
-    try {
-      const chatIds: string[] =
-        await redis.smembers(TELEGRAM_USERS_KEY)
+    if (
+      ENABLE_LEGACY_TELEGRAM_SEND
+    ) {
+      try {
+        const chatIds: string[] =
+          await redis.smembers(
+            TELEGRAM_USERS_KEY,
+          )
 
-      for (const chatId of chatIds) {
-        await sendVipReportPdf(
-          Number(chatId),
-          pdf,
-          `VIP_Report_${kstDate}.pdf`
+        for (const chatId of chatIds) {
+          await sendVipReportPdf(
+            Number(chatId),
+            pdf,
+            `VIP_Report_${kstDate}.pdf`,
+          )
+        }
+
+        console.log(
+          '[LEGACY TELEGRAM SEND ENABLED]',
+        )
+
+      } catch (err) {
+        console.error(
+          '[VIP REPORT TELEGRAM FAILED]',
+          err,
         )
       }
-    } catch (err) {
-      console.error('[VIP REPORT TELEGRAM FAILED]', err)
+    } else {
+
+      console.log(
+        '[LEGACY TELEGRAM SEND DISABLED]',
+      )
+
     }
 
   } catch (error) {
-    console.error('[VIP REPORT FATAL ERROR]', error)
+    console.error(
+      '[VIP REPORT FATAL ERROR]',
+      error,
+    )
   }
 }

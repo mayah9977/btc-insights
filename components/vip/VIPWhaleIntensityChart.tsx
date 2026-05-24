@@ -1,3 +1,5 @@
+//components/vip/VIPWhaleIntensityChart.tsx 
+
 'use client'
 
 import React, {
@@ -323,11 +325,11 @@ function VIPWhaleIntensityChart({
 
         <div className="mb-3">
           <div className="text-sm font-semibold text-white">
-            Institutional Intervention Energy
+            Institutional Intervention Energy (세력 개입 강도)
           </div>
 
           <div className="text-xs text-neutral-400">
-            Non-directional institutional intervention energy
+            Non-directional institutional intervention energy(순수 시장 개입 강도)
           </div>
         </div>
 

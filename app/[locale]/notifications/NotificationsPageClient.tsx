@@ -81,32 +81,32 @@ function getIndicatorSignalLabel(data: any) {
   > = {
     RSI: {
       RSI_OVERBOUGHT: structureMode
-        ? 'Structure Overheat(구조 과열)'
+        ? 'Structure Overheat(과매수)'
         : 'Overbought(과매수)',
 
       RSI_OVERSOLD: structureMode
-        ? 'Structure Compression(구조 압축)'
+        ? 'Structure Compression(과매도)'
         : 'Oversold(과매도)',
     },
 
     MACD: {
       GOLDEN_CROSS: structureMode
-        ? 'Structure Alignment(추세 정렬)'
+        ? 'Structure Alignment(골든크로스)'
         : 'Golden Cross(골든크로스)',
 
       DEAD_CROSS: structureMode
-        ? 'Directional Structure Shift(추세 방향 전환)'
+        ? 'Directional Structure Shift(데드크로스)'
         : 'Dead Cross(데드크로스)',
     },
 
     EMA: {
       BULLISH_TREND: structureMode
-        ? 'Higher Timeframe Structure Shift(추세 전환)'
-        : 'Trend Cross Signal(추세 교차 신호)',
+        ? 'Higher Timeframe Structure Shift(상방 추세 전환)'
+        : 'Trend Cross Signal(상방 추세 교차 신호)',
 
       BEARISH_TREND: structureMode
-        ? 'Higher Timeframe Structure Shift(추세 전환)'
-        : 'Trend Cross Signal(추세 교차 신호)',
+        ? 'Higher Timeframe Structure Shift(하방 추세 전환)'
+        : 'Trend Cross Signal(하방 추세 교차 신호)',
     },
   }
 
@@ -381,7 +381,6 @@ function NotificationCard({
       return
     }
 
-    // MODIFIED: Institutional Flow notification routes to VIP casino page.
     if (item.type === 'INSTITUTIONAL_PATTERN') {
       router.push('/ko/casino/vip')
       return
@@ -485,22 +484,33 @@ export default function NotificationsPageClient({
   const notifications = useNotificationStore(
     state => state.notifications,
   )
+
   const unreadCount = useNotificationStore(
     state => state.unreadCount,
   )
+
   const setServerSnapshot =
     useNotificationStore(
       state => state.setServerSnapshot,
     )
+
   const pushIncoming = useNotificationStore(
     state => state.pushIncoming,
   )
+
   const markOneRead = useNotificationStore(
     state => state.markOneRead,
   )
+
+  // ✅ added
+  const markAllRead = useNotificationStore(
+    state => state.markAllRead,
+  )
+
   const deleteOne = useNotificationStore(
     state => state.deleteOne,
   )
+
   const deleteAll = useNotificationStore(
     state => state.deleteAll,
   )
@@ -598,7 +608,7 @@ export default function NotificationsPageClient({
         id: `institutional-${detail.pattern}-${detail.confirmedCandleTs ?? detail.ts ?? Date.now()}`,
         type: 'INSTITUTIONAL_PATTERN',
         title:
-          'Institutional Flow Signal',
+          'Institutional Flow Signal(기관흐름감지)',
         body: `${detail.pattern ?? 'Institutional Flow'} · ${detail.intensity ?? 'Flow Layer'}`,
         createdAt:
           detail.ts ?? Date.now(),
@@ -610,10 +620,12 @@ export default function NotificationsPageClient({
       'alert:triggered',
       handleAlert,
     )
+
     window.addEventListener(
       'indicator:triggered',
       handleIndicator,
     )
+
     window.addEventListener(
       'institutional-pattern:triggered',
       handleInstitutionalPattern,
@@ -624,10 +636,12 @@ export default function NotificationsPageClient({
         'alert:triggered',
         handleAlert,
       )
+
       window.removeEventListener(
         'indicator:triggered',
         handleIndicator,
       )
+
       window.removeEventListener(
         'institutional-pattern:triggered',
         handleInstitutionalPattern,
@@ -669,8 +683,10 @@ export default function NotificationsPageClient({
 
     const btcAlert: NotificationViewItem[] =
       []
+
     const indicator: NotificationViewItem[] =
       []
+
     const institutional: NotificationViewItem[] =
       []
 
@@ -793,9 +809,16 @@ export default function NotificationsPageClient({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-gray-200">
+            {/* ✅ unread badge clickable */}
+            <button
+              type="button"
+              onClick={() =>
+                void markAllRead()
+              }
+              className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-3 py-1 text-sm text-yellow-200 transition hover:bg-yellow-500/15 hover:text-yellow-100"
+            >
               unread {unreadCount}
-            </span>
+            </button>
 
             <button
               onClick={() =>
@@ -1143,8 +1166,8 @@ export default function NotificationsPageClient({
             <section className="mb-6">
               <AccordionHeader
                 icon="🏦"
-                title="INSTITUTIONAL FLOW"
-                subtitle="Flow Layer / positioning pressure"
+                title="INSTITUTIONAL FLOW(세력흐름감지)"
+                subtitle="Flow Layer(세력 흐름) / positioning pressure(포지션압력)"
                 count={
                   groupedNotifications
                     .institutional.length

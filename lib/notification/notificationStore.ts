@@ -1,4 +1,5 @@
 // lib/notification/notificationStore.ts
+
 'use client'
 
 import { create } from 'zustand'
@@ -307,6 +308,11 @@ export const useNotificationStore =
         })
       },
 
+      // ✅ ALL READ SUPPORT
+      // 기존 architecture 유지
+      // notification structure 유지
+      // unreadCount 즉시 0 반영
+      // read=true optimistic update 적용
       markAllRead: async () => {
         const { authenticated } =
           get()
@@ -318,9 +324,13 @@ export const useNotificationStore =
         const current =
           get().notifications
 
+        const prevNotifications =
+          current
+
         const prevUnreadCount =
           get().unreadCount
 
+        // ✅ optimistic update
         set({
           notifications: current.map(
             item => ({
@@ -332,35 +342,69 @@ export const useNotificationStore =
           unreadCount: 0,
         })
 
-        const res = await safeFetch(
-          '/api/notification/read',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({}),
-          },
-        )
+        try {
+          const unreadIds = current
+            .filter(
+              item => !item.read,
+            )
+            .map(item => item.id)
 
-        if (!res.ok) {
+          // 이미 모두 읽음 상태면 API 호출 생략
+          if (
+            unreadIds.length === 0
+          ) {
+            return
+          }
+
+          const res =
+            await safeFetch(
+              '/api/notification/read',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type':
+                    'application/json',
+                },
+                body: JSON.stringify({
+                  ids: unreadIds,
+                }),
+              },
+            )
+
+          if (!res.ok) {
+            set({
+              notifications:
+                prevNotifications,
+
+              unreadCount:
+                prevUnreadCount,
+            })
+
+            return
+          }
+
+          const data =
+            await res.json()
+
           set({
-            notifications: current,
+            unreadCount:
+              data.unreadCount ??
+              0,
+          })
+        } catch (error) {
+          console.error(
+            '[NOTIFICATION_MARK_ALL_READ]',
+            error,
+          )
+
+          set({
+            notifications:
+              prevNotifications,
+
             unreadCount:
               prevUnreadCount,
           })
-
-          return
         }
-
-        const data =
-          await res.json()
-
-        set({
-          unreadCount:
-            data.unreadCount ?? 0,
-        })
       },
 
       deleteOne: async id => {

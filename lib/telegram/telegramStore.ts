@@ -1,3 +1,5 @@
+//lib/telegram/telegramStore.ts
+
 import { TelegramUser } from './telegramTypes';
 
 // DEV: in-memory (운영 시 Redis/DB)

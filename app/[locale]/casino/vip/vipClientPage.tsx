@@ -1,3 +1,5 @@
+//app/[locale]/casino/vip/vipClientPage.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'

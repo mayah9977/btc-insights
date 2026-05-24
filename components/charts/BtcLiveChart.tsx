@@ -90,10 +90,19 @@ export default function BtcLiveChart({
   const lastTimeRef =
     useRef<number | null>(null)
 
+  const ma20LastTimeRef =
+    useRef<number | null>(null)
+
+  const ma60LastTimeRef =
+    useRef<number | null>(null)
+
   const liveCandleRef =
     useRef<LiveCandle | null>(null)
 
   const disposedRef = useRef(false)
+
+  const historicalLoadingRef =
+    useRef(false)
 
   const sseUnsubscribeRef =
     useRef<(() => void) | null>(null)
@@ -114,6 +123,7 @@ export default function BtcLiveChart({
     if (!containerRef.current) return
 
     disposedRef.current = false
+    historicalLoadingRef.current = true
 
     /**
      * reconnect timer cleanup 유지.
@@ -194,7 +204,51 @@ export default function BtcLiveChart({
 
     pricesRef.current = []
     lastTimeRef.current = null
+    ma20LastTimeRef.current = null
+    ma60LastTimeRef.current = null
     liveCandleRef.current = null
+
+    const updateMa20 = (
+      time: UTCTimestamp,
+      value: number,
+    ) => {
+      const timeNumber = Number(time)
+
+      if (
+        ma20LastTimeRef.current !== null &&
+        timeNumber < ma20LastTimeRef.current
+      ) {
+        return
+      }
+
+      ma20Ref.current?.update({
+        time,
+        value,
+      })
+
+      ma20LastTimeRef.current = timeNumber
+    }
+
+    const updateMa60 = (
+      time: UTCTimestamp,
+      value: number,
+    ) => {
+      const timeNumber = Number(time)
+
+      if (
+        ma60LastTimeRef.current !== null &&
+        timeNumber < ma60LastTimeRef.current
+      ) {
+        return
+      }
+
+      ma60Ref.current?.update({
+        time,
+        value,
+      })
+
+      ma60LastTimeRef.current = timeNumber
+    }
 
     const updateMovingAverages = (
       time: UTCTimestamp,
@@ -214,10 +268,7 @@ export default function BtcLiveChart({
             0,
           ) / 20
 
-        ma20Ref.current?.update({
-          time,
-          value: ma20v,
-        })
+        updateMa20(time, ma20v)
       }
 
       if (len >= 60) {
@@ -232,10 +283,7 @@ export default function BtcLiveChart({
             0,
           ) / 60
 
-        ma60Ref.current?.update({
-          time,
-          value: ma60v,
-        })
+        updateMa60(time, ma60v)
       }
     }
 
@@ -254,6 +302,10 @@ export default function BtcLiveChart({
       source: 'SSE_PRICE_TICK'
     }) => {
       if (disposedRef.current) return
+
+      if (historicalLoadingRef.current) {
+        return
+      }
 
       if (!candleRef.current) {
         console.warn(
@@ -283,6 +335,13 @@ export default function BtcLiveChart({
       const bucket =
         Math.floor(seconds / TF_SECONDS[tf]) *
         TF_SECONDS[tf]
+
+      if (
+        lastTimeRef.current !== null &&
+        bucket < lastTimeRef.current
+      ) {
+        return
+      }
 
       const time = bucket as UTCTimestamp
 
@@ -405,6 +464,14 @@ export default function BtcLiveChart({
           i++
         ) {
           const time = candles[i].time
+          const timeNumber = Number(time)
+
+          if (
+            lastTimeRef.current !== null &&
+            timeNumber > lastTimeRef.current
+          ) {
+            lastTimeRef.current = timeNumber
+          }
 
           if (i >= 19) {
             const slice20 =
@@ -419,10 +486,7 @@ export default function BtcLiveChart({
                 0,
               ) / 20
 
-            ma20.update({
-              time,
-              value: ma20v,
-            })
+            updateMa20(time, ma20v)
           }
 
           if (i >= 59) {
@@ -438,12 +502,11 @@ export default function BtcLiveChart({
                 0,
               ) / 60
 
-            ma60.update({
-              time,
-              value: ma60v,
-            })
+            updateMa60(time, ma60v)
           }
         }
+
+        historicalLoadingRef.current = false
 
         console.log(
           '[BTC_CHART] initial candles loaded',
@@ -456,6 +519,8 @@ export default function BtcLiveChart({
           },
         )
       } catch (error) {
+        historicalLoadingRef.current = false
+
         console.error(
           '[BTC_CHART] initial fetch failed',
           error,
@@ -534,6 +599,7 @@ export default function BtcLiveChart({
 
     return () => {
       disposedRef.current = true
+      historicalLoadingRef.current = false
 
       window.removeEventListener(
         'resize',
@@ -577,6 +643,8 @@ export default function BtcLiveChart({
       candleRef.current = null
       ma20Ref.current = null
       ma60Ref.current = null
+      ma20LastTimeRef.current = null
+      ma60LastTimeRef.current = null
       liveCandleRef.current = null
     }
   }, [tf])

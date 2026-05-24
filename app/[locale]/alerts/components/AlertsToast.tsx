@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/AlertsToast.tsx 
+
 'use client'
 
 import { useEffect, useState } from 'react'

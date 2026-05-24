@@ -9,9 +9,13 @@ import {
   useTransform,
   animate,
 } from 'framer-motion'
+
 import { useEffect } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { toast } from 'react-hot-toast'
+
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -21,14 +25,34 @@ import {
 import { stopNotificationLoop } from '@/lib/alerts/alertsSSEStore'
 
 type Props = {
-  t: any
-  type: 'BTC' | 'INDICATOR' | 'INSTITUTIONAL'
+  t: {
+    id: string
+    visible: boolean
+  }
+
+  createdAt?: number
+
+  durationMs?: number
+
+  onDismiss?: () => void
+
+  type:
+    | 'BTC'
+    | 'INDICATOR'
+    | 'INSTITUTIONAL'
+
   symbol: string
+
   price?: number
+
   label?: string
+
   indicator?: string
+
   signal?: string
+
   value?: number
+
   timeframe?: '15m' | '1h'
 }
 
@@ -54,32 +78,32 @@ function getSignalDisplayLabel(args: {
   > = {
     RSI: {
       RSI_OVERBOUGHT: structureMode
-        ? 'Structure Overheat(구조 과열)'
+        ? 'Structure Overheat(과매수)'
         : 'Overbought(과매수)',
 
       RSI_OVERSOLD: structureMode
-        ? 'Structure Compression(구조 압축)'
+        ? 'Structure Compression(과매도)'
         : 'Oversold(과매도)',
     },
 
     MACD: {
       GOLDEN_CROSS: structureMode
-        ? 'Structure Alignment(추세 정렬)'
+        ? 'Structure Alignment(골든크로스)'
         : 'Golden Cross(골든크로스)',
 
       DEAD_CROSS: structureMode
-        ? 'Directional Structure Shift(추세 방향 전환)'
+        ? 'Directional Structure Shift(데드크로스)'
         : 'Dead Cross(데드크로스)',
     },
 
     EMA: {
       BULLISH_TREND: structureMode
-        ? 'Higher Timeframe Structure Shift(추세전환)'
-        : 'Trend Cross Signal(추세 교차 신호)',
+        ? 'Higher Timeframe Structure Shift(상방추세전환)'
+        : 'Trend Cross Signal(상방 추세 교차 신호)',
 
       BEARISH_TREND: structureMode
-        ? 'Higher Timeframe Structure Shift(추세전환)'
-        : 'Trend Cross Signal(추세 교차 신호)',
+        ? 'Higher Timeframe Structure Shift(하방추세전환)'
+        : 'Trend Cross Signal(하방 추세 교차 신호)',
     },
   }
 
@@ -96,6 +120,9 @@ function getSignalDisplayLabel(args: {
 
 export default function AlertToastCard({
   t,
+  createdAt,
+  durationMs,
+  onDismiss,
   type,
   symbol,
   price,
@@ -108,7 +135,9 @@ export default function AlertToastCard({
   const router = useRouter()
 
   const isUp =
-    signal?.toLowerCase().includes('golden') ||
+    signal
+      ?.toLowerCase()
+      .includes('golden') ||
     label?.includes('상승')
 
   const count = useMotionValue(0)
@@ -116,7 +145,9 @@ export default function AlertToastCard({
   const rounded = useTransform(
     count,
     latest =>
-      Math.floor(latest).toLocaleString(),
+      Math.floor(
+        latest,
+      ).toLocaleString(),
   )
 
   useEffect(() => {
@@ -132,7 +163,101 @@ export default function AlertToastCard({
 
       return controls.stop
     }
+
+    return undefined
   }, [count, price])
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined'
+    ) {
+      return undefined
+    }
+
+    if (
+      createdAt === undefined ||
+      durationMs === undefined
+    ) {
+      return undefined
+    }
+
+    const dismissToast = () => {
+      onDismiss?.()
+      toast.dismiss(t.id)
+    }
+
+    const cleanupIfExpired = () => {
+      const expired =
+        Date.now() - createdAt >=
+        durationMs
+
+      if (expired) {
+        dismissToast()
+      }
+    }
+
+    cleanupIfExpired()
+
+    const remainingMs = Math.max(
+      durationMs -
+        (Date.now() - createdAt),
+      0,
+    )
+
+    const timer =
+      window.setTimeout(() => {
+        dismissToast()
+      }, remainingMs)
+
+    const handleVisibilityChange =
+      () => {
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+          cleanupIfExpired()
+        }
+      }
+
+    window.addEventListener(
+      'focus',
+      cleanupIfExpired,
+    )
+
+    window.addEventListener(
+      'pageshow',
+      cleanupIfExpired,
+    )
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
+
+    return () => {
+      window.clearTimeout(timer)
+
+      window.removeEventListener(
+        'focus',
+        cleanupIfExpired,
+      )
+
+      window.removeEventListener(
+        'pageshow',
+        cleanupIfExpired,
+      )
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+    }
+  }, [
+    createdAt,
+    durationMs,
+    onDismiss,
+    t.id,
+  ])
 
   /* =========================
      🔥 OK BUTTON HANDLER
@@ -141,6 +266,8 @@ export default function AlertToastCard({
     e: React.MouseEvent,
   ) => {
     e.stopPropagation()
+
+    onDismiss?.()
 
     toast.dismiss(t.id)
 
@@ -151,12 +278,16 @@ export default function AlertToastCard({
       return
     }
 
-    if (type === 'INSTITUTIONAL') {
+    if (
+      type === 'INSTITUTIONAL'
+    ) {
       router.push('/ko/casino/vip')
       return
     }
 
-    router.push('/ko/alerts?tab=indicator')
+    router.push(
+      '/ko/alerts?tab=indicator',
+    )
   }
 
   const timeframeLabel =
@@ -425,24 +556,26 @@ export default function AlertToastCard({
                   {layerDescription}
                 </div>
 
-                {label && label !== displayLabel && (
-                  <div
-                    className="
-                      mt-2
-                      rounded-lg
-                      border
-                      border-white/10
-                      bg-white/[0.035]
-                      px-2.5
-                      py-1.5
-                      text-[11px]
-                      leading-relaxed
-                      text-zinc-300
-                    "
-                  >
-                    {label}
-                  </div>
-                )}
+                {label &&
+                  label !==
+                    displayLabel && (
+                    <div
+                      className="
+                        mt-2
+                        rounded-lg
+                        border
+                        border-white/10
+                        bg-white/[0.035]
+                        px-2.5
+                        py-1.5
+                        text-[11px]
+                        leading-relaxed
+                        text-zinc-300
+                      "
+                    >
+                      {label}
+                    </div>
+                  )}
 
                 {signal && (
                   <div
@@ -468,7 +601,8 @@ export default function AlertToastCard({
                   </div>
                 )}
 
-                {value !== undefined && (
+                {value !==
+                  undefined && (
                   <div className="mt-2 text-xs text-gray-500">
                     value:{' '}
                     {value.toFixed(2)}

@@ -229,7 +229,7 @@ export default function IndicatorInfoCards() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:gap-5">
       {cards.map(card => {
         const active = openKey === card.key
         const Icon = card.icon
@@ -288,9 +288,9 @@ export default function IndicatorInfoCards() {
                 stiffness: 360,
                 damping: 24,
               }}
-              className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left sm:min-h-[150px] sm:flex-col sm:items-start sm:justify-start sm:p-6"
+              className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left sm:min-h-[170px] sm:flex-col sm:items-start sm:justify-start sm:p-6 lg:min-h-[132px] lg:flex-row lg:items-center lg:justify-between lg:p-6 xl:min-h-[140px]"
             >
-              <div className="flex min-w-0 items-center gap-4 sm:w-full sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-center gap-4 sm:w-full sm:items-start sm:justify-between lg:items-center lg:justify-start">
                 <div
                   className={clsx(
                     'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition',
@@ -302,10 +302,10 @@ export default function IndicatorInfoCards() {
                   <Icon className="h-6 w-6" />
                 </div>
 
-                <div className="min-w-0 flex-1 sm:mt-5 sm:flex-none">
+                <div className="min-w-0 flex-1 sm:mt-5 sm:flex-none sm:w-full lg:mt-0 lg:flex-1">
                   <div
                     className={clsx(
-                      'text-sm font-extrabold tracking-[0.18em]',
+                      'break-words whitespace-normal text-sm font-extrabold tracking-[0.14em] leading-5 lg:tracking-[0.04em] xl:text-[15px] xl:leading-6',
                       active ? 'text-white' : 'text-white/90',
                     )}
                   >
@@ -314,7 +314,7 @@ export default function IndicatorInfoCards() {
 
                   <div
                     className={clsx(
-                      'mt-2 text-xs',
+                      'mt-2 break-words whitespace-normal text-xs leading-5 lg:leading-6 xl:text-[13px]',
                       active ? 'text-white/78' : 'text-white/52',
                     )}
                   >
@@ -362,7 +362,7 @@ export default function IndicatorInfoCards() {
                         >
                           <div
                             className={clsx(
-                              'mb-2 text-[11px] font-bold tracking-[0.18em]',
+                              'mb-2 break-words text-[11px] font-bold tracking-[0.18em] leading-5',
                               section.tone === 'point'
                                 ? 'text-emerald-200'
                                 : section.tone === 'warning'
@@ -377,7 +377,7 @@ export default function IndicatorInfoCards() {
                             {section.content.map((line, idx) => (
                               <p
                                 key={idx}
-                                className="text-[13px] leading-6 text-white/78"
+                                className="break-words whitespace-normal text-[13px] leading-6 text-white/78"
                               >
                                 {line}
                               </p>

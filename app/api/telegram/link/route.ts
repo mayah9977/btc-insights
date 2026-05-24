@@ -1,3 +1,5 @@
+//app/api/telegram/link/route.ts
+
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
