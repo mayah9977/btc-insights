@@ -1,3 +1,5 @@
+//worker/binance-stream-worker.ts  
+
 import 'dotenv/config'
 import { bootstrapBinanceMarketStreamOnce } from '@/lib/exchange/binanceWS'
 

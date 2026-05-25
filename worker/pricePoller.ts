@@ -1,3 +1,5 @@
+//worker/pricePoller.ts  
+
 import { handlePriceTick } from '../lib/poller/alertEngine.poller.js'
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT']

@@ -33,46 +33,101 @@ function getKstDateString(): string {
 ===================================================== */
 function isWithin48Hours(dateString?: string | null): boolean {
   if (!dateString) return false
+
   const pubDate = new Date(dateString)
+
   const diffHours =
-    (Date.now() - pubDate.getTime()) / (1000 * 60 * 60)
+    (Date.now() - pubDate.getTime()) /
+    (1000 * 60 * 60)
+
   return diffHours <= 48
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    console.log('[CRON] 🚀 send-vip-telegram started')
+
+    /* =====================================================
+       🔍 Caller Trace Log
+       - external duplicate sender 추적용
+       - architecture 영향 없음
+    ===================================================== */
+
+    console.log('[CRON TRACE]', {
+      at: new Date().toISOString(),
+
+      userAgent:
+        req.headers.get('user-agent'),
+
+      forwardedFor:
+        req.headers.get('x-forwarded-for'),
+
+      realIp:
+        req.headers.get('x-real-ip'),
+
+      host:
+        req.headers.get('host'),
+    })
+
+    console.log(
+      '[CRON] 🚀 send-vip-telegram started'
+    )
 
     /* =====================================================
        🚨 Daily Send Lock (KST 기준 1회만 허용)
     ===================================================== */
 
     const kstDate = getKstDateString()
-    const dailyLockKey = `vip:telegram:daily:${kstDate}`
+
+    const dailyLockKey =
+      `vip:telegram:daily:${kstDate}`
 
     // NX = 이미 존재하면 실패
-    const alreadyExists = await redis.setnx(dailyLockKey, '1')
+    const alreadyExists =
+      await redis.setnx(
+        dailyLockKey,
+        '1'
+      )
 
-if (alreadyExists === 0) {
-  console.log('[CRON] ⚠ Already sent today. Skipping.')
-  return Response.json({ ok: true, skipped: true })
-}
+    if (alreadyExists === 0) {
+      console.log(
+        '[CRON] ⚠ Already sent today. Skipping.'
+      )
 
-// TTL 24시간 설정
-await redis.expire(dailyLockKey, 60 * 60 * 24)
+      return Response.json({
+        ok: true,
+        skipped: true,
+      })
+    }
+
+    // TTL 24시간 설정
+    await redis.expire(
+      dailyLockKey,
+      60 * 60 * 24
+    )
 
     /* =====================================================
        1️⃣ Telegram 유저 조회
     ===================================================== */
 
-    const chatIds: string[] = await redis.smembers(TELEGRAM_USERS_KEY)
+    const chatIds: string[] =
+      await redis.smembers(
+        TELEGRAM_USERS_KEY
+      )
 
     if (!chatIds || chatIds.length === 0) {
-      console.log('[CRON] ❌ No telegram users found')
-      return Response.json({ ok: false, message: 'No telegram users' })
+      console.log(
+        '[CRON] ❌ No telegram users found'
+      )
+
+      return Response.json({
+        ok: false,
+        message: 'No telegram users',
+      })
     }
 
-    console.log(`[CRON] 👥 ${chatIds.length} users found`)
+    console.log(
+      `[CRON] 👥 ${chatIds.length} users found`
+    )
 
     /* =====================================================
        2️⃣ News
@@ -80,18 +135,31 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
 
     let newsSummary =
       '오늘의 주요 뉴스 데이터가 아직 생성되지 않았습니다.'
+
     let newsMidLongTerm =
       '구조적 관점에서 변동성 구간을 관찰해야 합니다.'
 
     try {
-      const newsRaw = await redis.get(NEWS_KEY)
+      const newsRaw =
+        await redis.get(NEWS_KEY)
+
       if (newsRaw) {
-        const parsed = JSON.parse(newsRaw)
-        newsSummary = parsed?.summary ?? newsSummary
-        newsMidLongTerm = parsed?.midLongTerm ?? newsMidLongTerm
+        const parsed =
+          JSON.parse(newsRaw)
+
+        newsSummary =
+          parsed?.summary ??
+          newsSummary
+
+        newsMidLongTerm =
+          parsed?.midLongTerm ??
+          newsMidLongTerm
       }
     } catch (err) {
-      console.error('[NEWS ERROR]', err)
+      console.error(
+        '[NEWS ERROR]',
+        err
+      )
     }
 
     /* =====================================================
@@ -102,27 +170,44 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
     let externalOnchainSummary = ''
 
     try {
-      const cachedRaw = await redis.get(ONCHAIN_CACHE_KEY)
+      const cachedRaw =
+        await redis.get(
+          ONCHAIN_CACHE_KEY
+        )
 
       let cached: any = null
       let useCache = false
 
       if (cachedRaw) {
         cached = JSON.parse(cachedRaw)
-        if (isWithin48Hours(cached?.pubDate)) {
+
+        if (
+          isWithin48Hours(
+            cached?.pubDate
+          )
+        ) {
           useCache = true
         }
       }
 
       if (useCache && cached) {
-        externalOnchainSource = cached.source ?? ''
-        externalOnchainSummary = cached.summary ?? ''
-      } else {
-        const rssItems = await fetchOnchainMultiList()
+        externalOnchainSource =
+          cached.source ?? ''
 
-        if (rssItems && rssItems.length > 0) {
+        externalOnchainSummary =
+          cached.summary ?? ''
+      } else {
+        const rssItems =
+          await fetchOnchainMultiList()
+
+        if (
+          rssItems &&
+          rssItems.length > 0
+        ) {
           externalOnchainSummary =
-            await summarizeExternalOnchain(rssItems)
+            await summarizeExternalOnchain(
+              rssItems
+            )
 
           externalOnchainSource =
             `Institutional On-Chain Research (${rssItems.length} reports aggregated)`
@@ -130,9 +215,15 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
           await redis.set(
             ONCHAIN_CACHE_KEY,
             JSON.stringify({
-              source: externalOnchainSource,
-              summary: externalOnchainSummary,
-              pubDate: rssItems[0]?.pubDate ?? null,
+              source:
+                externalOnchainSource,
+
+              summary:
+                externalOnchainSummary,
+
+              pubDate:
+                rssItems[0]
+                  ?.pubDate ?? null,
             }),
             'EX',
             60 * 60 * 24
@@ -146,43 +237,56 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
         }
       }
     } catch (err) {
-      console.error('[ONCHAIN RSS ERROR]', err)
+      console.error(
+        '[ONCHAIN RSS ERROR]',
+        err
+      )
     }
 
     /* =====================================================
        4️⃣ Fusion
     ===================================================== */
 
-    const fusion = await generateFusionIntel({
-      newsSummary,
-      newsMidLongTerm,
-      onchainSummary: externalOnchainSummary,
-      whaleIntensity: 0,
-      fundingRate: 0,
-      openInterest: 0,
-      sentimentRegime: 'NEUTRAL',
-    })
+    const fusion =
+      await generateFusionIntel({
+        newsSummary,
+        newsMidLongTerm,
+        onchainSummary:
+          externalOnchainSummary,
+        whaleIntensity: 0,
+        fundingRate: 0,
+        openInterest: 0,
+        sentimentRegime: 'NEUTRAL',
+      })
 
     /* =====================================================
        5️⃣ PDF 생성
     ===================================================== */
 
-    const pdfBytes = await generateVipDailyReportPdf({
-      date: kstDate,
-      market: 'BTC',
-      vipLevel: 'VIP3',
+    const pdfBytes =
+      await generateVipDailyReportPdf({
+        date: kstDate,
+        market: 'BTC',
+        vipLevel: 'VIP3',
 
-      newsSummary,
-      newsMidLongTerm,
+        newsSummary,
+        newsMidLongTerm,
 
-      externalOnchainSource,
-      externalOnchainSummary,
+        externalOnchainSource,
+        externalOnchainSummary,
 
-      fusionTacticalBias: fusion.tacticalBias,
-      fusionStructuralOutlook: fusion.structuralOutlook,
-      fusionRiskRegime: fusion.riskRegime,
-      fusionPositioningPressure: fusion.positioningPressure,
-    })
+        fusionTacticalBias:
+          fusion.tacticalBias,
+
+        fusionStructuralOutlook:
+          fusion.structuralOutlook,
+
+        fusionRiskRegime:
+          fusion.riskRegime,
+
+        fusionPositioningPressure:
+          fusion.positioningPressure,
+      })
 
     /* =====================================================
        6️⃣ Telegram 발송
@@ -198,9 +302,15 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
           new Uint8Array(pdfBytes),
           `VIP_Report_${kstDate}.pdf`
         )
+
         success++
       } catch (err) {
-        console.error('[SEND ERROR]', chatId, err)
+        console.error(
+          '[SEND ERROR]',
+          chatId,
+          err
+        )
+
         failed++
       }
     }
@@ -217,11 +327,21 @@ await redis.expire(dailyLockKey, 60 * 60 * 24)
     })
 
   } catch (err: any) {
-    console.error('[CRON FATAL ERROR]', err)
+    console.error(
+      '[CRON FATAL ERROR]',
+      err
+    )
 
     return Response.json(
-      { ok: false, error: err?.message ?? 'unknown error' },
-      { status: 500 }
+      {
+        ok: false,
+        error:
+          err?.message ??
+          'unknown error',
+      },
+      {
+        status: 500,
+      }
     )
   }
 }
