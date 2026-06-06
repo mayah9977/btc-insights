@@ -1,3 +1,5 @@
+//components/syststem/ActionGateStatus.tsx  
+
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'

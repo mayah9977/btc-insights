@@ -8,6 +8,14 @@ import { motion } from 'framer-motion'
 import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
 
 import {
+  useInstitutionalEvidenceStore1h,
+} from '@/lib/market/institutional/institutionalEvidenceStore1h'
+
+import {
+  buildInstitutionalConfirmation1h,
+} from '@/lib/market/institutional/buildInstitutionalConfirmation1h'
+
+import {
   detectInstitutionalPattern,
   type InstitutionalPatternIntensity,
   type InstitutionalPatternRisk,
@@ -53,78 +61,103 @@ export function MobileInstitutionalPatternAlertCard() {
   const finalized =
     useFinalizedInstitutionalSnapshot()
 
+  const snapshot1h =
+    useInstitutionalEvidenceStore1h(
+      (state) => state.snapshot,
+    )
+
   const pattern = useMemo(() => {
     if (!finalized.snapshotReady) {
       return null
     }
 
-    return detectInstitutionalPattern({
-      snapshotReady: finalized.snapshotReady,
+    const detected =
+      detectInstitutionalPattern({
+        snapshotReady: finalized.snapshotReady,
 
-      oiDeltaAverage:
-        finalized.oiDeltaAverage,
+        oiDeltaAverage:
+          finalized.oiDeltaAverage,
 
-      oiDeltaAccum:
-        finalized.oiDeltaAccum,
+        oiDeltaAccum:
+          finalized.oiDeltaAccum,
 
-      oiDirectionalPersistenceAverage:
-        finalized.oiDirectionalPersistenceAverage,
+        oiDirectionalPersistenceAverage:
+          finalized.oiDirectionalPersistenceAverage,
 
-      fundingAverage:
-        finalized.fundingAverage,
+        fundingAverage:
+          finalized.fundingAverage,
 
-      fundingState:
-        finalized.fundingState,
+        fundingState:
+          finalized.fundingState,
 
-      volumeRatioAverage:
-        finalized.volumeRatioAverage,
+        volumeRatioAverage:
+          finalized.volumeRatioAverage,
 
-      volumeState:
-        finalized.volumeState,
+        volumeState:
+          finalized.volumeState,
 
-      whaleIntensityAverage:
-        finalized.whaleIntensityAverage,
+        whaleIntensityAverage:
+          finalized.whaleIntensityAverage,
 
-      whaleBias:
-        finalized.whaleBias,
+        whaleBias:
+          finalized.whaleBias,
 
-      whaleBuyPressure:
-        finalized.whaleBuyPressure,
+        whaleBuyPressure:
+          finalized.whaleBuyPressure,
 
-      whaleSellPressure:
-        finalized.whaleSellPressure,
+        whaleSellPressure:
+          finalized.whaleSellPressure,
 
-      longLiquidationPressure:
-        finalized.longLiquidationPressure,
+        longLiquidationPressure:
+          finalized.longLiquidationPressure,
 
-      shortLiquidationPressure:
-        finalized.shortLiquidationPressure,
+        shortLiquidationPressure:
+          finalized.shortLiquidationPressure,
 
-      dominantFlow:
-        finalized.dominantFlow,
+        dominantFlow:
+          finalized.dominantFlow,
 
-      oiDirectionalPressure:
-        finalized.oiDirectionalPressure,
+        oiDirectionalPressure:
+          finalized.oiDirectionalPressure,
 
-      fmaiDirectionalPressure:
-        finalized.fmaiDirectionalPressure,
+        fmaiDirectionalPressure:
+          finalized.fmaiDirectionalPressure,
 
-      absorptionAccum:
-        finalized.absorptionAccum,
+        absorptionAccum:
+          finalized.absorptionAccum,
 
-      absorptionAverage:
-        finalized.absorptionAverage,
+        absorptionAverage:
+          finalized.absorptionAverage,
 
-      sweepAccum:
-        finalized.sweepAccum,
+        sweepAccum:
+          finalized.sweepAccum,
 
-      sweepAverage:
-        finalized.sweepAverage,
+        sweepAverage:
+          finalized.sweepAverage,
 
-      institutionalEvents:
-        finalized.institutionalEvents,
-    })
-  }, [finalized])
+        institutionalEvents:
+          finalized.institutionalEvents,
+      })
+
+    if (!detected || detected.type === 'NONE') {
+      return null
+    }
+
+    const confirmation1h =
+      buildInstitutionalConfirmation1h(
+        detected.type,
+        snapshot1h,
+      )
+
+    if (
+      confirmation1h.action === 'BLOCK' ||
+      confirmation1h.action === 'WATCH'
+    ) {
+      return null
+    }
+
+    return detected
+  }, [finalized, snapshot1h])
 
   if (!pattern || pattern.type === 'NONE') {
     return null

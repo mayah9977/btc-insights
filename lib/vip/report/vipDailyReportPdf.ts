@@ -35,14 +35,124 @@ function firstSentence(text: string) {
   return t
 }
 
-function toParas(text: string) {
+function toParas(text: string, limit?: number) {
   if (!text) return []
-  return text
+
+  const paras = text
     .replace(/\r/g, '')
     .split(/\n{2,}|\n- |\n• /g)
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 12)
+
+  return typeof limit === 'number'
+    ? paras.slice(0, limit)
+    : paras
+}
+
+function normalizeText(text: string) {
+  return (text ?? '')
+    .replace(/\r/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normalizeForCompare(text: string) {
+  return normalizeText(text)
+    .replace(/[“”"']/g, '')
+    .replace(/[.,!?。！？…]/g, '')
+    .toLowerCase()
+}
+
+function splitSentences(text: string) {
+  const normalized = normalizeText(text)
+
+  if (!normalized) return []
+
+  const matches =
+    normalized.match(/[^.!?。！？]+[.!?。！？]?/g) ?? []
+
+  return matches
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function uniqueSentences(
+  sentences: string[],
+  exclude: string[] = [],
+) {
+  const seen =
+    new Set<string>(
+      exclude
+        .map(normalizeForCompare)
+        .filter(Boolean),
+    )
+
+  const result: string[] = []
+
+  for (const sentence of sentences) {
+    const key = normalizeForCompare(sentence)
+
+    if (!key) continue
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    result.push(sentence)
+  }
+
+  return result
+}
+
+function buildExecutiveSummarySentences(input: DailyReportInput) {
+  const headlineText =
+    firstSentence(input.newsSummary) || ''
+
+  const sourceSentences = [
+    ...splitSentences(input.newsMidLongTerm),
+    ...splitSentences(input.newsSummary),
+  ]
+
+  const unique =
+    uniqueSentences(
+      sourceSentences,
+      [headlineText],
+    )
+
+  const selected =
+    unique.slice(0, 5)
+
+  if (selected.length >= 3) {
+    return selected
+  }
+
+  const fallback =
+    uniqueSentences(
+      [
+        ...selected,
+        '현재 시장은 뉴스, 온체인 흐름, 구조적 리스크를 함께 확인해야 하는 구간입니다.',
+        '단기 가격 변동보다 주요 이벤트와 유동성 변화의 지속성을 우선적으로 관찰할 필요가 있습니다.',
+        'VIP 투자자는 단일 신호보다 복수 지표의 합의 여부를 기준으로 시장을 해석하는 것이 중요합니다.',
+      ],
+      [headlineText],
+    )
+
+  return fallback.slice(0, 5)
+}
+
+function sentenceSafePreview(
+  text: string,
+  maxSentences = 2,
+  fallback = '',
+) {
+  const sentences =
+    splitSentences(text).slice(
+      0,
+      maxSentences,
+    )
+
+  const result =
+    sentences.join(' ').trim()
+
+  return result || fallback
 }
 
 function escapeHtml(s: string) {
@@ -74,36 +184,51 @@ function buildVipDailyReportHtml(input: DailyReportInput): string {
 
   const vipAccessLabel = 'THE WHALES VIP ACCESS'
 
-  const headline = escapeHtml(firstSentence(input.newsSummary) || 'Market Update')
-  const sub = escapeHtml(
-    (input.newsMidLongTerm || input.newsSummary || '').trim().slice(0, 160),
-  )
+  const headlineRaw =
+    firstSentence(input.newsSummary) ||
+    'Market Update'
 
-  const p1StoryParasRaw = [
-    ...(toParas(input.newsSummary) ?? []),
-    ...(toParas(input.newsMidLongTerm) ?? []),
-  ].slice(0, 10)
+  const headline =
+    escapeHtml(headlineRaw)
 
-  const p1Lead = escapeHtml(
-    (p1StoryParasRaw[0] ?? input.newsSummary ?? '').slice(0, 260),
-  )
-  const p1BodyParas = p1StoryParasRaw.slice(1, 9)
-  const p1BodyHtml = parasToHtml(p1BodyParas)
+  const executiveSummarySentences =
+    buildExecutiveSummarySentences(input)
+
+  const sub =
+    escapeHtml('Executive Summary')
+
+  const p1Lead =
+    escapeHtml(
+      executiveSummarySentences[0] ??
+        '현재 시장은 주요 뉴스와 온체인 흐름을 함께 확인해야 하는 구간입니다.',
+    )
+
+  const p1BodyParas =
+    executiveSummarySentences.slice(1)
+
+  const p1BodyHtml =
+    parasToHtml(p1BodyParas)
 
   const sideBox1Title = 'ON-CHAIN BRIEF'
   const sideBox1Body = escapeHtml(
-    (input.externalOnchainSummary ?? '').trim().slice(0, 260) ||
+    sentenceSafePreview(
+      input.externalOnchainSummary ?? '',
+      2,
       '현재 48시간 내 기관 온체인 리포트 데이터가 제한적이며, 변동성 구간에서는 단기적인 수급/포지셔닝 변화에 대한 관찰이 우선됩니다.',
+    ),
   )
 
   const sideBox2Title = 'FUSION SNAPSHOT'
   const sideBox2Body = escapeHtml(
-    (input.fusionRiskRegime ||
-      input.fusionTacticalBias ||
-      input.fusionStructuralOutlook ||
-      input.fusionPositioningPressure ||
-      '').trim().slice(0, 260) ||
+    sentenceSafePreview(
+      input.fusionRiskRegime ||
+        input.fusionTacticalBias ||
+        input.fusionStructuralOutlook ||
+        input.fusionPositioningPressure ||
+        '',
+      2,
       '리스크 체계가 재정렬되는 구간에서는, 방향성보다 “신호의 합의 수준(컨플루언스)”과 급변 이벤트에 대한 방어적 대응이 우선입니다.',
+    ),
   )
 
   const newsHtml = parasToHtml(toParas(input.newsSummary))
@@ -619,7 +744,7 @@ body {
     </div>
 
     <div class="sub-title">
-      ${sub || 'Institutional-grade daily intelligence generated from market news, on-chain context and fusion risk analysis.'}
+      ${sub}
     </div>
 
     <div class="market-ticker">
@@ -652,11 +777,11 @@ body {
         </div>
 
         <div class="lead">
-          ${p1Lead}${p1Lead.endsWith('.') ? '' : '.'}
+          ${p1Lead}
         </div>
 
         <div class="hero-article">
-          ${p1BodyHtml || `<p>${escapeHtml((input.newsSummary ?? '').slice(0, 520))}</p>`}
+          ${p1BodyHtml}
         </div>
       </div>
 

@@ -174,6 +174,11 @@ const THRESHOLDS = {
   VOLUME_AGGRESSIVE: 1.8,
 } as const
 
+const CONFIRMATION_THRESHOLDS = {
+  MIN_DIRECTIONAL_CONFIRMATION: 3,
+  MIN_NON_DIRECTIONAL_CONFIRMATION: 2,
+} as const
+
 const clamp = (
   value: number,
   min: number,
@@ -327,6 +332,184 @@ const normalizeVolumeState = (
   if (value === 'EXPANSION') return 'EXPANSION'
   if (value === 'WEAK') return 'WEAK'
   return 'NORMAL'
+}
+
+type ConfirmationDirection =
+  | 'LONG'
+  | 'SHORT'
+  | 'NON_DIRECTIONAL'
+
+function getCandidateDirection(
+  type: InstitutionalPatternType,
+): ConfirmationDirection {
+  if (
+    type === 'LONG_PRESSURE_BUILDING' ||
+    type === 'SHORT_SQUEEZE_RISK' ||
+    type === 'INSTITUTIONAL_ABSORPTION'
+  ) {
+    return 'LONG'
+  }
+
+  if (
+    type === 'SHORT_PRESSURE_BUILDING' ||
+    type === 'LONG_SQUEEZE_RISK' ||
+    type === 'WHALE_DISTRIBUTION'
+  ) {
+    return 'SHORT'
+  }
+
+  return 'NON_DIRECTIONAL'
+}
+
+function getConfirmationResult(params: {
+  direction: ConfirmationDirection
+  fmaiDirectionalPressure: InstitutionalDirectionalPressure
+  oiDirectionalPressure: InstitutionalDirectionalPressure
+  dominantFlow: InstitutionalDominantFlow
+  whaleBias: InstitutionalWhaleBias
+  fundingState: InstitutionalFundingState
+  volumeState: InstitutionalVolumeState
+  absorptionAverage: number
+  sweepAverage: number
+  whaleAbsorptionCount: number
+  liquiditySweepCount: number
+}) {
+  const {
+    direction,
+    fmaiDirectionalPressure,
+    oiDirectionalPressure,
+    dominantFlow,
+    whaleBias,
+    fundingState,
+    volumeState,
+    absorptionAverage,
+    sweepAverage,
+    whaleAbsorptionCount,
+    liquiditySweepCount,
+  } = params
+
+  if (direction === 'LONG') {
+    const checks = {
+      fmai: fmaiDirectionalPressure === 'LONG',
+      oi: oiDirectionalPressure === 'LONG',
+      dominantFlow: dominantFlow === 'LONG',
+      whaleBias: whaleBias === 'ACCUMULATION',
+      volumeExpansion: volumeState === 'EXPANSION',
+      fundingSafe: fundingState !== 'LONG_OVERHEATED',
+      absorption:
+        absorptionAverage > 0 ||
+        whaleAbsorptionCount > 0,
+      sweep:
+        sweepAverage > 0 ||
+        liquiditySweepCount > 0,
+    }
+
+    const coreConfirmCount = [
+      checks.oi,
+      checks.dominantFlow,
+      checks.whaleBias,
+      checks.volumeExpansion,
+    ].filter(Boolean).length
+
+    const fmaiOnly =
+      checks.fmai &&
+      coreConfirmCount === 0
+
+    const score =
+      Object.values(checks).filter(Boolean).length
+
+    return {
+      direction,
+      score,
+      required:
+        CONFIRMATION_THRESHOLDS
+          .MIN_DIRECTIONAL_CONFIRMATION,
+      checks,
+      fmaiOnly,
+      passed:
+        !fmaiOnly &&
+        score >=
+          CONFIRMATION_THRESHOLDS
+            .MIN_DIRECTIONAL_CONFIRMATION,
+    }
+  }
+
+  if (direction === 'SHORT') {
+    const checks = {
+      fmai: fmaiDirectionalPressure === 'SHORT',
+      oi: oiDirectionalPressure === 'SHORT',
+      dominantFlow: dominantFlow === 'SHORT',
+      whaleBias: whaleBias === 'DISTRIBUTION',
+      volumeExpansion: volumeState === 'EXPANSION',
+      fundingSafe: fundingState !== 'SHORT_OVERHEATED',
+      absorption:
+        absorptionAverage < 0 ||
+        whaleAbsorptionCount > 0,
+      sweep:
+        sweepAverage > 0 ||
+        liquiditySweepCount > 0,
+    }
+
+    const coreConfirmCount = [
+      checks.oi,
+      checks.dominantFlow,
+      checks.whaleBias,
+      checks.volumeExpansion,
+    ].filter(Boolean).length
+
+    const fmaiOnly =
+      checks.fmai &&
+      coreConfirmCount === 0
+
+    const score =
+      Object.values(checks).filter(Boolean).length
+
+    return {
+      direction,
+      score,
+      required:
+        CONFIRMATION_THRESHOLDS
+          .MIN_DIRECTIONAL_CONFIRMATION,
+      checks,
+      fmaiOnly,
+      passed:
+        !fmaiOnly &&
+        score >=
+          CONFIRMATION_THRESHOLDS
+            .MIN_DIRECTIONAL_CONFIRMATION,
+    }
+  }
+
+  const checks = {
+    volumeExpansion: volumeState === 'EXPANSION',
+    absorption:
+      Math.abs(absorptionAverage) > 0 ||
+      whaleAbsorptionCount > 0,
+    sweep:
+      sweepAverage > 0 ||
+      liquiditySweepCount > 0,
+    dominantFlow:
+      dominantFlow !== 'NEUTRAL',
+    whaleBias:
+      whaleBias !== 'NEUTRAL',
+  }
+
+  const score =
+    Object.values(checks).filter(Boolean).length
+
+  return {
+    direction,
+    score,
+    required:
+      CONFIRMATION_THRESHOLDS
+        .MIN_NON_DIRECTIONAL_CONFIRMATION,
+    checks,
+    fmaiOnly: false,
+    passed:
+      score >=
+        CONFIRMATION_THRESHOLDS
+          .MIN_NON_DIRECTIONAL_CONFIRMATION,
+  }
 }
 
 export function detectInstitutionalPattern(
@@ -1031,6 +1214,24 @@ export function detectInstitutionalPattern(
 
   const top = sorted[0]
 
+  const confirmation =
+    top
+      ? getConfirmationResult({
+          direction:
+            getCandidateDirection(top.type),
+          fmaiDirectionalPressure,
+          oiDirectionalPressure,
+          dominantFlow,
+          whaleBias,
+          fundingState,
+          volumeState,
+          absorptionAverage,
+          sweepAverage,
+          whaleAbsorptionCount,
+          liquiditySweepCount,
+        })
+      : null
+
   if (process.env.NODE_ENV !== 'production') {
     const finalScore = top?.score ?? 0
     const confidence = confidenceFromScore(finalScore)
@@ -1058,6 +1259,16 @@ export function detectInstitutionalPattern(
       threshold: THRESHOLDS.MIN_VISIBLE_SCORE,
       passed:
         finalScore >= THRESHOLDS.MIN_VISIBLE_SCORE,
+      confirmationPassed:
+        confirmation?.passed ?? false,
+      confirmationScore:
+        confirmation?.score ?? 0,
+      confirmationRequired:
+        confirmation?.required ?? 0,
+      confirmationDirection:
+        confirmation?.direction ?? 'NONE',
+      fmaiOnly:
+        confirmation?.fmaiOnly ?? false,
     })
 
     console.log('CONFIDENCE_FLOW', {
@@ -1091,6 +1302,10 @@ export function detectInstitutionalPattern(
       whaleBias,
       fundingState,
       volumeState,
+    })
+
+    console.log('CONFIRMATION_GATE', {
+      confirmation,
     })
 
     console.log('INPUT_METRICS', {
@@ -1153,6 +1368,21 @@ export function detectInstitutionalPattern(
     !top ||
     top.score < THRESHOLDS.MIN_VISIBLE_SCORE
   ) {
+    return createNonePattern()
+  }
+
+  if (!confirmation?.passed) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(
+        '[INSTITUTIONAL_PATTERN_CONFIRMATION_BLOCKED]',
+        {
+          topPattern: top.type,
+          topScore: Number(top.score.toFixed(2)),
+          confirmation,
+        },
+      )
+    }
+
     return createNonePattern()
   }
 

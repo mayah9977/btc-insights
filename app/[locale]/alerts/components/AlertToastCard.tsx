@@ -56,6 +56,32 @@ type Props = {
   timeframe?: '15m' | '1h'
 }
 
+function getIndicatorToneClass(
+  type: Props['type'],
+  indicator?: string,
+) {
+  if (type !== 'INDICATOR') {
+    return 'bg-gradient-to-br from-indigo-500/40 via-purple-500/30 to-cyan-400/30 shadow-[0_0_35px_rgba(99,102,241,0.45)]'
+  }
+
+  const normalized =
+    indicator?.toUpperCase() ?? ''
+
+  if (normalized.includes('RSI')) {
+    return 'bg-gradient-to-br from-red-500/40 via-pink-500/30 to-rose-400/30 shadow-[0_0_35px_rgba(244,63,94,0.45)]'
+  }
+
+  if (normalized.includes('MACD')) {
+    return 'bg-gradient-to-br from-blue-500/40 via-cyan-500/30 to-sky-400/30 shadow-[0_0_35px_rgba(34,211,238,0.45)]'
+  }
+
+  if (normalized.includes('EMA')) {
+    return 'bg-gradient-to-br from-amber-500/40 via-yellow-500/30 to-orange-400/30 shadow-[0_0_35px_rgba(251,191,36,0.45)]'
+  }
+
+  return 'bg-gradient-to-br from-indigo-500/40 via-purple-500/30 to-cyan-400/30 shadow-[0_0_35px_rgba(99,102,241,0.45)]'
+}
+
 function getSignalDisplayLabel(args: {
   indicator?: string
   signal?: string
@@ -103,7 +129,7 @@ function getSignalDisplayLabel(args: {
 
       BEARISH_TREND: structureMode
         ? 'Higher Timeframe Structure Shift(하방추세전환)'
-        : 'Trend Cross Signal(하방 추세 교차 신호)',
+        : 'Trend Cross Signal(하방추세전환)',
     },
   }
 
@@ -323,6 +349,12 @@ export default function AlertToastCard({
       fallback: label,
     })
 
+  const outerToneClass =
+    getIndicatorToneClass(
+      type,
+      indicator,
+    )
+
   return (
     <AnimatePresence>
       {t.visible && (
@@ -347,18 +379,14 @@ export default function AlertToastCard({
             stiffness: 260,
             damping: 20,
           }}
-          className="
+          className={`
             relative
             w-full
             max-w-[360px]
             rounded-2xl
-            bg-gradient-to-br
-            from-indigo-500/40
-            via-purple-500/30
-            to-cyan-400/30
             p-[1px]
-            shadow-[0_0_35px_rgba(99,102,241,0.45)]
-          "
+            ${outerToneClass}
+          `}
         >
           <motion.div
             whileHover={{

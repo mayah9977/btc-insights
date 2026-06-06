@@ -25,6 +25,13 @@ type SocketState = {
   heartbeatTimer?: NodeJS.Timeout
 }
 
+type WhaleRollingBucket = {
+  ts: number
+  totalVolume: number
+  whaleBuyVolume: number
+  whaleSellVolume: number
+}
+
 const g = globalThis as typeof globalThis & {
   __BINANCE_STREAM_STARTED__?: boolean
   __BINANCE_STREAM_STOP__?: (() => void) | null
@@ -37,9 +44,13 @@ const CHANNEL = 'realtime:raw'
 const PRICE_KEY = `market:last:price:${SYMBOL}`
 const FUNDING_KEY = `market:last:funding:${SYMBOL}`
 
-const WHALE_THRESHOLD_USD = 20_000
+const WHALE_THRESHOLD_USD = 100_000
 const OI_POLL_INTERVAL_MS = 5_000
 const OI_FETCH_TIMEOUT_MS = 4_000
+
+const WHALE_ROLLING_WINDOW_MS = 30_000
+const MIN_TOTAL_VOLUME_USD = 500_000
+const MIN_WHALE_VOLUME_USD = 100_000
 
 const MARKET_COMBINED_URL =
   `wss://fstream.binance.com/market/stream?streams=${LOWER_SYMBOL}@aggTrade/${LOWER_SYMBOL}@markPrice@1s`
@@ -70,6 +81,8 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
   let whaleBuyVolumeBufferUSD = 0
   let whaleSellVolumeBufferUSD = 0
 
+  const whaleRollingBuckets: WhaleRollingBucket[] = []
+
   const volumeLoop = setInterval(async () => {
     const now = Date.now()
 
@@ -77,21 +90,59 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
     const whaleBuyVolume = whaleBuyVolumeBufferUSD
     const whaleSellVolume = whaleSellVolumeBufferUSD
 
-    const whaleTotalVolume = whaleBuyVolume + whaleSellVolume
-    const whaleNetPressure = whaleBuyVolume - whaleSellVolume
+    whaleRollingBuckets.push({
+      ts: now,
+      totalVolume,
+      whaleBuyVolume,
+      whaleSellVolume,
+    })
 
-    const whaleRatio =
-      totalVolume > 0 ? whaleTotalVolume / totalVolume : 0
+    while (
+      whaleRollingBuckets.length > 0 &&
+      now - whaleRollingBuckets[0].ts > WHALE_ROLLING_WINDOW_MS
+    ) {
+      whaleRollingBuckets.shift()
+    }
 
-    const whaleNetRatio =
-      totalVolume > 0 ? whaleNetPressure / totalVolume : 0
+    const rollingTotalVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.totalVolume,
+      0,
+    )
+
+    const rollingWhaleBuyVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.whaleBuyVolume,
+      0,
+    )
+
+    const rollingWhaleSellVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.whaleSellVolume,
+      0,
+    )
+
+    const rollingWhaleTotalVolume =
+      rollingWhaleBuyVolume + rollingWhaleSellVolume
+
+    const rollingWhaleNetPressure =
+      rollingWhaleBuyVolume - rollingWhaleSellVolume
+
+    const validWhaleBase =
+      rollingTotalVolume >= MIN_TOTAL_VOLUME_USD &&
+      rollingWhaleTotalVolume >= MIN_WHALE_VOLUME_USD
+
+    const whaleRatio = validWhaleBase
+      ? rollingWhaleTotalVolume / rollingTotalVolume
+      : 0
+
+    const whaleNetRatio = validWhaleBase
+      ? rollingWhaleNetPressure / rollingTotalVolume
+      : 0
 
     console.log('[VOLUME_LOOP]', {
       totalVolume,
       whaleBuyVolume,
       whaleSellVolume,
-      whaleTotalVolume,
-      whaleNetPressure,
+      whaleTotalVolume: rollingWhaleTotalVolume,
+      whaleNetPressure: rollingWhaleNetPressure,
       whaleRatio,
       whaleNetRatio,
       whaleThresholdUSD: WHALE_THRESHOLD_USD,
@@ -99,7 +150,7 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
 
     try {
       setLastTradeUSD(SYMBOL, totalVolume)
-      setLastWhaleTradeUSD(SYMBOL, whaleTotalVolume)
+      setLastWhaleTradeUSD(SYMBOL, whaleBuyVolume + whaleSellVolume)
       setLastWhaleBuyUSD(SYMBOL, whaleBuyVolume)
       setLastWhaleSellUSD(SYMBOL, whaleSellVolume)
 
@@ -119,8 +170,8 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
           type: 'WHALE_TRADE_FLOW',
           symbol: SYMBOL,
           ratio: Math.max(0, Math.min(1, whaleRatio)),
-          whaleVolume: whaleTotalVolume,
-          totalVolume,
+          whaleVolume: rollingWhaleTotalVolume,
+          totalVolume: rollingTotalVolume,
           ts: now,
         }),
       )
@@ -130,11 +181,11 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
         JSON.stringify({
           type: 'WHALE_NET_PRESSURE',
           symbol: SYMBOL,
-          whaleBuyVolume,
-          whaleSellVolume,
-          whaleNetPressure,
+          whaleBuyVolume: rollingWhaleBuyVolume,
+          whaleSellVolume: rollingWhaleSellVolume,
+          whaleNetPressure: rollingWhaleNetPressure,
           whaleNetRatio,
-          totalVolume,
+          totalVolume: rollingTotalVolume,
           ts: now,
         }),
       )
@@ -142,11 +193,11 @@ export function startBinanceMarketStream(mode: Mode = 'multi') {
       console.log('[REDIS_PUBLISH_VOLUME_AND_WHALE]', {
         channel: CHANNEL,
         symbol: SYMBOL,
-        totalVolume,
-        whaleTotalVolume,
-        whaleBuyVolume,
-        whaleSellVolume,
-        whaleNetPressure,
+        totalVolume: rollingTotalVolume,
+        whaleTotalVolume: rollingWhaleTotalVolume,
+        whaleBuyVolume: rollingWhaleBuyVolume,
+        whaleSellVolume: rollingWhaleSellVolume,
+        whaleNetPressure: rollingWhaleNetPressure,
         whaleNetRatio,
       })
     } catch (e) {

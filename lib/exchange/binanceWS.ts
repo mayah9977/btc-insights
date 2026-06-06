@@ -1,3 +1,5 @@
+//lib/exchange/binanceWS.ts  
+
 import WebSocket from 'ws'
 import { onPriceUpdate } from '@/lib/market/pricePolling'
 import { redis } from '@/lib/redis'
@@ -35,6 +37,13 @@ type ManagedSocket = {
   lastMessageAt: number
 }
 
+type WhaleRollingBucket = {
+  ts: number
+  totalVolume: number
+  whaleBuyVolume: number
+  whaleSellVolume: number
+}
+
 const g = globalThis as typeof globalThis & {
   __BINANCE_STREAM_STARTED__?: boolean
   __BINANCE_STREAM_STOP__?: (() => void) | null
@@ -42,9 +51,13 @@ const g = globalThis as typeof globalThis & {
 
 const DEFAULT_SYMBOL = 'BTCUSDT'
 const DEFAULT_CHANNEL = 'realtime:raw'
-const DEFAULT_WHALE_THRESHOLD_USD = 20_000
+const DEFAULT_WHALE_THRESHOLD_USD = 100_000
 const DEFAULT_OI_POLL_INTERVAL_MS = 5_000
 const OI_FETCH_TIMEOUT_MS = 4_000
+
+const WHALE_ROLLING_WINDOW_MS = 30_000
+const MIN_TOTAL_VOLUME_USD = 500_000
+const MIN_WHALE_VOLUME_USD = 100_000
 
 const MARKET_COMBINED_BASE = 'wss://fstream.binance.com/market/stream'
 const MARKET_SINGLE_BASE = 'wss://fstream.binance.com/market/ws'
@@ -160,6 +173,8 @@ export function startBinanceMarketStream(
   let totalVolumeBufferUSD = 0
   let whaleBuyVolumeBufferUSD = 0
   let whaleSellVolumeBufferUSD = 0
+
+  const whaleRollingBuckets: WhaleRollingBucket[] = []
 
   const sockets: ManagedSocket[] = []
 
@@ -647,21 +662,59 @@ export function startBinanceMarketStream(
     const whaleBuyVolume = whaleBuyVolumeBufferUSD
     const whaleSellVolume = whaleSellVolumeBufferUSD
 
-    const whaleTotalVolume = whaleBuyVolume + whaleSellVolume
-    const whaleNetPressure = whaleBuyVolume - whaleSellVolume
+    whaleRollingBuckets.push({
+      ts: now,
+      totalVolume,
+      whaleBuyVolume,
+      whaleSellVolume,
+    })
 
-    const whaleRatio =
-      totalVolume > 0 ? whaleTotalVolume / totalVolume : 0
+    while (
+      whaleRollingBuckets.length > 0 &&
+      now - whaleRollingBuckets[0].ts > WHALE_ROLLING_WINDOW_MS
+    ) {
+      whaleRollingBuckets.shift()
+    }
 
-    const whaleNetRatio =
-      totalVolume > 0 ? whaleNetPressure / totalVolume : 0
+    const rollingTotalVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.totalVolume,
+      0,
+    )
+
+    const rollingWhaleBuyVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.whaleBuyVolume,
+      0,
+    )
+
+    const rollingWhaleSellVolume = whaleRollingBuckets.reduce(
+      (sum, bucket) => sum + bucket.whaleSellVolume,
+      0,
+    )
+
+    const rollingWhaleTotalVolume =
+      rollingWhaleBuyVolume + rollingWhaleSellVolume
+
+    const rollingWhaleNetPressure =
+      rollingWhaleBuyVolume - rollingWhaleSellVolume
+
+    const validWhaleBase =
+      rollingTotalVolume >= MIN_TOTAL_VOLUME_USD &&
+      rollingWhaleTotalVolume >= MIN_WHALE_VOLUME_USD
+
+    const whaleRatio = validWhaleBase
+      ? rollingWhaleTotalVolume / rollingTotalVolume
+      : 0
+
+    const whaleNetRatio = validWhaleBase
+      ? rollingWhaleNetPressure / rollingTotalVolume
+      : 0
 
     log(DEBUG, '[VOLUME_LOOP]', {
       totalVolume,
       whaleBuyVolume,
       whaleSellVolume,
-      whaleTotalVolume,
-      whaleNetPressure,
+      whaleTotalVolume: rollingWhaleTotalVolume,
+      whaleNetPressure: rollingWhaleNetPressure,
       whaleRatio,
       whaleNetRatio,
       whaleThresholdUSD: WHALE_THRESHOLD_USD,
@@ -670,14 +723,14 @@ export function startBinanceMarketStream(
 
     try {
       setLastTradeUSD(SYMBOL, totalVolume)
-      setLastWhaleTradeUSD(SYMBOL, whaleTotalVolume)
+      setLastWhaleTradeUSD(SYMBOL, whaleBuyVolume + whaleSellVolume)
       setLastWhaleBuyUSD(SYMBOL, whaleBuyVolume)
       setLastWhaleSellUSD(SYMBOL, whaleSellVolume)
 
       log(DEBUG, '[MARKET_LAST_STATE_UPDATED]', {
         symbol: SYMBOL,
         totalVolume,
-        whaleTotalVolume,
+        whaleTotalVolume: whaleBuyVolume + whaleSellVolume,
         whaleBuyVolume,
         whaleSellVolume,
       })
@@ -698,8 +751,8 @@ export function startBinanceMarketStream(
           type: 'WHALE_TRADE_FLOW',
           symbol: SYMBOL,
           ratio: Math.max(0, Math.min(1, whaleRatio)),
-          whaleVolume: whaleTotalVolume,
-          totalVolume,
+          whaleVolume: rollingWhaleTotalVolume,
+          totalVolume: rollingTotalVolume,
           ts: now,
         }),
       )
@@ -709,11 +762,11 @@ export function startBinanceMarketStream(
         JSON.stringify({
           type: 'WHALE_NET_PRESSURE',
           symbol: SYMBOL,
-          whaleBuyVolume,
-          whaleSellVolume,
-          whaleNetPressure,
+          whaleBuyVolume: rollingWhaleBuyVolume,
+          whaleSellVolume: rollingWhaleSellVolume,
+          whaleNetPressure: rollingWhaleNetPressure,
           whaleNetRatio,
-          totalVolume,
+          totalVolume: rollingTotalVolume,
           ts: now,
         }),
       )
@@ -722,10 +775,10 @@ export function startBinanceMarketStream(
         channel: CHANNEL,
         symbol: SYMBOL,
         volume: totalVolume,
-        whaleTotalVolume,
-        whaleBuyVolume,
-        whaleSellVolume,
-        whaleNetPressure,
+        whaleTotalVolume: rollingWhaleTotalVolume,
+        whaleBuyVolume: rollingWhaleBuyVolume,
+        whaleSellVolume: rollingWhaleSellVolume,
+        whaleNetPressure: rollingWhaleNetPressure,
         whaleNetRatio,
       })
     } catch (error) {

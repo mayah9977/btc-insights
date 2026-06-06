@@ -4,6 +4,19 @@ import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
 
+import {
+  accumulateInstitutionalEvidence1h,
+  freezeInstitutionalSnapshot1h,
+} from '@/lib/market/institutional/institutionalEvidenceAccumulator1h'
+
+import {
+  useInstitutionalEvidenceStore1h,
+} from '@/lib/market/institutional/institutionalEvidenceStore1h'
+
+import {
+  buildInstitutionalConfirmation1h,
+} from '@/lib/market/institutional/buildInstitutionalConfirmation1h'
+
 import type {
   InstitutionalEvidenceSnapshot,
 } from '@/lib/market/institutional/institutionalEvidenceSnapshot'
@@ -291,6 +304,43 @@ function emitInstitutionalPatternSignal(
           reason: 'NONE_PATTERN',
           confirmedCandleTs:
             snapshot.confirmedCandleTs,
+        },
+      )
+
+      return
+    }
+
+    const confirmation1h =
+      buildInstitutionalConfirmation1h(
+        detectedPattern.type,
+        useInstitutionalEvidenceStore1h
+          .getState()
+          .snapshot,
+      )
+
+    console.log(
+      '[INSTITUTIONAL_PATTERN_1H_CONFIRMATION]',
+      {
+        pattern:
+          detectedPattern.type,
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        confirmation1h,
+      },
+    )
+
+    if (
+      confirmation1h.action === 'BLOCK' ||
+      confirmation1h.action === 'WATCH'
+    ) {
+      console.log(
+        '[INSTITUTIONAL_PATTERN_EMIT_BLOCKED_BY_1H]',
+        {
+          pattern:
+            detectedPattern.type,
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+          confirmation1h,
         },
       )
 
@@ -588,6 +638,15 @@ export function accumulateInstitutionalEvidence() {
   if (sweep > 0 && whaleNetRatio > 0) {
     accumulator.shortLiquidationPressure += Math.abs(
       sweep,
+    )
+  }
+
+  try {
+    accumulateInstitutionalEvidence1h()
+  } catch (error) {
+    console.error(
+      '[ACCUMULATE_EVIDENCE_1H_ERROR]',
+      error,
     )
   }
 }
@@ -958,6 +1017,27 @@ export function freezeInstitutionalSnapshot(
         snapshot.whaleIntensityAccum,
     },
   )
+
+  if (
+    new Date(
+      snapshot.confirmedCandleTs,
+    ).getUTCMinutes() === 0
+  ) {
+    try {
+      freezeInstitutionalSnapshot1h(
+        snapshot.confirmedCandleTs,
+      )
+    } catch (error) {
+      console.error(
+        '[FREEZE_INSTITUTIONAL_SNAPSHOT_1H_ERROR]',
+        {
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+          error,
+        },
+      )
+    }
+  }
 
   emitInstitutionalPatternSignal(snapshot)
 

@@ -1,3 +1,5 @@
+//components/vip/mobile/ActionGateStatusMobile.tsx 
+
 'use client'
 
 import React from 'react'

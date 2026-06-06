@@ -1,3 +1,5 @@
+//lib/realtime/sseConnectionManager.ts  
+
 import { SSE_EVENT } from './types'
 import {
   handleWhaleIntensityEffect,

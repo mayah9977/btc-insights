@@ -1,4 +1,4 @@
-//app/api/crom/vip-report/route.ts 
+//app/api/cron/vip-report/route.ts 
 
 import { generateVipDailyReportPdf } from '@/lib/vip/report/vipDailyReportPdf'
 import { redis } from '@/lib/redis/server'

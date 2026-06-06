@@ -1,3 +1,5 @@
+//lib/market/buildRiskInputFromRealtime.ts   
+
 'use server'
 
 import {
@@ -42,7 +44,17 @@ const OI_DELTA_WINDOW_MS = 15000
 const oiDeltaHistoryMap = new Map<string, number[]>()
 const volatilityHistoryMap = new Map<string, number[]>()
 
+const whaleIntensityEmaMap = new Map<string, number>()
+const whaleStrongConfirmMap = new Map<string, number>()
+
 const MAX_FEATURE_HISTORY = 60
+
+const WHALE_INTENSITY_EMA_ALPHA = 0.25
+const WHALE_STRONG_LEVEL = 60
+const WHALE_STRONG_CONFIRM_COUNT = 3
+
+const MIN_TOTAL_VOLUME_USD = 500_000
+const MIN_WHALE_VOLUME_USD = 100_000
 
 /* ======================================================= */
 
@@ -215,13 +227,37 @@ export async function buildRiskInputFromRealtime(
      🔥 WhaleIntensity v2 계산
   ======================================================= */
 
-  const { intensity: whaleIntensity } =
+  const { intensity: rawWhaleIntensity } =
     calculateWhaleIntensityV2({
       oiDeltaRatio,
       volumeRatio,
       volatility: volatilityShock,
       drift,
     })
+
+  const prevEma =
+    whaleIntensityEmaMap.get(symbol) ?? rawWhaleIntensity
+
+  const smoothedWhaleIntensity =
+    prevEma * (1 - WHALE_INTENSITY_EMA_ALPHA) +
+    rawWhaleIntensity * WHALE_INTENSITY_EMA_ALPHA
+
+  whaleIntensityEmaMap.set(symbol, smoothedWhaleIntensity)
+
+  const prevConfirm =
+    whaleStrongConfirmMap.get(symbol) ?? 0
+
+  const nextConfirm =
+    smoothedWhaleIntensity >= WHALE_STRONG_LEVEL
+      ? prevConfirm + 1
+      : 0
+
+  whaleStrongConfirmMap.set(symbol, nextConfirm)
+
+  const whaleIntensity =
+    nextConfirm >= WHALE_STRONG_CONFIRM_COUNT
+      ? smoothedWhaleIntensity
+      : Math.min(smoothedWhaleIntensity, WHALE_STRONG_LEVEL - 1)
 
   console.log(
     '[RealtimeRiskSnapshot]',
@@ -250,6 +286,7 @@ export async function buildRiskInputFromRealtime(
       rollingStd,
       drift,
 
+      rawWhaleIntensity,
       whaleIntensity,
     },
   )
@@ -262,8 +299,12 @@ export async function buildRiskInputFromRealtime(
   const whaleBuyVolume = getLastWhaleBuyUSD(symbol) ?? 0
   const whaleSellVolume = getLastWhaleSellUSD(symbol) ?? 0
 
+  const validWhaleBase =
+    totalTradeUSD >= MIN_TOTAL_VOLUME_USD &&
+    whaleTradeUSD >= MIN_WHALE_VOLUME_USD
+
   const whaleRatio =
-    totalTradeUSD > 0
+    validWhaleBase
       ? whaleTradeUSD / totalTradeUSD
       : 0
 
@@ -271,7 +312,7 @@ export async function buildRiskInputFromRealtime(
     whaleBuyVolume - whaleSellVolume
 
   const whaleNetRatio =
-    totalTradeUSD > 0
+    validWhaleBase
       ? whaleNetPressureRaw / totalTradeUSD
       : 0
 

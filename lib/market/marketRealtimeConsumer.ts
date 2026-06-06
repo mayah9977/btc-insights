@@ -1,3 +1,5 @@
+//lib/market/marketRealtimeConsumer.ts  
+
 import { createRedisSubscriber } from '@/lib/redis'
 import { redis } from '@/lib/redis'
 import { deriveOpenInterest } from './deriveOpenInterest'
@@ -91,6 +93,136 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
 
   const lastPriceMap =
     new Map<string, number>()
+
+  type StableActionGateState =
+    ReturnType<typeof getActionGateState>['state']
+
+  type StableActionGateSnapshot = {
+    state: StableActionGateState
+    changedAt: number
+    candidate: StableActionGateState | null
+    candidateCount: number
+  }
+
+  const stableActionGateMap =
+    new Map<string, StableActionGateSnapshot>()
+
+  const ACTION_GATE_MIN_HOLD_MS =
+    3 * 60 * 1000
+
+  const ACTION_GATE_OBSERVE_RETURN_HOLD_MS =
+    5 * 60 * 1000
+
+  const ACTION_GATE_CONFIRM_COUNT =
+    3
+
+  const ACTION_GATE_IGNORE_CONFIRM_COUNT =
+    2
+
+  function stabilizeActionGateState(
+    symbol: string,
+    nextState: StableActionGateState,
+  ): StableActionGateState {
+    const now =
+      Date.now()
+
+    const current =
+      stableActionGateMap.get(symbol) ?? {
+        state: nextState,
+        changedAt: now,
+        candidate: null,
+        candidateCount: 0,
+      }
+
+    if (
+      !stableActionGateMap.has(symbol)
+    ) {
+      stableActionGateMap.set(
+        symbol,
+        current,
+      )
+
+      return current.state
+    }
+
+    if (
+      current.state === nextState
+    ) {
+      current.candidate = null
+      current.candidateCount = 0
+
+      stableActionGateMap.set(
+        symbol,
+        current,
+      )
+
+      return current.state
+    }
+
+    const requiredHoldMs =
+      nextState === 'OBSERVE'
+        ? ACTION_GATE_OBSERVE_RETURN_HOLD_MS
+        : ACTION_GATE_MIN_HOLD_MS
+
+    if (
+      now - current.changedAt <
+      requiredHoldMs
+    ) {
+      return current.state
+    }
+
+    if (
+      current.candidate !== nextState
+    ) {
+      current.candidate =
+        nextState
+
+      current.candidateCount =
+        1
+
+      stableActionGateMap.set(
+        symbol,
+        current,
+      )
+
+      return current.state
+    }
+
+    current.candidateCount +=
+      1
+
+    const requiredConfirmCount =
+      nextState === 'IGNORE'
+        ? ACTION_GATE_IGNORE_CONFIRM_COUNT
+        : ACTION_GATE_CONFIRM_COUNT
+
+    if (
+      current.candidateCount <
+      requiredConfirmCount
+    ) {
+      stableActionGateMap.set(
+        symbol,
+        current,
+      )
+
+      return current.state
+    }
+
+    const updated:
+      StableActionGateSnapshot = {
+        state: nextState,
+        changedAt: now,
+        candidate: null,
+        candidateCount: 0,
+      }
+
+    stableActionGateMap.set(
+      symbol,
+      updated,
+    )
+
+    return updated.state
+  }
 
   const lastBBPublish =
     new Map<string, number>()
@@ -781,7 +913,10 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           )
 
         const actionGateState =
-          gateResult.state
+          stabilizeActionGateState(
+            symbol,
+            gateResult.state,
+          )
 
         setActionGateState(
           symbol,

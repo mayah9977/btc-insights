@@ -1,3 +1,5 @@
+//lib/market/actionGate/priorityDecisionTree.ts   
+
 /* =========================================================
    🧠 Adaptive Weight Decision Engine (Final)
 ========================================================= */
