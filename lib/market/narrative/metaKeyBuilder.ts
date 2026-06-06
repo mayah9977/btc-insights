@@ -1,3 +1,5 @@
+//lib/market/narrative/metakeyBuilder.ts   
+
 export function buildMetaKey(snapshot: any): string {
   const oiDelta = snapshot?.oiDelta ?? 0
   const whaleNetRatio = snapshot?.whaleNetRatio ?? 0

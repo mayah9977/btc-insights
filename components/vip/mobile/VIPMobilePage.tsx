@@ -14,6 +14,7 @@ import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
+import { useFinalizedSnapshotBootstrap } from '@/lib/market/institutional/useFinalizedSnapshotBootstrap'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
@@ -25,17 +26,17 @@ import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
 
 const VIPWhaleMiniCharts = dynamic(
   () => import('./VIPWhaleMiniCharts'),
-  { ssr: false }
+  { ssr: false },
 )
 
 const VIPWhaleTradeGuideCardMobile = dynamic(
   () => import('./VIPWhaleTradeGuideCardMobile'),
-  { ssr: false }
+  { ssr: false },
 )
 
 const VIPOverviewDashboardMobile = dynamic(
   () => import('./VIPOverviewDashboardMobile'),
-  { ssr: false }
+  { ssr: false },
 )
 
 type Props = {
@@ -47,6 +48,11 @@ type Props = {
 
 export default function VIPMobilePage(props: Props) {
   const symbol = 'BTCUSDT'
+
+  /* ===============================
+     Finalized Snapshot Bootstrap
+  =============================== */
+  useFinalizedSnapshotBootstrap()
 
   /* ===============================
      SSE (1곳만 유지)
@@ -93,7 +99,7 @@ export default function VIPMobilePage(props: Props) {
 
     return generateNarrative(
       BOLLINGER_SENTENCE_MAP[signalType],
-      signalType
+      signalType,
     )
   }, [signalType, isReady])
 
@@ -109,8 +115,8 @@ export default function VIPMobilePage(props: Props) {
       whaleIntensity: Number(
         Math.min(
           Math.max(snapshot.whaleIntensity ?? 0, 0),
-          100
-        ).toFixed(1)
+          100,
+        ).toFixed(1),
       ),
     }
   }, [marketTick])
@@ -125,12 +131,12 @@ export default function VIPMobilePage(props: Props) {
     mobileData.whaleNet > 5
       ? 'LONG'
       : mobileData.whaleNet < -5
-      ? 'SHORT'
-      : 'NONE'
+        ? 'SHORT'
+        : 'NONE'
 
   const confidence = Math.min(
     Math.abs(mobileData.whaleNet),
-    100
+    100,
   )
 
   /* ===============================
@@ -169,4 +175,4 @@ export default function VIPMobilePage(props: Props) {
       <VIPOverviewDashboardMobile />
     </main>
   )
-}   
+}

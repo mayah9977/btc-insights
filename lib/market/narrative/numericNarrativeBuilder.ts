@@ -1,3 +1,5 @@
+//lib/market/narrative/numericNarrativeBuilder.ts   
+
 /* =========================================================
  Numeric Narrative Builder
  FINALIZED SNAPSHOT OWNERSHIP SAFE

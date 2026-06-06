@@ -221,6 +221,72 @@ async function publishInstitutionalPatternSignal(
   }
 }
 
+async function saveFinalized30mSnapshotViaRoute(
+  snapshot: InstitutionalEvidenceSnapshot,
+) {
+  if (typeof window === 'undefined') {
+    console.log(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_SKIPPED_30M]',
+      {
+        reason:
+          'SERVER_RUNTIME_ROUTE_DELEGATION_UNAVAILABLE',
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+      },
+    )
+
+    return
+  }
+
+  try {
+    const response = await fetch(
+      '/api/institutional/finalized/save',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeframe: '30m',
+          snapshot,
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      console.error(
+        '[FINALIZED_SNAPSHOT_SAVE_ROUTE_ERROR_30M]',
+        {
+          status: response.status,
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+        },
+      )
+
+      return
+    }
+
+    console.log(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_PUBLISHED_30M]',
+      {
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        sampleCount:
+          snapshot.sampleCount,
+      },
+    )
+  } catch (error) {
+    console.error(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_FETCH_ERROR_30M]',
+      {
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        error,
+      },
+    )
+  }
+}
+
 function emitInstitutionalPatternSignal(
   snapshot: InstitutionalEvidenceSnapshot,
 ) {
@@ -411,14 +477,6 @@ function emitInstitutionalPatternSignal(
   }
 }
 
-/* =========================================================
-   Realtime Aggregation
-   - SSE → VIPMarketStore → getMarketSnapshot 이후 호출
-   - vipMarketStore에서 30초 throttle로만 호출
-   - 순간값 narrative 방지
-   - 30분 confirmed freeze 전까지 누적
-========================================================= */
-
 export function accumulateInstitutionalEvidence() {
   const beforeSampleCount =
     accumulator.sampleCount
@@ -482,13 +540,6 @@ export function accumulateInstitutionalEvidence() {
   const volatilityShock = Number(
     (snapshot as any).volatilityShock ?? 0,
   )
-
-  /* =========================================================
-     Institutional Event Detection
-     - Narrative memory only
-     - Decision authority ❌
-     - ENUM / ActionGate / DecisionEngine 영향 없음
-  ========================================================= */
 
   if (
     whaleIntensity >= 80 &&
@@ -650,13 +701,6 @@ export function accumulateInstitutionalEvidence() {
     )
   }
 }
-
-/* =========================================================
-   Freeze Snapshot
-   - 30m Bollinger confirmed 시점에서만 실행
-   - freeze 이후 accumulator reset
-   - ENUM 변경/override 없음
-========================================================= */
 
 export function freezeInstitutionalSnapshot(
   confirmedCandleTs?: number,
@@ -822,9 +866,6 @@ export function freezeInstitutionalSnapshot(
 
   const snapshot: InstitutionalEvidenceSnapshot =
     {
-      /**
-       * 🔥 freeze metadata
-       */
       timeframe: '30m',
       confirmedCandleTs:
         confirmedCandleTs ?? Date.now(),
@@ -839,9 +880,6 @@ export function freezeInstitutionalSnapshot(
 
       oiDeltaAverage,
 
-      /**
-       * 🔥 OI velocity layer
-       */
       oiExpansionVelocityAccum:
         accumulator.oiExpansionVelocityAccum,
 
@@ -1017,6 +1055,8 @@ export function freezeInstitutionalSnapshot(
         snapshot.whaleIntensityAccum,
     },
   )
+
+  void saveFinalized30mSnapshotViaRoute(snapshot)
 
   if (
     new Date(

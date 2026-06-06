@@ -95,6 +95,72 @@ function createEmptyAccumulator1h(): InternalAccumulator1h {
   }
 }
 
+async function saveFinalized1hSnapshotViaRoute(
+  snapshot: InstitutionalEvidenceSnapshot1h,
+) {
+  if (typeof window === 'undefined') {
+    console.log(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_SKIPPED_1H]',
+      {
+        reason:
+          'SERVER_RUNTIME_ROUTE_DELEGATION_UNAVAILABLE',
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+      },
+    )
+
+    return
+  }
+
+  try {
+    const response = await fetch(
+      '/api/institutional/finalized/save',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeframe: '1h',
+          snapshot,
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      console.error(
+        '[FINALIZED_SNAPSHOT_SAVE_ROUTE_ERROR_1H]',
+        {
+          status: response.status,
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+        },
+      )
+
+      return
+    }
+
+    console.log(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_PUBLISHED_1H]',
+      {
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        sampleCount:
+          snapshot.sampleCount,
+      },
+    )
+  } catch (error) {
+    console.error(
+      '[FINALIZED_SNAPSHOT_SAVE_ROUTE_FETCH_ERROR_1H]',
+      {
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        error,
+      },
+    )
+  }
+}
+
 export function accumulateInstitutionalEvidence1h() {
   const beforeSampleCount =
     accumulator1h.sampleCount
@@ -634,6 +700,8 @@ export function freezeInstitutionalSnapshot1h(
         snapshot.fmaiDirectionalPressure,
     },
   )
+
+  void saveFinalized1hSnapshotViaRoute(snapshot)
 
   accumulator1h =
     createEmptyAccumulator1h()

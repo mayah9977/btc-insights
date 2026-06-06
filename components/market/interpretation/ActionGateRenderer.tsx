@@ -25,6 +25,7 @@ import { buildMetaKey } from '@/lib/market/narrative/metaKeyBuilder'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
+import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
 
 import { InstitutionalPatternAlertCard } from '@/components/market/patterns/InstitutionalPatternAlertCard'
 
@@ -37,6 +38,9 @@ interface ActionGateRendererProps {
 export const ActionGateRenderer: React.FC<
   ActionGateRendererProps
 > = ({ signalType }) => {
+  const finalized =
+    useFinalizedInstitutionalSnapshot()
+
   const gate = useVIPMarketStore(
     (s) => s.actionGateState,
   )
@@ -215,80 +219,100 @@ export const ActionGateRenderer: React.FC<
               }}
               className="mt-8"
             >
-              <motion.div
-                className="
-                  bg-gradient-to-r
-                  from-yellow-300
-                  via-amber-400
-                  to-yellow-500
-                  bg-clip-text
-                  text-lg
-                  font-semibold
-                  tracking-wide
-                  text-transparent
-                  md:text-xl
-                "
-              >
-                {sentence.summary}
-              </motion.div>
+              {!finalized.snapshotReady ? (
+                <motion.section
+                  layout
+                  transition={{
+                    duration: 0.3,
+                    ease: 'easeOut',
+                  }}
+                  className="
+                    mt-6
+                    space-y-6
+                  "
+                >
+                  <div className="rounded-2xl border border-zinc-800 bg-black/20 px-5 py-4 text-sm leading-relaxed text-zinc-400">
+                    확정 데이터 수집 중입니다. 첫 번째 30분 확정 분석 이후 수치가 표시됩니다.
+                  </div>
+                </motion.section>
+              ) : (
+                <>
+                  <motion.div
+                    className="
+                      bg-gradient-to-r
+                      from-yellow-300
+                      via-amber-400
+                      to-yellow-500
+                      bg-clip-text
+                      text-lg
+                      font-semibold
+                      tracking-wide
+                      text-transparent
+                      md:text-xl
+                    "
+                  >
+                    {sentence.summary}
+                  </motion.div>
 
-              <div className="mt-6">
-                <ActionGateDescriptionHero
-                  description={
-                    sentence.description
-                  }
-                  signalType={
-                    signalType
-                  }
-                />
-              </div>
+                  <div className="mt-6">
+                    <ActionGateDescriptionHero
+                      description={
+                        sentence.description
+                      }
+                      signalType={
+                        signalType
+                      }
+                    />
+                  </div>
 
-              <motion.div
-                initial={{
-                  opacity: 0,
-                }}
-                animate={{
-                  opacity: 1,
-                }}
-                transition={{
-                  delay: 0.25,
-                  duration: 0.35,
-                }}
-                className="
-                  mt-6
-                  inline-block
-                  rounded-xl
-                  border
-                  border-emerald-400/30
-                  bg-gradient-to-r
-                  from-emerald-500/20
-                  to-teal-500/20
-                  px-5
-                  py-2
-                  text-lg
-                  font-semibold
-                  tracking-wide
-                  text-emerald-300
-                "
-              >
-                {sentence.tendency}
-              </motion.div>
+                  <motion.div
+                    initial={{
+                      opacity: 0,
+                    }}
+                    animate={{
+                      opacity: 1,
+                    }}
+                    transition={{
+                      delay: 0.25,
+                      duration: 0.35,
+                    }}
+                    className="
+                      mt-6
+                      inline-block
+                      rounded-xl
+                      border
+                      border-emerald-400/30
+                      bg-gradient-to-r
+                      from-emerald-500/20
+                      to-teal-500/20
+                      px-5
+                      py-2
+                      text-lg
+                      font-semibold
+                      tracking-wide
+                      text-emerald-300
+                    "
+                  >
+                    {sentence.tendency}
+                  </motion.div>
 
-              <motion.section
-                layout
-                transition={{
-                  duration: 0.3,
-                  ease: 'easeOut',
-                }}
-                className="
-                  mt-6
-                  space-y-6
-                "
-              >
-                <InstitutionalPatternAlertCard />
+                  <motion.section
+                    layout
+                    transition={{
+                      duration: 0.3,
+                      ease: 'easeOut',
+                    }}
+                    className="
+                      mt-6
+                      space-y-6
+                    "
+                  >
+                    <InstitutionalPatternAlertCard />
 
-                <FinalizedInstitutionalNumbers />
-              </motion.section>
+                    <FinalizedInstitutionalNumbers />
+                  </motion.section>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

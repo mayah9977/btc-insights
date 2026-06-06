@@ -20,6 +20,7 @@ import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 
 import { MobileInstitutionalPatternAlertCard } from '@/components/vip/mobile/MobileInstitutionalPatternAlertCard'
 import { MobileFinalizedInstitutionalNumbers } from '@/components/vip/mobile/MobileFinalizedInstitutionalNumbers'
+import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -37,6 +38,9 @@ export default function ActionGateRendererMobile({
   signalType,
   sentence,
 }: Props) {
+  const finalized =
+    useFinalizedInstitutionalSnapshot()
+
   const title = 'Whales dominate the market.'
 
   const bg =
@@ -319,30 +323,38 @@ export default function ActionGateRendererMobile({
               ${transition ? 'scale-[1.02]' : ''}
             `}
           >
-            <div className="font-semibold text-yellow-400">
-              {typedSummary}
-            </div>
+            {!finalized.snapshotReady ? (
+              <div className="rounded-xl border border-zinc-800 bg-black/20 px-4 py-3 text-xs leading-relaxed text-zinc-400">
+                확정 데이터 수집 중입니다. 첫 번째 30분 확정 분석 이후 수치가 표시됩니다.
+              </div>
+            ) : (
+              <>
+                <div className="font-semibold text-yellow-400">
+                  {typedSummary}
+                </div>
 
-            <div
-              className="
-                whitespace-pre-line
-                text-xs
-                leading-relaxed
-                text-gray-300
-              "
-            >
-              {typedDescription}
-            </div>
+                <div
+                  className="
+                    whitespace-pre-line
+                    text-xs
+                    leading-relaxed
+                    text-gray-300
+                  "
+                >
+                  {typedDescription}
+                </div>
 
-            <div className="text-xs text-gray-500">
-              {typedTendency}
-            </div>
+                <div className="text-xs text-gray-500">
+                  {typedTendency}
+                </div>
 
-            <div className="space-y-3 pt-1">
-              <MobileInstitutionalPatternAlertCard />
+                <div className="space-y-3 pt-1">
+                  <MobileInstitutionalPatternAlertCard />
 
-              <MobileFinalizedInstitutionalNumbers />
-            </div>
+                  <MobileFinalizedInstitutionalNumbers />
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

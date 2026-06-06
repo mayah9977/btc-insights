@@ -14,6 +14,7 @@ import { RawObservationBar } from '@/components/market/observation/RawObservatio
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
+import { useFinalizedSnapshotBootstrap } from '@/lib/market/institutional/useFinalizedSnapshotBootstrap'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
@@ -63,6 +64,8 @@ export default function VIPDesktopPage({
   monthlySummary,
   vip3Metrics,
 }: Props) {
+  useFinalizedSnapshotBootstrap()
+
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
