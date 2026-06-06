@@ -1,3 +1,5 @@
+//components/vip/mobile/VIPInstitutionalGuideCardMobile.tsx   
+
 'use client'
 
 import React, {

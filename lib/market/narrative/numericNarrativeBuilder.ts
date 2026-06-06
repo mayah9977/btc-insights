@@ -9,6 +9,8 @@ import { MarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 import { MarketSignal } from '@/lib/market/signalEngine'
 
 type FinalizedMetricSnapshot = Partial<MarketSnapshot> & {
+  oiDeltaAverage?: number
+  oiDeltaRatio?: number
   oiDeltaAccum?: number
   fundingAverage?: number
   volumeRatioAverage?: number
@@ -35,7 +37,8 @@ function safeFunding(n?: number): string {
 function getFinalizedMetrics(snapshot: FinalizedMetricSnapshot) {
   return {
     oiDelta:
-      snapshot.oiDeltaAccum ??
+      snapshot.oiDeltaAverage ??
+      snapshot.oiDeltaRatio ??
       snapshot.oiDelta ??
       0,
 

@@ -60,7 +60,7 @@ function createFrozenMarketSnapshot(
 
     ts: snapshot.confirmedCandleTs,
 
-    oiDelta: snapshot.oiDeltaAccum,
+    oiDelta: snapshot.oiDeltaAverage,
     oiDeltaRatio: snapshot.oiDeltaAverage,
 
     fundingRate: snapshot.fundingAverage,
