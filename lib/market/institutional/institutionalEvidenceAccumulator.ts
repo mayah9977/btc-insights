@@ -2,8 +2,6 @@
 
 import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
-import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
-
 import {
   accumulateInstitutionalEvidence1h,
   freezeInstitutionalSnapshot1h,
@@ -705,21 +703,15 @@ export function accumulateInstitutionalEvidence() {
 export function freezeInstitutionalSnapshot(
   confirmedCandleTs?: number,
 ): InstitutionalEvidenceSnapshot {
-  const persistedSnapshot =
-    useInstitutionalEvidenceStore.getState().snapshot
-
-  if (
-    confirmedCandleTs !== undefined &&
-    persistedSnapshot !== null &&
-    persistedSnapshot.confirmedCandleTs ===
-      confirmedCandleTs
-  ) {
-    lastFrozenSnapshot = persistedSnapshot
-    lastFrozenCandleTs =
-      persistedSnapshot.confirmedCandleTs
-
-    return persistedSnapshot
-  }
+  console.log(
+    '[LOCAL_ACCUMULATOR_30M_FINALIZED_STORE_READ_SKIPPED]',
+    {
+      ts: Date.now(),
+      reason:
+        'FINALIZED_30M_STORE_IS_REDIS_API_OWNED',
+      confirmedCandleTs,
+    },
+  )
 
   if (
     confirmedCandleTs !== undefined &&
