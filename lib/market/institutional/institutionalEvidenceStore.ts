@@ -18,6 +18,10 @@ type State = {
     snapshot: InstitutionalEvidenceSnapshot,
   ) => void
 
+  setFinalizedSnapshot: (
+    snapshot: InstitutionalEvidenceSnapshot,
+  ) => void
+
   clearSnapshot: () => void
 }
 
@@ -156,6 +160,68 @@ export const useInstitutionalEvidenceStore =
 
             return
           }
+
+          set({
+            snapshot,
+          })
+        },
+
+        setFinalizedSnapshot: (snapshot) => {
+          const existingSnapshot =
+            get().snapshot
+
+          console.log(
+            '[SET_FINALIZED_INSTITUTIONAL_SNAPSHOT_FROM_API]',
+            {
+              ts: Date.now(),
+
+              existingConfirmedCandleTs:
+                existingSnapshot
+                  ?.confirmedCandleTs,
+
+              newConfirmedCandleTs:
+                snapshot.confirmedCandleTs,
+
+              existingConfirmedSignalType:
+                existingSnapshot
+                  ?.confirmedSignalType,
+
+              newConfirmedSignalType:
+                snapshot.confirmedSignalType,
+
+              existingSampleCount:
+                existingSnapshot?.sampleCount,
+
+              newSampleCount:
+                snapshot.sampleCount,
+
+              existingOiDeltaAccum:
+                existingSnapshot?.oiDeltaAccum,
+
+              newOiDeltaAccum:
+                snapshot.oiDeltaAccum,
+
+              existingFundingAccum:
+                existingSnapshot?.fundingAccum,
+
+              newFundingAccum:
+                snapshot.fundingAccum,
+
+              existingVolumeRatioAccum:
+                existingSnapshot
+                  ?.volumeRatioAccum,
+
+              newVolumeRatioAccum:
+                snapshot.volumeRatioAccum,
+
+              existingWhaleIntensityAccum:
+                existingSnapshot
+                  ?.whaleIntensityAccum,
+
+              newWhaleIntensityAccum:
+                snapshot.whaleIntensityAccum,
+            },
+          )
 
           set({
             snapshot,

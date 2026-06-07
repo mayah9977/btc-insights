@@ -459,9 +459,31 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
       duplicateReplayAfterFreeze,
   })
 
-  useInstitutionalEvidenceStore
-    .getState()
-    .setSnapshot(institutionalSnapshot)
+  console.log(
+    '[LOCAL_ACCUMULATOR_FINALIZED_STORE_WRITE_SKIPPED]',
+    {
+      ts: Date.now(),
+      reason:
+        'FINALIZED_30M_STORE_IS_REDIS_API_OWNED',
+      signalType:
+        signal.signalType,
+      snapshotConfirmedSignalType:
+        institutionalSnapshot.confirmedSignalType,
+      confirmedCandleTs,
+      attemptedSnapshotConfirmedCandleTs:
+        institutionalSnapshot.confirmedCandleTs,
+      sampleCount:
+        institutionalSnapshot.sampleCount,
+      oiDeltaAccum:
+        institutionalSnapshot.oiDeltaAccum,
+      fundingAccum:
+        institutionalSnapshot.fundingAccum,
+      volumeRatioAccum:
+        institutionalSnapshot.volumeRatioAccum,
+      whaleIntensityAccum:
+        institutionalSnapshot.whaleIntensityAccum,
+    },
+  )
 
   const existingSnapshotAfterSet =
     useInstitutionalEvidenceStore
@@ -549,15 +571,13 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
         ?.confirmedCandleTs,
     attemptedSnapshotConfirmedCandleTs:
       institutionalSnapshot.confirmedCandleTs,
-    overwriteBlocked:
-      existingSnapshotAfterSet
-        ?.confirmedCandleTs !==
-        institutionalSnapshot.confirmedCandleTs &&
-      duplicateReplayAfterFreeze,
+    overwriteBlocked: true,
     sameConfirmedCandleReplay:
       existingSnapshotAfterSet
         ?.confirmedCandleTs ===
       institutionalSnapshot.confirmedCandleTs,
+    skippedReason:
+      'FINALIZED_30M_STORE_IS_REDIS_API_OWNED',
   })
 
   useBollingerSignalStore.getState().setLast(signal)

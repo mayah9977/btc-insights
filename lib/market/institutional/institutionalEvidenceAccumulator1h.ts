@@ -648,9 +648,38 @@ export function freezeInstitutionalSnapshot1h(
       oiDirectionalPressure,
     }
 
-  useInstitutionalEvidenceStore1h
-    .getState()
-    .setSnapshot(snapshot)
+  console.log(
+    '[LOCAL_ACCUMULATOR_1H_FINALIZED_STORE_WRITE_SKIPPED]',
+    {
+      ts: Date.now(),
+      reason:
+        'FINALIZED_1H_STORE_IS_REDIS_API_OWNED',
+      confirmedCandleTs:
+        snapshot.confirmedCandleTs,
+      sampleCount:
+        snapshot.sampleCount,
+      oiDeltaAccum:
+        snapshot.oiDeltaAccum,
+      fundingAccum:
+        snapshot.fundingAccum,
+      volumeRatioAccum:
+        snapshot.volumeRatioAccum,
+      whaleIntensityAccum:
+        snapshot.whaleIntensityAccum,
+      dominantFlow:
+        snapshot.dominantFlow,
+      fundingState:
+        snapshot.fundingState,
+      whaleBias:
+        snapshot.whaleBias,
+      volumeState:
+        snapshot.volumeState,
+      oiDirectionalPressure:
+        snapshot.oiDirectionalPressure,
+      fmaiDirectionalPressure:
+        snapshot.fmaiDirectionalPressure,
+    },
+  )
 
   lastFrozenSnapshot1h =
     snapshot

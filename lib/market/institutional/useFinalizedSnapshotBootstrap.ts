@@ -174,7 +174,7 @@ export function useFinalizedSnapshotBootstrap() {
             snapshot30m,
           )
         ) {
-          store30m.setSnapshot(
+          store30m.setFinalizedSnapshot(
             snapshot30m as InstitutionalEvidenceSnapshot,
           )
 
@@ -239,7 +239,7 @@ export function useFinalizedSnapshotBootstrap() {
             snapshot1h,
           )
         ) {
-          store1h.setSnapshot(
+          store1h.setFinalizedSnapshot(
             snapshot1h as InstitutionalEvidenceSnapshot1h,
           )
 

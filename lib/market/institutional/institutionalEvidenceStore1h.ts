@@ -18,6 +18,10 @@ type State = {
     snapshot: InstitutionalEvidenceSnapshot1h,
   ) => void
 
+  setFinalizedSnapshot: (
+    snapshot: InstitutionalEvidenceSnapshot1h,
+  ) => void
+
   clearSnapshot: () => void
 }
 
@@ -186,6 +190,99 @@ export const useInstitutionalEvidenceStore1h =
 
             return
           }
+
+          set({
+            snapshot,
+          })
+        },
+
+        setFinalizedSnapshot: (snapshot) => {
+          const existingSnapshot =
+            get().snapshot
+
+          console.log(
+            '[SET_FINALIZED_INSTITUTIONAL_SNAPSHOT_1H_FROM_API]',
+            {
+              ts: Date.now(),
+
+              existingConfirmedCandleTs:
+                existingSnapshot
+                  ?.confirmedCandleTs,
+
+              newConfirmedCandleTs:
+                snapshot.confirmedCandleTs,
+
+              existingSampleCount:
+                existingSnapshot?.sampleCount,
+
+              newSampleCount:
+                snapshot.sampleCount,
+
+              existingOiDeltaAccum:
+                existingSnapshot?.oiDeltaAccum,
+
+              newOiDeltaAccum:
+                snapshot.oiDeltaAccum,
+
+              existingFundingAccum:
+                existingSnapshot?.fundingAccum,
+
+              newFundingAccum:
+                snapshot.fundingAccum,
+
+              existingVolumeRatioAccum:
+                existingSnapshot
+                  ?.volumeRatioAccum,
+
+              newVolumeRatioAccum:
+                snapshot.volumeRatioAccum,
+
+              existingWhaleIntensityAccum:
+                existingSnapshot
+                  ?.whaleIntensityAccum,
+
+              newWhaleIntensityAccum:
+                snapshot.whaleIntensityAccum,
+
+              existingDominantFlow:
+                existingSnapshot?.dominantFlow,
+
+              newDominantFlow:
+                snapshot.dominantFlow,
+
+              existingWhaleBias:
+                existingSnapshot?.whaleBias,
+
+              newWhaleBias:
+                snapshot.whaleBias,
+
+              existingVolumeState:
+                existingSnapshot?.volumeState,
+
+              newVolumeState:
+                snapshot.volumeState,
+
+              existingFundingState:
+                existingSnapshot?.fundingState,
+
+              newFundingState:
+                snapshot.fundingState,
+
+              existingOiDirectionalPressure:
+                existingSnapshot
+                  ?.oiDirectionalPressure,
+
+              newOiDirectionalPressure:
+                snapshot.oiDirectionalPressure,
+
+              existingFmaiDirectionalPressure:
+                existingSnapshot
+                  ?.fmaiDirectionalPressure,
+
+              newFmaiDirectionalPressure:
+                snapshot.fmaiDirectionalPressure,
+            },
+          )
 
           set({
             snapshot,
