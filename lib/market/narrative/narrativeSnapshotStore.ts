@@ -1,3 +1,5 @@
+//lib/market/narrative/narrativeSnapshotStore.ts    
+
 /* =========================================================
  Narrative Snapshot Store (FINAL - FIXED)
 ========================================================= */
@@ -6,7 +8,7 @@ import { FinalNarrativeReport } from '@/lib/market/narrative/types'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import {
   MarketSnapshot,
-  getMarketSnapshot
+  getMarketSnapshot,
 } from '@/lib/market/engine/marketSnapshot'
 
 /* =========================================================
@@ -15,6 +17,18 @@ import {
 export type NarrativeMarketSnapshot =
   MarketSnapshot & {
     signalType: BollingerSignalType
+
+    confirmedCandleTs?: number
+    sampleCount?: number
+
+    oiDelta?: number
+    volumeRatio?: number
+    whaleIntensity?: number
+    whaleNetRatio?: number
+    fundingRate?: number
+
+    __institutionalEvidenceEndTs?: number
+    __institutionalConfirmedCandleTs?: number
   }
 
 /* =========================================================
@@ -39,15 +53,56 @@ export function createMarketSnapshot(
 }
 
 /* =========================================================
- 🔥 Snapshot Key (FIXED)
+ 🔥 Snapshot Key (FINALIZED SNAPSHOT SAFE)
 ========================================================= */
 export function createSnapshotKey(
   snapshot: NarrativeMarketSnapshot
 ): string {
 
+  const confirmedCandleTs =
+    snapshot.__institutionalConfirmedCandleTs ??
+    snapshot.confirmedCandleTs ??
+    snapshot.ts ??
+    0
+
+  const evidenceEndTs =
+    snapshot.__institutionalEvidenceEndTs ??
+    0
+
+  const sampleCount =
+    snapshot.sampleCount ??
+    0
+
+  const oiDelta =
+    snapshot.oiDelta ??
+    0
+
+  const volumeRatio =
+    snapshot.volumeRatio ??
+    1
+
+  const whaleIntensity =
+    snapshot.whaleIntensity ??
+    0
+
+  const whaleNetRatio =
+    snapshot.whaleNetRatio ??
+    0
+
+  const fundingRate =
+    snapshot.fundingRate ??
+    0
+
   return [
     snapshot.signalType,
-    snapshot.ts // 🔥 핵심: 시간 기반 key
+    confirmedCandleTs,
+    evidenceEndTs,
+    sampleCount,
+    oiDelta,
+    volumeRatio,
+    whaleIntensity,
+    whaleNetRatio,
+    fundingRate,
   ].join('|')
 }
 

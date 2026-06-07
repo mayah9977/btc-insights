@@ -31,19 +31,74 @@ type FinalizedSnapshotApiResponse = {
   ts: number
 }
 
+type ComparableFinalizedSnapshot = {
+  confirmedCandleTs?: number
+  sampleCount?: number
+
+  oiDeltaAverage?: number
+  oiDeltaAccum?: number
+
+  volumeRatioAverage?: number
+  whaleIntensityAverage?: number
+  whaleNetRatioAverage?: number
+
+  fundingAverage?: number
+
+  fmaiDirectionalPressure?: string
+  oiDirectionalPressure?: string
+
+  dominantFlow?: string
+  whaleBias?: string
+  volumeState?: string
+  fundingState?: string
+
+  endTs?: number
+}
+
 let bootstrapped = false
+
+function createSnapshotFingerprint(
+  snapshot:
+    | ComparableFinalizedSnapshot
+    | null
+    | undefined,
+): string {
+  if (!snapshot) {
+    return ''
+  }
+
+  return [
+    snapshot.confirmedCandleTs ?? '',
+    snapshot.sampleCount ?? '',
+
+    snapshot.oiDeltaAverage ?? '',
+    snapshot.oiDeltaAccum ?? '',
+
+    snapshot.volumeRatioAverage ?? '',
+    snapshot.whaleIntensityAverage ?? '',
+    snapshot.whaleNetRatioAverage ?? '',
+
+    snapshot.fundingAverage ?? '',
+
+    snapshot.fmaiDirectionalPressure ?? '',
+    snapshot.oiDirectionalPressure ?? '',
+
+    snapshot.dominantFlow ?? '',
+    snapshot.whaleBias ?? '',
+    snapshot.volumeState ?? '',
+    snapshot.fundingState ?? '',
+
+    snapshot.endTs ?? '',
+  ].join('|')
+}
 
 function shouldApplySnapshot(
   current:
-    | {
-        confirmedCandleTs: number
-      }
+    | ComparableFinalizedSnapshot
     | null
     | undefined,
   next:
-    | {
-        confirmedCandleTs: number
-      }
+    | ComparableFinalizedSnapshot
     | null
     | undefined,
 ): boolean {
@@ -56,8 +111,8 @@ function shouldApplySnapshot(
   }
 
   return (
-    next.confirmedCandleTs >
-    current.confirmedCandleTs
+    createSnapshotFingerprint(current) !==
+    createSnapshotFingerprint(next)
   )
 }
 
@@ -107,6 +162,12 @@ export function useFinalizedSnapshotBootstrap() {
         const current30m =
           store30m.snapshot
 
+        const current30mFingerprint =
+          createSnapshotFingerprint(current30m)
+
+        const server30mFingerprint =
+          createSnapshotFingerprint(snapshot30m)
+
         if (
           shouldApplySnapshot(
             current30m,
@@ -125,8 +186,14 @@ export function useFinalizedSnapshotBootstrap() {
                 current30m?.confirmedCandleTs,
               newConfirmedCandleTs:
                 snapshot30m?.confirmedCandleTs,
-              sampleCount:
+              previousSampleCount:
+                current30m?.sampleCount,
+              newSampleCount:
                 snapshot30m?.sampleCount,
+              previousFingerprint:
+                current30mFingerprint,
+              newFingerprint:
+                server30mFingerprint,
             },
           )
         } else {
@@ -138,10 +205,18 @@ export function useFinalizedSnapshotBootstrap() {
                 current30m?.confirmedCandleTs,
               serverConfirmedCandleTs:
                 snapshot30m?.confirmedCandleTs,
+              currentSampleCount:
+                current30m?.sampleCount,
+              serverSampleCount:
+                snapshot30m?.sampleCount,
+              currentFingerprint:
+                current30mFingerprint,
+              serverFingerprint:
+                server30mFingerprint,
               reason:
                 snapshot30m === null
                   ? 'NO_SERVER_SNAPSHOT'
-                  : 'CURRENT_IS_NEWER_OR_EQUAL',
+                  : 'FINGERPRINT_EQUAL',
             },
           )
         }
@@ -151,6 +226,12 @@ export function useFinalizedSnapshotBootstrap() {
 
         const current1h =
           store1h.snapshot
+
+        const current1hFingerprint =
+          createSnapshotFingerprint(current1h)
+
+        const server1hFingerprint =
+          createSnapshotFingerprint(snapshot1h)
 
         if (
           shouldApplySnapshot(
@@ -170,8 +251,14 @@ export function useFinalizedSnapshotBootstrap() {
                 current1h?.confirmedCandleTs,
               newConfirmedCandleTs:
                 snapshot1h?.confirmedCandleTs,
-              sampleCount:
+              previousSampleCount:
+                current1h?.sampleCount,
+              newSampleCount:
                 snapshot1h?.sampleCount,
+              previousFingerprint:
+                current1hFingerprint,
+              newFingerprint:
+                server1hFingerprint,
             },
           )
         } else {
@@ -183,10 +270,18 @@ export function useFinalizedSnapshotBootstrap() {
                 current1h?.confirmedCandleTs,
               serverConfirmedCandleTs:
                 snapshot1h?.confirmedCandleTs,
+              currentSampleCount:
+                current1h?.sampleCount,
+              serverSampleCount:
+                snapshot1h?.sampleCount,
+              currentFingerprint:
+                current1hFingerprint,
+              serverFingerprint:
+                server1hFingerprint,
               reason:
                 snapshot1h === null
                   ? 'NO_SERVER_SNAPSHOT'
-                  : 'CURRENT_IS_NEWER_OR_EQUAL',
+                  : 'FINGERPRINT_EQUAL',
             },
           )
         }

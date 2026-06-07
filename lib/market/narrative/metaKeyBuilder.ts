@@ -1,10 +1,38 @@
 //lib/market/narrative/metakeyBuilder.ts   
 
 export function buildMetaKey(snapshot: any): string {
-  const oiDelta = snapshot?.oiDelta ?? 0
-  const whaleNetRatio = snapshot?.whaleNetRatio ?? 0
-  const fundingRate = snapshot?.fundingRate ?? 0
-  const volumeRatio = snapshot?.volumeRatio ?? 1
+  const oiDelta =
+    snapshot?.oiDeltaAverage ??
+    snapshot?.oiDelta ??
+    0
+
+  const whaleNetRatio =
+    snapshot?.whaleNetRatioAverage ??
+    snapshot?.whaleNetRatio ??
+    0
+
+  const fundingRate =
+    snapshot?.fundingAverage ??
+    snapshot?.fundingRate ??
+    0
+
+  const volumeRatio =
+    snapshot?.volumeRatioAverage ??
+    snapshot?.volumeRatio ??
+    1
+
+  const confirmedCandleTs =
+    snapshot?.confirmedCandleTs ??
+    snapshot?.ts ??
+    0
+
+  const endTs =
+    snapshot?.endTs ??
+    0
+
+  const sampleCount =
+    snapshot?.sampleCount ??
+    0
 
   /* =========================
      1. Trend (OI 기반)
@@ -46,5 +74,13 @@ export function buildMetaKey(snapshot: any): string {
       ? 'LOW_VOL'
       : 'NORMAL_VOL'
 
-  return [trend, whale, funding, volume].join('|')
+  return [
+    confirmedCandleTs,
+    endTs,
+    sampleCount,
+    trend,
+    whale,
+    funding,
+    volume,
+  ].join('|')
 }
