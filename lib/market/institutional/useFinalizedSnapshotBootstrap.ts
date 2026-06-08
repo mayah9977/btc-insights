@@ -174,6 +174,26 @@ export function useFinalizedSnapshotBootstrap() {
             snapshot30m,
           )
         ) {
+          console.log('[BOOTSTRAP_SET_FINALIZED_30M_BEFORE]', {
+            ts: Date.now(),
+            currentConfirmedCandleTs:
+              current30m?.confirmedCandleTs,
+            nextConfirmedCandleTs:
+              snapshot30m?.confirmedCandleTs,
+            currentSampleCount:
+              current30m?.sampleCount,
+            nextSampleCount:
+              snapshot30m?.sampleCount,
+            currentEndTs:
+              current30m?.endTs,
+            nextEndTs:
+              snapshot30m?.endTs,
+            currentFingerprint:
+              current30mFingerprint,
+            serverFingerprint:
+              server30mFingerprint,
+          })
+
           store30m.setFinalizedSnapshot(
             snapshot30m as InstitutionalEvidenceSnapshot,
           )

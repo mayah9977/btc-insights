@@ -3,7 +3,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
@@ -34,10 +34,69 @@ const VIPWhaleTradeGuideCardMobile = dynamic(
   { ssr: false },
 )
 
-const VIPOverviewDashboardMobile = dynamic(
+const VIPOverviewDashboardMobileInner = dynamic(
   () => import('./VIPOverviewDashboardMobile'),
   { ssr: false },
 )
+
+const VIPOverviewDashboardMobileMemo = memo(
+  VIPOverviewDashboardMobileInner,
+)
+
+function VIPWhaleSection() {
+  const marketTick = useVIPMarketStore((s) => s.ts)
+
+  const mobileData = useMemo(() => {
+    const snapshot = getMarketSnapshot()
+
+    return {
+      whaleRatio: Number((snapshot.whaleRatio ?? 0).toFixed(2)),
+      whaleNet: Number((snapshot.whaleNetRatio ?? 0) * 100),
+      whaleIntensity: Number(
+        Math.min(
+          Math.max(snapshot.whaleIntensity ?? 0, 0),
+          100,
+        ).toFixed(1),
+      ),
+    }
+  }, [marketTick])
+
+  const long = Math.max(0, mobileData.whaleNet)
+  const short = Math.max(0, -mobileData.whaleNet)
+
+  const dominant =
+    mobileData.whaleNet > 5
+      ? 'LONG'
+      : mobileData.whaleNet < -5
+        ? 'SHORT'
+        : 'NONE'
+
+  const confidence = Math.min(
+    Math.abs(mobileData.whaleNet),
+    100,
+  )
+
+  return (
+    <>
+      <VIPWhaleMiniCharts />
+
+      <VIPWhaleTradeGuideCardMobile
+        ratio={mobileData.whaleRatio}
+        net={mobileData.whaleNet}
+      />
+
+      <VIPInstitutionalGuideCardMobile
+        long={long}
+        short={short}
+        confidence={confidence}
+        dominant={dominant}
+        intensity={mobileData.whaleIntensity}
+      />
+    </>
+  )
+}
+
+const VIPWhaleSectionMemo = memo(VIPWhaleSection)
 
 type Props = {
   userId: string
@@ -58,8 +117,6 @@ export default function VIPMobilePage(props: Props) {
      SSE (1곳만 유지)
   =============================== */
   useVIPMarketStream(symbol, { throttle: 1500 })
-
-  const marketTick = useVIPMarketStore((s) => s.ts)
 
   /* ===============================
      준비 상태
@@ -104,42 +161,6 @@ export default function VIPMobilePage(props: Props) {
   }, [signalType, isReady])
 
   /* ===============================
-     Snapshot 기반 데이터
-  =============================== */
-  const mobileData = useMemo(() => {
-    const snapshot = getMarketSnapshot()
-
-    return {
-      whaleRatio: Number((snapshot.whaleRatio ?? 0).toFixed(2)),
-      whaleNet: Number((snapshot.whaleNetRatio ?? 0) * 100),
-      whaleIntensity: Number(
-        Math.min(
-          Math.max(snapshot.whaleIntensity ?? 0, 0),
-          100,
-        ).toFixed(1),
-      ),
-    }
-  }, [marketTick])
-
-  /* ===============================
-     Derived values
-  =============================== */
-  const long = Math.max(0, mobileData.whaleNet)
-  const short = Math.max(0, -mobileData.whaleNet)
-
-  const dominant =
-    mobileData.whaleNet > 5
-      ? 'LONG'
-      : mobileData.whaleNet < -5
-        ? 'SHORT'
-        : 'NONE'
-
-  const confidence = Math.min(
-    Math.abs(mobileData.whaleNet),
-    100,
-  )
-
-  /* ===============================
      Render
   =============================== */
   return (
@@ -157,22 +178,9 @@ export default function VIPMobilePage(props: Props) {
 
       <VIPLiveStatusStripMobile symbol={symbol} />
 
-      <VIPWhaleMiniCharts />
+      <VIPWhaleSectionMemo />
 
-      <VIPWhaleTradeGuideCardMobile
-        ratio={mobileData.whaleRatio}
-        net={mobileData.whaleNet}
-      />
-
-      <VIPInstitutionalGuideCardMobile
-        long={long}
-        short={short}
-        confidence={confidence}
-        dominant={dominant}
-        intensity={mobileData.whaleIntensity}
-      />
-
-      <VIPOverviewDashboardMobile />
+      <VIPOverviewDashboardMobileMemo />
     </main>
   )
 }

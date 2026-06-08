@@ -52,6 +52,37 @@ function getInstitutionalSnapshotStorage(): StateStorage {
   }
 }
 
+function createFinalizedSnapshotCoreFingerprint(
+  snapshot:
+    | InstitutionalEvidenceSnapshot
+    | null
+    | undefined,
+): string {
+  if (!snapshot) {
+    return ''
+  }
+
+  return [
+    snapshot.confirmedCandleTs ?? '',
+    snapshot.sampleCount ?? '',
+
+    snapshot.oiDeltaAverage ?? '',
+    snapshot.oiDeltaAccum ?? '',
+
+    snapshot.volumeRatioAverage ?? '',
+    snapshot.whaleIntensityAverage ?? '',
+    snapshot.whaleNetRatioAverage ?? '',
+
+    snapshot.fundingAverage ?? '',
+    snapshot.fmaiDirectionalPressure ?? '',
+    snapshot.oiDirectionalPressure ?? '',
+    snapshot.dominantFlow ?? '',
+    snapshot.whaleBias ?? '',
+    snapshot.volumeState ?? '',
+    snapshot.fundingState ?? '',
+  ].join('|')
+}
+
 export const useInstitutionalEvidenceStore =
   create<State>()(
     persist(
@@ -223,15 +254,60 @@ export const useInstitutionalEvidenceStore =
             },
           )
 
+          const existingCoreFingerprint =
+            createFinalizedSnapshotCoreFingerprint(
+              existingSnapshot,
+            )
+
+          const newCoreFingerprint =
+            createFinalizedSnapshotCoreFingerprint(
+              snapshot,
+            )
+
+          if (
+            existingSnapshot &&
+            existingCoreFingerprint ===
+              newCoreFingerprint
+          ) {
+            console.log(
+              '[SET_FINALIZED_SNAPSHOT_SKIPPED_SAME_FINGERPRINT]',
+              {
+                ts: Date.now(),
+                confirmedCandleTs:
+                  snapshot.confirmedCandleTs,
+                sampleCount:
+                  snapshot.sampleCount,
+                existingFingerprint:
+                  existingCoreFingerprint,
+                newFingerprint:
+                  newCoreFingerprint,
+                existingEndTs:
+                  existingSnapshot.endTs,
+                newEndTs:
+                  snapshot.endTs,
+                reason:
+                  'SAME_CORE_FINALIZED_SNAPSHOT',
+              },
+            )
+
+            return
+          }
+
           set({
             snapshot,
           })
         },
 
-        clearSnapshot: () =>
+        clearSnapshot: () => {
+          console.log('[CLEAR_INSTITUTIONAL_SNAPSHOT]', {
+            ts: Date.now(),
+            previousSnapshot: get().snapshot,
+          })
+
           set({
             snapshot: null,
-          }),
+          })
+        },
       }),
       {
         name:

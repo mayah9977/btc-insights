@@ -68,6 +68,17 @@ export function MobileInstitutionalPatternAlertCard() {
 
   const pattern = useMemo(() => {
     if (!finalized.snapshotReady) {
+      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
+        ts: Date.now(),
+        reason: 'NO_FINALIZED_SNAPSHOT',
+        finalizedSnapshotReady:
+          finalized.snapshotReady,
+        finalizedConfirmedCandleTs:
+          finalized.confirmedCandleTs,
+        finalizedSampleCount:
+          finalized.sampleCount,
+      })
+
       return null
     }
 
@@ -140,6 +151,20 @@ export function MobileInstitutionalPatternAlertCard() {
       })
 
     if (!detected || detected.type === 'NONE') {
+      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
+        ts: Date.now(),
+        reason: 'NO_PATTERN_DETECTED',
+        detectedType:
+          detected?.type,
+        detectedScore:
+          (detected as any)?.score ??
+          (detected as any)?.finalScore,
+        finalizedConfirmedCandleTs:
+          finalized.confirmedCandleTs,
+        finalizedSampleCount:
+          finalized.sampleCount,
+      })
+
       return null
     }
 
@@ -153,11 +178,75 @@ export function MobileInstitutionalPatternAlertCard() {
       confirmation1h.action === 'BLOCK' ||
       confirmation1h.action === 'WATCH'
     ) {
+      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
+        ts: Date.now(),
+        reason:
+          confirmation1h.action === 'BLOCK'
+            ? 'CONFIRMATION_BLOCK'
+            : 'CONFIRMATION_WATCH',
+        detectedType:
+          detected.type,
+        confirmationAction:
+          confirmation1h.action,
+        confirmationReason:
+          confirmation1h.reason,
+        confirmationDirection:
+          confirmation1h.direction,
+        patternDirection:
+          confirmation1h.patternDirection,
+        confirmationScore:
+          confirmation1h.score,
+      })
+
       return null
     }
 
     return detected
-  }, [finalized, snapshot1h])
+  }, [
+    finalized.snapshotReady,
+    finalized.confirmedCandleTs,
+    finalized.sampleCount,
+    finalized.oiDeltaAverage,
+    finalized.oiDeltaAccum,
+    finalized.oiDirectionalPersistenceAverage,
+    finalized.fundingAverage,
+    finalized.fundingState,
+    finalized.volumeRatioAverage,
+    finalized.volumeState,
+    finalized.whaleIntensityAverage,
+    finalized.whaleBias,
+    finalized.whaleBuyPressure,
+    finalized.whaleSellPressure,
+    finalized.longLiquidationPressure,
+    finalized.shortLiquidationPressure,
+    finalized.dominantFlow,
+    finalized.oiDirectionalPressure,
+    finalized.fmaiDirectionalPressure,
+    finalized.absorptionAccum,
+    finalized.absorptionAverage,
+    finalized.sweepAccum,
+    finalized.sweepAverage,
+    finalized.institutionalEvents.whaleBurstCount,
+    finalized.institutionalEvents.longAggressionDuration,
+    finalized.institutionalEvents.shortAggressionDuration,
+    finalized.institutionalEvents.longAggressionPersistence,
+    finalized.institutionalEvents.shortAggressionPersistence,
+    finalized.institutionalEvents.fundingOverheatDuration,
+    finalized.institutionalEvents.oiExpansionEventCount,
+    finalized.institutionalEvents.whaleAbsorptionCount,
+    finalized.institutionalEvents.liquiditySweepCount,
+    finalized.institutionalEvents.volatilityShockCount,
+    snapshot1h?.confirmedCandleTs,
+    snapshot1h?.sampleCount,
+    snapshot1h?.oiDeltaAverage,
+    snapshot1h?.oiDeltaAccum,
+    snapshot1h?.dominantFlow,
+    snapshot1h?.whaleBias,
+    snapshot1h?.volumeState,
+    snapshot1h?.fundingState,
+    snapshot1h?.oiDirectionalPressure,
+    snapshot1h?.fmaiDirectionalPressure,
+  ])
 
   if (!pattern || pattern.type === 'NONE') {
     return null

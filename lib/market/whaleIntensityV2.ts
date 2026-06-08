@@ -73,24 +73,6 @@ export function calculateWhaleIntensityV2(
       0.20 * volatilityEnergy +
       0.10 * driftEnergy
 
-  console.log(
-    '[WhaleIntensityV2]',
-    {
-      oiDeltaRatio,
-      volumeRatio,
-      volatility,
-      drift,
-
-      oiEnergy,
-      volumeEnergy,
-      volatilityEnergy,
-      driftEnergy,
-
-      rawIntensity,
-      intensity: rawIntensity * 100,
-    },
-  )
-
   /**
    * 🔥 SSOT = 0~100
    */

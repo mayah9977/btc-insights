@@ -13,22 +13,14 @@ const MarketContextPanel = dynamic(
   { ssr: false }
 )
 
-export default function VIPOverviewDashboardMobile(){
-
+export default function VIPOverviewDashboardMobile() {
   return (
-
     <div className="space-y-6">
-
       {/* VIP Report Download */}
-
       <VIPReportDownloadCard />
 
       {/* Market Context */}
-
       <MarketContextPanel />
-
     </div>
-
   )
-
 }

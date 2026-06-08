@@ -23,6 +23,128 @@ const useBollingerSignalStore = create<State>((set) => ({
   setLast: (v) => set({ last: v }),
 }))
 
+function getSignalConfirmedCandleTs(
+  signal: BollingerSignal | null,
+): number | null {
+  if (!signal) {
+    return null
+  }
+
+  const rawConfirmedCandleTs =
+    (signal as any)?.closeTime ??
+    (signal as any)?.candleCloseTime ??
+    signal?.candle?.closeTime ??
+    (signal as any)?.timestamp ??
+    (signal as any)?.ts ??
+    (signal as any)?.time
+
+  return rawConfirmedCandleTs !== undefined &&
+    rawConfirmedCandleTs !== null &&
+    Number.isFinite(Number(rawConfirmedCandleTs))
+    ? Number(rawConfirmedCandleTs)
+    : null
+}
+
+function shouldUpdateBollingerSignal(
+  current: BollingerSignal | null,
+  next: BollingerSignal,
+  nextConfirmedCandleTs: number | null,
+): boolean {
+  if (!next) {
+    return false
+  }
+
+  if (
+    next.confirmed === true &&
+    next.timeframe === '30m' &&
+    nextConfirmedCandleTs !== null
+  ) {
+    const currentConfirmedCandleTs =
+      getSignalConfirmedCandleTs(current)
+
+    if (
+      current &&
+      current.signalType === next.signalType &&
+      current.confirmed === true &&
+      current.timeframe === '30m' &&
+      currentConfirmedCandleTs ===
+        nextConfirmedCandleTs
+    ) {
+      return false
+    }
+  }
+
+  if (!current) {
+    return true
+  }
+
+  const currentConfirmedCandleTs =
+    getSignalConfirmedCandleTs(current)
+
+  const sameConfirmed30mSignal =
+    current.signalType === next.signalType &&
+    current.confirmed === true &&
+    next.confirmed === true &&
+    current.timeframe === '30m' &&
+    next.timeframe === '30m' &&
+    currentConfirmedCandleTs !== null &&
+    nextConfirmedCandleTs !== null &&
+    currentConfirmedCandleTs === nextConfirmedCandleTs
+
+  return !sameConfirmed30mSignal
+}
+
+function applyLastSignalIfNeeded(
+  signal: BollingerSignal,
+  confirmedCandleTs: number | null,
+  reason: string,
+) {
+  const store =
+    useBollingerSignalStore.getState()
+
+  const lastSignal =
+    store.last
+
+  const shouldUpdate =
+    shouldUpdateBollingerSignal(
+      lastSignal,
+      signal,
+      confirmedCandleTs,
+    )
+
+  if (!shouldUpdate) {
+    console.log('[SET_LAST_SKIPPED]', {
+      ts: Date.now(),
+      reason,
+      signalType: signal.signalType,
+      confirmed: signal.confirmed,
+      timeframe: signal.timeframe,
+      confirmedCandleTs,
+      previousSignalType:
+        lastSignal?.signalType,
+      previousConfirmedCandleTs:
+        getSignalConfirmedCandleTs(lastSignal),
+    })
+
+    return
+  }
+
+  console.log('[SET_LAST_APPLIED]', {
+    ts: Date.now(),
+    reason,
+    signalType: signal.signalType,
+    confirmed: signal.confirmed,
+    timeframe: signal.timeframe,
+    confirmedCandleTs,
+    previousSignalType:
+      lastSignal?.signalType,
+    previousConfirmedCandleTs:
+      getSignalConfirmedCandleTs(lastSignal),
+  })
+
+  store.setLast(signal)
+}
+
 /**
  * ✅ UI 구독 훅
  * - Action Gate
@@ -148,9 +270,11 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
       },
     )
 
-    useBollingerSignalStore
-      .getState()
-      .setLast(signal)
+    applyLastSignalIfNeeded(
+      signal,
+      confirmedCandleTs,
+      'MISSING_CONFIRMED_CANDLE_TS',
+    )
 
     return
   }
@@ -241,12 +365,23 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
           'SAME_ENUM_AND_SAME_CONFIRMED_CANDLE_REPLAY_KEEP_EXISTING_INSTITUTIONAL_SNAPSHOT',
         accumulatorResetPrevented: true,
         freezeCalled: false,
+        setLastCalled: false,
       },
     )
 
-    useBollingerSignalStore
-      .getState()
-      .setLast(signal)
+    console.log('[SET_LAST_SKIPPED]', {
+      ts: Date.now(),
+      reason:
+        'SAME_ENUM_SAME_CONFIRMED_CANDLE_REPLAY',
+      signalType: signal.signalType,
+      confirmed: signal.confirmed,
+      timeframe: signal.timeframe,
+      confirmedCandleTs,
+      previousSignalType:
+        lastSignal?.signalType,
+      previousConfirmedCandleTs:
+        getSignalConfirmedCandleTs(lastSignal),
+    })
 
     return
   }
@@ -341,13 +476,16 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
       duplicateReplayBeforeFreeze,
   })
 
-  const institutionalSnapshot =
+  const frozenInstitutionalSnapshot =
     freezeInstitutionalSnapshot(
       confirmedCandleTs,
     )
 
-  institutionalSnapshot.confirmedSignalType =
-    signal.signalType
+  const institutionalSnapshot = {
+    ...frozenInstitutionalSnapshot,
+    confirmedSignalType:
+      signal.signalType,
+  }
 
   const existingSnapshotAfterFreeze =
     useInstitutionalEvidenceStore
@@ -580,5 +718,9 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
       'FINALIZED_30M_STORE_IS_REDIS_API_OWNED',
   })
 
-  useBollingerSignalStore.getState().setLast(signal)
+  applyLastSignalIfNeeded(
+    signal,
+    confirmedCandleTs,
+    'NEW_CONFIRMED_30M_SIGNAL',
+  )
 }

@@ -184,6 +184,17 @@ export function MobileFinalizedInstitutionalNumbers() {
     useState<CardKey | null>(null)
 
   if (!finalized.snapshotReady) {
+    console.log('[FINALIZED_NUMBERS_HIDDEN_REASON]', {
+      ts: Date.now(),
+      reason: 'SNAPSHOT_NOT_READY',
+      finalizedSnapshotReady:
+        finalized.snapshotReady,
+      finalizedConfirmedCandleTs:
+        finalized.confirmedCandleTs,
+      finalizedSampleCount:
+        finalized.sampleCount,
+    })
+
     return null
   }
 
@@ -208,8 +219,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'OI'}
         onToggle={() => toggle('OI')}
         accent="bg-emerald-500/10"
-        description="
-최근 약 30분동안 기관 포지션 에너지의 누적 변화입니다.
+        description=" 최근 약 30분동안 기관 포지션 에너지의 누적 변화입니다.
         "
         interpretation={[
           'OI 증가 = 신규 포지션 유입 가능성',
@@ -228,8 +238,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'FUNDING'}
         onToggle={() => toggle('FUNDING')}
         accent="bg-yellow-500/10"
-        description="
-최근 약 30분동안 평균 펀딩 압력 변화입니다.
+        description=" 최근 약 30분동안 평균 펀딩 압력 변화입니다.
         "
         interpretation={[
           '양수 = 롱 과열 가능성',
@@ -248,8 +257,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'VOLUME'}
         onToggle={() => toggle('VOLUME')}
         accent="bg-blue-500/10"
-        description="
-최근 약 30분동안 거래량 확장 강도 변화입니다.
+        description=" 최근 약 30분동안 거래량 확장 강도 변화입니다.
         "
         interpretation={[
           '1x 이하 = 거래량 부족',
@@ -268,8 +276,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'WHALE'}
         onToggle={() => toggle('WHALE')}
         accent="bg-red-500/10"
-        description="
-최근 약 30분동안 고래/기관 개입 강도 변화입니다.
+        description=" 최근 약 30분동안 고래/기관 개입 강도 변화입니다.
         "
         interpretation={[
           '0~30 = 낮음',
@@ -279,4 +286,4 @@ export function MobileFinalizedInstitutionalNumbers() {
       />
     </section>
   )
-} 
+}

@@ -143,7 +143,51 @@ export function InstitutionalPatternAlertCard() {
     }
 
     return detected
-  }, [finalized, snapshot1h])
+  }, [
+    finalized.snapshotReady,
+    finalized.confirmedCandleTs,
+    finalized.sampleCount,
+    finalized.oiDeltaAverage,
+    finalized.oiDeltaAccum,
+    finalized.oiDirectionalPersistenceAverage,
+    finalized.fundingAverage,
+    finalized.fundingState,
+    finalized.volumeRatioAverage,
+    finalized.volumeState,
+    finalized.whaleIntensityAverage,
+    finalized.whaleBias,
+    finalized.whaleBuyPressure,
+    finalized.whaleSellPressure,
+    finalized.longLiquidationPressure,
+    finalized.shortLiquidationPressure,
+    finalized.dominantFlow,
+    finalized.oiDirectionalPressure,
+    finalized.fmaiDirectionalPressure,
+    finalized.absorptionAccum,
+    finalized.absorptionAverage,
+    finalized.sweepAccum,
+    finalized.sweepAverage,
+    finalized.institutionalEvents.whaleBurstCount,
+    finalized.institutionalEvents.longAggressionDuration,
+    finalized.institutionalEvents.shortAggressionDuration,
+    finalized.institutionalEvents.longAggressionPersistence,
+    finalized.institutionalEvents.shortAggressionPersistence,
+    finalized.institutionalEvents.fundingOverheatDuration,
+    finalized.institutionalEvents.oiExpansionEventCount,
+    finalized.institutionalEvents.whaleAbsorptionCount,
+    finalized.institutionalEvents.liquiditySweepCount,
+    finalized.institutionalEvents.volatilityShockCount,
+    snapshot1h?.confirmedCandleTs,
+    snapshot1h?.sampleCount,
+    snapshot1h?.oiDeltaAverage,
+    snapshot1h?.oiDeltaAccum,
+    snapshot1h?.dominantFlow,
+    snapshot1h?.whaleBias,
+    snapshot1h?.volumeState,
+    snapshot1h?.fundingState,
+    snapshot1h?.oiDirectionalPressure,
+    snapshot1h?.fmaiDirectionalPressure,
+  ])
 
   if (!pattern || pattern.type === 'NONE') {
     return null

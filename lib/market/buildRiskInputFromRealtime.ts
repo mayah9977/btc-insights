@@ -259,37 +259,6 @@ export async function buildRiskInputFromRealtime(
       ? smoothedWhaleIntensity
       : Math.min(smoothedWhaleIntensity, WHALE_STRONG_LEVEL - 1)
 
-  console.log(
-    '[RealtimeRiskSnapshot]',
-    {
-      symbol,
-
-      openInterest,
-      prevSnapshotOI,
-
-      oiDelta,
-      oiDeltaRatio,
-      rollingAbsOIDeltaAvg,
-
-      lastVolume,
-      prevVolume,
-      recentVolumes,
-      rollingVolumeAvg,
-      volumeRatio,
-
-      volatilityRaw,
-      volatility,
-      volatilityShock,
-      rollingVolatilityAvg,
-
-      rollingMean,
-      rollingStd,
-      drift,
-
-      rawWhaleIntensity,
-      whaleIntensity,
-    },
-  )
 
   /* ================= Trade Flow ================= */
 
