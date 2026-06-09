@@ -74,6 +74,7 @@ function createFinalizedSnapshotCoreFingerprint(
     snapshot.whaleNetRatioAverage ?? '',
 
     snapshot.fundingAverage ?? '',
+
     snapshot.fmaiDirectionalPressure ?? '',
     snapshot.oiDirectionalPressure ?? '',
     snapshot.dominantFlow ?? '',
@@ -264,11 +265,12 @@ export const useInstitutionalEvidenceStore =
               snapshot,
             )
 
-          if (
-            existingSnapshot &&
+          const sameFingerprint =
+            !!existingSnapshot &&
             existingCoreFingerprint ===
               newCoreFingerprint
-          ) {
+
+          if (sameFingerprint) {
             console.log(
               '[SET_FINALIZED_SNAPSHOT_SKIPPED_SAME_FINGERPRINT]',
               {

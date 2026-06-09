@@ -213,11 +213,18 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
       sameConfirmedCandleReplay,
   })
 
-  if (!signal) return
+  if (!signal) {
+    return
+  }
 
   // 🔒 30m 확정 봉만 UI에 반영
-  if (signal.timeframe !== '30m') return
-  if (signal.confirmed !== true) return
+  if (signal.timeframe !== '30m') {
+    return
+  }
+
+  if (signal.confirmed !== true) {
+    return
+  }
 
   /**
    * 🔥 institutional freeze
@@ -394,87 +401,32 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
     sameEnumState &&
     !sameEnumSameConfirmedCandleReplay
 
-  console.log('[ENUM_FREEZE_SYNC_BEFORE]', {
-    ts: Date.now(),
-    lifecycleBoundary:
-      'CONFIRMED_BOLLINGER_ENUM_BRIDGE',
-    signalType: signal.signalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    persistedConfirmedSignalType:
-      existingSnapshotBeforeFreeze
-        ?.confirmedSignalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    timeframe: signal.timeframe,
-    confirmedCandleTs,
-    rawConfirmedCandleTs,
-    signalCloseTime:
-      (signal as any).closeTime,
-    signalCandleCloseTime:
-      (signal as any).candleCloseTime,
-    signalTimestamp:
-      (signal as any).timestamp,
-    signalTs:
-      (signal as any).ts,
-    signalTime:
-      (signal as any).time,
-    candleCloseTime:
-      signal?.candle?.closeTime,
-    candleOpenTime:
-      signal?.candle?.openTime,
-    existingPersistedSnapshotConfirmedCandleTs:
-      existingSnapshotBeforeFreeze
-        ?.confirmedCandleTs,
-    duplicateReplayBeforeFreeze,
-    expectedBehavior:
-      duplicateReplayBeforeFreeze
-        ? 'RETURN_PERSISTED_SNAPSHOT'
-        : 'CREATE_FINALIZED_SNAPSHOT',
-  })
+  void duplicateReplayBeforeFreeze
 
-  console.log('[FREEZE_BEFORE]', {
-    ts: Date.now(),
-    signalType: signal.signalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    persistedConfirmedSignalType:
-      existingSnapshotBeforeFreeze
-        ?.confirmedSignalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    confirmedCandleTs,
-    existingPersistedSnapshotConfirmedCandleTs:
-      existingSnapshotBeforeFreeze
-        ?.confirmedCandleTs,
-    duplicateReplayBeforeFreeze,
-    overwriteBlockedExpected:
-      duplicateReplayBeforeFreeze,
-  })
+  console.log(
+    '[FINALIZED_30M_FREEZE_CONDITION_TRACE]',
+    {
+      ts: Date.now(),
+      currentCandleTs:
+        existingSnapshotBeforeFreeze
+          ?.confirmedCandleTs,
+      confirmedCandleTs,
+      sampleCount:
+        existingSnapshotBeforeFreeze
+          ?.sampleCount,
+      shouldFreeze: true,
+      reason:
+        sameEnumNewConfirmedCandle
+          ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
+          : 'ENUM_TRANSITION',
+      signalType:
+        signal.signalType,
+      confirmed:
+        signal.confirmed,
+      timeframe:
+        signal.timeframe,
+    },
+  )
 
   const frozenInstitutionalSnapshot =
     freezeInstitutionalSnapshot(
@@ -501,101 +453,8 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
     institutionalSnapshot.confirmedCandleTs ===
     confirmedCandleTs
 
-  console.log('[ENUM_FREEZE_SYNC_AFTER]', {
-    ts: Date.now(),
-    lifecycleBoundary:
-      'CONFIRMED_BOLLINGER_ENUM_BRIDGE',
-    signalType: signal.signalType,
-    snapshotConfirmedSignalType:
-      institutionalSnapshot.confirmedSignalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    persistedConfirmedSignalType:
-      existingSnapshotBeforeFreeze
-        ?.confirmedSignalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    timeframe: signal.timeframe,
-    confirmedCandleTs,
-    rawConfirmedCandleTs,
-    snapshotConfirmedCandleTs:
-      institutionalSnapshot.confirmedCandleTs,
-    enumFreezeSynchronized,
-    sampleCount:
-      institutionalSnapshot.sampleCount,
-    oiDeltaAccum:
-      institutionalSnapshot.oiDeltaAccum,
-    fundingAccum:
-      institutionalSnapshot.fundingAccum,
-    volumeRatioAccum:
-      institutionalSnapshot.volumeRatioAccum,
-    whaleIntensityAccum:
-      institutionalSnapshot.whaleIntensityAccum,
-    existingPersistedSnapshotConfirmedCandleTs:
-      existingSnapshotAfterFreeze
-        ?.confirmedCandleTs,
-    duplicateReplayAfterFreeze,
-    expectedImmutableOwnership:
-      enumFreezeSynchronized,
-  })
-
-  console.log('[FREEZE_AFTER]', {
-    ts: Date.now(),
-    signalType: signal.signalType,
-    snapshotConfirmedSignalType:
-      institutionalSnapshot.confirmedSignalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    persistedConfirmedSignalType:
-      existingSnapshotBeforeFreeze
-        ?.confirmedSignalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    confirmedCandleTs:
-      institutionalSnapshot.confirmedCandleTs,
-    sampleCount:
-      institutionalSnapshot.sampleCount,
-    oiDeltaAccum:
-      institutionalSnapshot.oiDeltaAccum,
-    fundingAccum:
-      institutionalSnapshot.fundingAccum,
-    volumeRatioAccum:
-      institutionalSnapshot.volumeRatioAccum,
-    whaleIntensityAccum:
-      institutionalSnapshot.whaleIntensityAccum,
-    snapshotConfirmedCandleTs:
-      institutionalSnapshot.confirmedCandleTs,
-    existingPersistedSnapshotConfirmedCandleTs:
-      existingSnapshotAfterFreeze
-        ?.confirmedCandleTs,
-    duplicateReplayAfterFreeze,
-    overwriteBlockedExpected:
-      duplicateReplayAfterFreeze,
-  })
+  void duplicateReplayAfterFreeze
+  void enumFreezeSynchronized
 
   console.log(
     '[LOCAL_ACCUMULATOR_FINALIZED_STORE_WRITE_SKIPPED]',
@@ -636,87 +495,8 @@ export function applyRealtimeBollingerSignal(signal: BollingerSignal) {
     existingSnapshotAfterSet
       ?.confirmedSignalType === signal.signalType
 
-  console.log('[ENUM_FREEZE_SYNC_PERSISTED]', {
-    ts: Date.now(),
-    lifecycleBoundary:
-      'CONFIRMED_BOLLINGER_ENUM_BRIDGE',
-    signalType: signal.signalType,
-    snapshotConfirmedSignalType:
-      institutionalSnapshot.confirmedSignalType,
-    persistedConfirmedSignalType:
-      existingSnapshotAfterSet
-        ?.confirmedSignalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    timeframe: signal.timeframe,
-    confirmedCandleTs,
-    rawConfirmedCandleTs,
-    snapshotConfirmedCandleTs:
-      institutionalSnapshot.confirmedCandleTs,
-    persistedSnapshotConfirmedCandleTs:
-      existingSnapshotAfterSet
-        ?.confirmedCandleTs,
-    enumFreezeSynchronized,
-    persistedSnapshotSynchronized,
-    persistedEnumPhaseSynchronized,
-    sameImmutableInstitutionalSnapshot:
-      enumFreezeSynchronized &&
-      persistedSnapshotSynchronized &&
-      persistedEnumPhaseSynchronized,
-  })
-
-  console.log('[SET_SNAPSHOT_AFTER_BRIDGE]', {
-    ts: Date.now(),
-    signalType: signal.signalType,
-    snapshotConfirmedSignalType:
-      institutionalSnapshot.confirmedSignalType,
-    persistedConfirmedSignalType:
-      existingSnapshotAfterSet
-        ?.confirmedSignalType,
-    previousSignalType:
-      lastSignal?.signalType,
-    runtimeSameEnumState,
-    persistedSameEnumState,
-    runtimeSameConfirmedCandle,
-    persistedSameConfirmedCandle,
-    sameEnumState,
-    sameEnumSameConfirmedCandleReplay,
-    sameEnumNewConfirmedCandle,
-    enumTransition:
-      !sameEnumState,
-    freezeAllowedReason:
-      sameEnumNewConfirmedCandle
-        ? 'SAME_ENUM_NEW_CONFIRMED_CANDLE'
-        : 'ENUM_TRANSITION',
-    confirmed: signal.confirmed,
-    confirmedCandleTs,
-    existingPersistedSnapshotConfirmedCandleTs:
-      existingSnapshotAfterSet
-        ?.confirmedCandleTs,
-    attemptedSnapshotConfirmedCandleTs:
-      institutionalSnapshot.confirmedCandleTs,
-    overwriteBlocked: true,
-    sameConfirmedCandleReplay:
-      existingSnapshotAfterSet
-        ?.confirmedCandleTs ===
-      institutionalSnapshot.confirmedCandleTs,
-    skippedReason:
-      'FINALIZED_30M_STORE_IS_REDIS_API_OWNED',
-  })
+  void persistedSnapshotSynchronized
+  void persistedEnumPhaseSynchronized
 
   applyLastSignalIfNeeded(
     signal,

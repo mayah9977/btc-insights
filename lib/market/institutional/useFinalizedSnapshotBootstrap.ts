@@ -1,4 +1,4 @@
-//lib/market/institutional/useFinalizedSnapshotBootstrap.ts  
+//lib/market/institutional/useFinalizedSnapshotBootstrap.ts
 
 'use client'
 
@@ -55,7 +55,14 @@ type ComparableFinalizedSnapshot = {
   endTs?: number
 }
 
+const FINALIZED_SNAPSHOT_REFRESH_INTERVAL_MS =
+  60 * 1000
+
 let bootstrapped = false
+
+let finalizedSnapshotRefreshIntervalId:
+  | number
+  | null = null
 
 function createSnapshotFingerprint(
   snapshot:
@@ -118,20 +125,25 @@ function shouldApplySnapshot(
 
 export function useFinalizedSnapshotBootstrap() {
   useEffect(() => {
-    if (bootstrapped) {
-      return
+    const shouldRunBootstrap =
+      !bootstrapped
+
+    if (shouldRunBootstrap) {
+      bootstrapped = true
     }
 
-    bootstrapped = true
-
-    const bootstrap = async () => {
+    const fetchAndApplyFinalizedSnapshots = async (
+      source: 'BOOTSTRAP' | 'REFRESH',
+    ) => {
       try {
-        console.log(
-          '[FINALIZED_SNAPSHOT_BOOTSTRAP_START]',
-          {
-            ts: Date.now(),
-          },
-        )
+        if (source === 'BOOTSTRAP') {
+          console.log(
+            '[FINALIZED_SNAPSHOT_BOOTSTRAP_START]',
+            {
+              ts: Date.now(),
+            },
+          )
+        }
 
         const response = await fetch(
           '/api/institutional/finalized',
@@ -168,77 +180,104 @@ export function useFinalizedSnapshotBootstrap() {
         const server30mFingerprint =
           createSnapshotFingerprint(snapshot30m)
 
-        if (
+        const shouldApply30m =
           shouldApplySnapshot(
             current30m,
             snapshot30m,
           )
-        ) {
-          console.log('[BOOTSTRAP_SET_FINALIZED_30M_BEFORE]', {
-            ts: Date.now(),
-            currentConfirmedCandleTs:
-              current30m?.confirmedCandleTs,
-            nextConfirmedCandleTs:
-              snapshot30m?.confirmedCandleTs,
-            currentSampleCount:
-              current30m?.sampleCount,
-            nextSampleCount:
-              snapshot30m?.sampleCount,
-            currentEndTs:
-              current30m?.endTs,
-            nextEndTs:
-              snapshot30m?.endTs,
-            currentFingerprint:
-              current30mFingerprint,
-            serverFingerprint:
-              server30mFingerprint,
-          })
 
+        if (shouldApply30m) {
           store30m.setFinalizedSnapshot(
             snapshot30m as InstitutionalEvidenceSnapshot,
           )
 
-          console.log(
-            '[FINALIZED_SNAPSHOT_BOOTSTRAP_APPLIED_30M]',
-            {
-              ts: Date.now(),
-              previousConfirmedCandleTs:
-                current30m?.confirmedCandleTs,
-              newConfirmedCandleTs:
-                snapshot30m?.confirmedCandleTs,
-              previousSampleCount:
-                current30m?.sampleCount,
-              newSampleCount:
-                snapshot30m?.sampleCount,
-              previousFingerprint:
-                current30mFingerprint,
-              newFingerprint:
-                server30mFingerprint,
-            },
-          )
+          if (source === 'BOOTSTRAP') {
+            console.log(
+              '[FINALIZED_SNAPSHOT_BOOTSTRAP_APPLIED_30M]',
+              {
+                ts: Date.now(),
+                previousConfirmedCandleTs:
+                  current30m?.confirmedCandleTs,
+                newConfirmedCandleTs:
+                  snapshot30m?.confirmedCandleTs,
+                previousSampleCount:
+                  current30m?.sampleCount,
+                newSampleCount:
+                  snapshot30m?.sampleCount,
+                previousFingerprint:
+                  current30mFingerprint,
+                newFingerprint:
+                  server30mFingerprint,
+              },
+            )
+          } else {
+            console.log(
+              '[FINALIZED_SNAPSHOT_REFRESH_APPLIED_30M]',
+              {
+                ts: Date.now(),
+                previousConfirmedCandleTs:
+                  current30m?.confirmedCandleTs,
+                newConfirmedCandleTs:
+                  snapshot30m?.confirmedCandleTs,
+                previousSampleCount:
+                  current30m?.sampleCount,
+                newSampleCount:
+                  snapshot30m?.sampleCount,
+                previousFingerprint:
+                  current30mFingerprint,
+                newFingerprint:
+                  server30mFingerprint,
+              },
+            )
+          }
         } else {
-          console.log(
-            '[FINALIZED_SNAPSHOT_BOOTSTRAP_SKIPPED_30M]',
-            {
-              ts: Date.now(),
-              currentConfirmedCandleTs:
-                current30m?.confirmedCandleTs,
-              serverConfirmedCandleTs:
-                snapshot30m?.confirmedCandleTs,
-              currentSampleCount:
-                current30m?.sampleCount,
-              serverSampleCount:
-                snapshot30m?.sampleCount,
-              currentFingerprint:
-                current30mFingerprint,
-              serverFingerprint:
-                server30mFingerprint,
-              reason:
-                snapshot30m === null
-                  ? 'NO_SERVER_SNAPSHOT'
-                  : 'FINGERPRINT_EQUAL',
-            },
-          )
+          if (source === 'BOOTSTRAP') {
+            console.log(
+              '[FINALIZED_SNAPSHOT_BOOTSTRAP_SKIPPED_30M]',
+              {
+                ts: Date.now(),
+                currentConfirmedCandleTs:
+                  current30m?.confirmedCandleTs,
+                serverConfirmedCandleTs:
+                  snapshot30m?.confirmedCandleTs,
+                currentSampleCount:
+                  current30m?.sampleCount,
+                serverSampleCount:
+                  snapshot30m?.sampleCount,
+                currentFingerprint:
+                  current30mFingerprint,
+                serverFingerprint:
+                  server30mFingerprint,
+                reason:
+                  snapshot30m === null
+                    ? 'NO_SERVER_SNAPSHOT'
+                    : 'FINGERPRINT_EQUAL',
+              },
+            )
+          } else {
+            console.log(
+              '[FINALIZED_SNAPSHOT_REFRESH_SKIPPED_30M]',
+              {
+                ts: Date.now(),
+                currentConfirmedCandleTs:
+                  current30m?.confirmedCandleTs,
+                serverConfirmedCandleTs:
+                  snapshot30m?.confirmedCandleTs,
+                currentSampleCount:
+                  current30m?.sampleCount,
+                serverSampleCount:
+                  snapshot30m?.sampleCount,
+                currentFingerprint:
+                  current30mFingerprint,
+                serverFingerprint:
+                  server30mFingerprint,
+                reason:
+                  snapshot30m === null
+                    ? 'NO_SERVER_SNAPSHOT'
+                    : 'FINGERPRINT_EQUAL',
+              },
+            )
+          }
         }
 
         const store1h =
@@ -267,6 +306,7 @@ export function useFinalizedSnapshotBootstrap() {
             '[FINALIZED_SNAPSHOT_BOOTSTRAP_APPLIED_1H]',
             {
               ts: Date.now(),
+              source,
               previousConfirmedCandleTs:
                 current1h?.confirmedCandleTs,
               newConfirmedCandleTs:
@@ -286,6 +326,7 @@ export function useFinalizedSnapshotBootstrap() {
             '[FINALIZED_SNAPSHOT_BOOTSTRAP_SKIPPED_1H]',
             {
               ts: Date.now(),
+              source,
               currentConfirmedCandleTs:
                 current1h?.confirmedCandleTs,
               serverConfirmedCandleTs:
@@ -310,12 +351,36 @@ export function useFinalizedSnapshotBootstrap() {
           '[FINALIZED_SNAPSHOT_BOOTSTRAP_ERROR]',
           {
             ts: Date.now(),
+            source,
             error,
           },
         )
       }
     }
 
-    void bootstrap()
+    if (shouldRunBootstrap) {
+      void fetchAndApplyFinalizedSnapshots(
+        'BOOTSTRAP',
+      )
+    }
+
+    if (finalizedSnapshotRefreshIntervalId === null) {
+      finalizedSnapshotRefreshIntervalId =
+        window.setInterval(() => {
+          void fetchAndApplyFinalizedSnapshots(
+            'REFRESH',
+          )
+        }, FINALIZED_SNAPSHOT_REFRESH_INTERVAL_MS)
+    }
+
+    return () => {
+      if (finalizedSnapshotRefreshIntervalId !== null) {
+        window.clearInterval(
+          finalizedSnapshotRefreshIntervalId,
+        )
+
+        finalizedSnapshotRefreshIntervalId = null
+      }
+    }
   }, [])
 }
