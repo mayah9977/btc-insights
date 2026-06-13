@@ -1,7 +1,8 @@
+//lib/realtime/useRealtimePrice.ts  
+
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { subscribeMarketPrice } from '@/lib/realtime/marketChannel'
+import { useEffect, useMemo, useRef } from 'react'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 type RealtimePriceState = {
@@ -11,67 +12,42 @@ type RealtimePriceState = {
   lastUpdatedAt: number | null
 }
 
-const INITIAL_STATE: RealtimePriceState = {
-  price: null,
-  prevPrice: null,
-  connected: false,
-  lastUpdatedAt: null,
-}
-
 export function useRealtimePrice(symbol: string) {
-  const [state, setState] = useState<RealtimePriceState>(INITIAL_STATE)
+  void symbol
 
   const prevPriceRef = useRef<number | null>(null)
 
-  const lastUpdateRef = useRef(0)
+  const price = useVIPMarketStore((s) => s.price)
+  const ts = useVIPMarketStore((s) => s.ts)
+  const lastRealtimeTs = useVIPMarketStore(
+    (s) => s.lastRealtimeTs,
+  )
+  const realtimeDelayed = useVIPMarketStore(
+    (s) => s.realtimeDelayed,
+  )
 
   useEffect(() => {
-    if (!symbol) return
-
-    const upperSymbol = symbol.toUpperCase()
-
-    const unsubscribe = subscribeMarketPrice(
-      upperSymbol,
-      (price, ts) => {
-        const now = Date.now()
-
-        /* 🔥 throttle */
-        if (now - lastUpdateRef.current < 250) return
-        lastUpdateRef.current = now
-
-        /* =====================================================
-           🔥 핵심 추가 (원상복구)
-        ===================================================== */
-        useVIPMarketStore.getState().update({
-          price,
-          ts: ts ?? now,
-        })
-
-        /* 기존 UI 상태 유지 */
-        setState(() => {
-          const next = {
-            price,
-            prevPrice: prevPriceRef.current,
-            connected: true,
-            lastUpdatedAt: now,
-          }
-
-          prevPriceRef.current = price
-          return next
-        })
-      },
-    )
-
-    return () => {
-      unsubscribe()
-      prevPriceRef.current = null
-
-      setState((s) => ({
-        ...s,
-        connected: false,
-      }))
+    if (price > 0) {
+      prevPriceRef.current = price
     }
-  }, [symbol])
+  }, [price])
 
-  return state
+  return useMemo<RealtimePriceState>(() => {
+    const safePrice =
+      price > 0 ? price : null
+
+    return {
+      price: safePrice,
+      prevPrice: prevPriceRef.current,
+      connected:
+        lastRealtimeTs > 0 && !realtimeDelayed,
+      lastUpdatedAt:
+        ts > 0 ? ts : null,
+    }
+  }, [
+    price,
+    ts,
+    lastRealtimeTs,
+    realtimeDelayed,
+  ])
 }

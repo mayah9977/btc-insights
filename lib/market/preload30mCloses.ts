@@ -1,3 +1,5 @@
+//lib/market/preload30mCloses.ts  
+
 export async function preload30mCloses(
   symbol: string,
   limit = 50, // ✅ MACD 계산 안정성 확보

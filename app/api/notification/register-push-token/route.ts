@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-import { saveUserPushToken } from "@/lib/push/pushStore";
+// app/api/notification/register-push-token/route.ts
+
+import { NextRequest, NextResponse } from 'next/server'
+import { saveUserPushToken } from '@/lib/push/pushStore'
 
 /**
  * Client → Server Push Token Register
@@ -7,22 +9,24 @@ import { saveUserPushToken } from "@/lib/push/pushStore";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, token } = await req.json();
+    const { userId, token } = await req.json()
 
     if (!userId || !token) {
       return NextResponse.json(
-        { ok: false, error: "Missing userId or token" },
-        { status: 400 }
-      );
+        { ok: false, error: 'Missing userId or token' },
+        { status: 400 },
+      )
     }
 
-    console.log("[API] registerPushToken", userId, token);
+    await saveUserPushToken(userId, token)
 
-    await saveUserPushToken(userId, token);
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error("[API] registerPushToken error", err);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    console.error('[API] registerPushToken error', err)
+
+    return NextResponse.json(
+      { ok: false },
+      { status: 500 },
+    )
   }
 }

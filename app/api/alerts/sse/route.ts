@@ -36,11 +36,6 @@ export async function GET(req: NextRequest) {
 
       const send = (event: any) => {
         try {
-          console.log(
-            '[ALERTS SSE][SEND]',
-            event,
-          )
-
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify(
@@ -55,11 +50,6 @@ export async function GET(req: NextRequest) {
         message: string,
       ) => {
         try {
-          console.log(
-            '[ALERTS SSE][REDIS RAW]',
-            message,
-          )
-
           const parsed = JSON.parse(message)
 
           if (
@@ -72,11 +62,6 @@ export async function GET(req: NextRequest) {
           ) {
             return
           }
-
-          console.log(
-            '[ALERTS SSE][REDIS PARSED]',
-            parsed,
-          )
 
           send(parsed)
         } catch (error) {
@@ -138,10 +123,6 @@ export async function GET(req: NextRequest) {
             await (
               subscriber as any
             ).subscribe('realtime:alerts')
-
-            console.log(
-              '[ALERTS SSE] subscribed: realtime:alerts',
-            )
           }
         } catch (error) {
           console.error(

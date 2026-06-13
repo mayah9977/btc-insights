@@ -144,12 +144,16 @@ export default function ActionGateRendererMobile({
       >
         <motion.div
           aria-hidden
-          initial={{ x: '-20%' }}
-          animate={{ x: '20%' }}
+          initial={{
+            x: gate === 'OBSERVE' ? '0%' : '-20%',
+          }}
+          animate={{
+            x: gate === 'OBSERVE' ? '0%' : '20%',
+          }}
           transition={{
             duration: 7,
             ease: 'linear',
-            repeat: Infinity,
+            repeat: gate === 'OBSERVE' ? 0 : Infinity,
           }}
           className="
             pointer-events-none

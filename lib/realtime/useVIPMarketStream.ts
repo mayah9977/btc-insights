@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react'
 
 import {
   scheduleVIPMarketUpdate,
+  useVIPMarketStore,
 } from '@/lib/market/store/vipMarketStore'
 
 import { sseManager } from '@/lib/realtime/sseConnectionManager'
@@ -24,13 +25,27 @@ type VIPMarketStreamOptions = {
   throttle?: number
 }
 
-/**
- * 🔥 whaleIntensity SSOT = 0~100
- *
- * SSE 구버전 호환:
- * - 0~1 legacy value는 자동으로 0~100으로 승격
- * - 1 초과 값은 이미 0~100으로 보고 그대로 사용
- */
+type FundingBias =
+  | 'LONG_HEAVY'
+  | 'SHORT_HEAVY'
+  | 'NEUTRAL'
+
+type RealtimeFallbackPayload = {
+  ok?: boolean
+  source?: string
+  symbol?: string
+  ts?: number
+  data?: {
+    price?: number
+    oi?: number
+    fundingRate?: number
+  }
+  error?: string
+}
+
+const FALLBACK_HYDRATE_INTERVAL_MS = 30000
+const FUNDING_BIAS_THRESHOLD = 0.0015
+
 function normalizeWhaleIntensityScale(
   value: unknown,
 ): number | undefined {
@@ -43,6 +58,40 @@ function normalizeWhaleIntensityScale(
   }
 
   return Math.max(0, Math.min(100, n))
+}
+
+function resolveFundingBias(
+  fundingRate: number | undefined,
+): FundingBias {
+  if (fundingRate === undefined) {
+    return 'NEUTRAL'
+  }
+
+  if (fundingRate > FUNDING_BIAS_THRESHOLD) {
+    return 'LONG_HEAVY'
+  }
+
+  if (fundingRate < -FUNDING_BIAS_THRESHOLD) {
+    return 'SHORT_HEAVY'
+  }
+
+  return 'NEUTRAL'
+}
+
+/**
+ * Primary market-feed events에서만 사용합니다.
+ *
+ * 적용 대상:
+ * PRICE / OI / VOLUME / FUNDING / WHALE
+ *
+ * FMAI / ABSORPTION / SWEEP / MARKET_STATE /
+ * FINAL_DECISION 같은 derived event에는 붙이지 않습니다.
+ */
+function realtimeAlivePatch() {
+  return {
+    lastRealtimeTs: Date.now(),
+    realtimeDelayed: false,
+  }
 }
 
 export function useVIPMarketStream(
@@ -67,6 +116,8 @@ export function useVIPMarketStream(
   })
 
   const prevVolumeRef = useRef(0)
+  const fallbackInFlightRef = useRef(false)
+  const lastFallbackHydrateRef = useRef(0)
 
   const shouldUpdate = (
     key: keyof typeof lastUpdateRef.current,
@@ -84,9 +135,83 @@ export function useVIPMarketStream(
   }
 
   useEffect(() => {
-    const safeSymbol = symbol?.toUpperCase()
+    const safeSymbol =
+      symbol?.toUpperCase() || 'BTCUSDT'
 
-    /* ========================= PRICE ========================= */
+    const hydrateRealtimeFallback = async () => {
+      const now = Date.now()
+
+      if (fallbackInFlightRef.current) {
+        return
+      }
+
+      if (
+        now - lastFallbackHydrateRef.current <
+        FALLBACK_HYDRATE_INTERVAL_MS
+      ) {
+        return
+      }
+
+      fallbackInFlightRef.current = true
+      lastFallbackHydrateRef.current = now
+
+      try {
+        const res = await fetch(
+          `/api/market/realtime-fallback?symbol=${safeSymbol}`,
+          { cache: 'no-store' },
+        )
+
+        if (!res.ok) {
+          return
+        }
+
+        const json =
+          (await res.json()) as RealtimeFallbackPayload
+
+        const data = json?.data ?? {}
+
+        const price = Number(data.price)
+        const oi = Number(data.oi)
+        const fundingRate = Number(data.fundingRate)
+
+        const safeFundingRate =
+          Number.isFinite(fundingRate)
+            ? fundingRate
+            : undefined
+
+        const fundingBias =
+          safeFundingRate !== undefined
+            ? resolveFundingBias(safeFundingRate)
+            : undefined
+
+        scheduleVIPMarketUpdate({
+          ...(Number.isFinite(price) && { price }),
+          ...(Number.isFinite(oi) && { oi }),
+          ...(safeFundingRate !== undefined && {
+            fundingRate: safeFundingRate,
+          }),
+          ...(fundingBias !== undefined && {
+            fundingBias,
+          }),
+        })
+      } catch {
+      } finally {
+        fallbackInFlightRef.current = false
+      }
+    }
+
+    const staleTimer = window.setInterval(() => {
+      const state = useVIPMarketStore.getState()
+
+      if (
+        state.lastRealtimeTs > 0 &&
+        Date.now() - state.lastRealtimeTs > 15000
+      ) {
+        state.markRealtimeDelayed(true)
+        void hydrateRealtimeFallback()
+      }
+    }, 5000)
+
     const unsubPrice = sseManager.subscribe(
       SSE_EVENT.PRICE_TICK,
       (msg: any) => {
@@ -94,12 +219,14 @@ export function useVIPMarketStream(
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
         scheduleVIPMarketUpdate({
-          ...(msg.price !== undefined && { price: msg.price }),
+          ...realtimeAlivePatch(),
+          ...(msg.price !== undefined && {
+            price: msg.price,
+          }),
         })
       },
     )
 
-    /* ========================= OI ========================= */
     const unsubOI = sseManager.subscribe(
       SSE_EVENT.OI_TICK,
       (msg: any) => {
@@ -115,6 +242,7 @@ export function useVIPMarketStream(
           msg.delta !== undefined ? msg.delta : undefined
 
         scheduleVIPMarketUpdate({
+          ...realtimeAlivePatch(),
           ...(oi !== undefined && { oi }),
           ...(oiDelta !== undefined && { oiDelta }),
         })
@@ -126,7 +254,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= VOLUME ========================= */
     const unsubVolume = sseManager.subscribe(
       SSE_EVENT.VOLUME_TICK,
       (msg: any) => {
@@ -150,6 +277,7 @@ export function useVIPMarketStream(
         }
 
         scheduleVIPMarketUpdate({
+          ...realtimeAlivePatch(),
           ...(volume !== undefined && { volume }),
           ...(volumeRatio !== undefined && {
             volumeRatio,
@@ -162,7 +290,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= FUNDING ========================= */
     const unsubFunding = sseManager.subscribe(
       SSE_EVENT.FUNDING_RATE_TICK,
       (msg: any) => {
@@ -174,16 +301,11 @@ export function useVIPMarketStream(
             ? msg.fundingRate
             : undefined
 
-        let fundingBias: any = 'NEUTRAL'
-
-        if (fundingRate !== undefined) {
-          if (fundingRate > 0.0015)
-            fundingBias = 'LONG_HEAVY'
-          else if (fundingRate < -0.0015)
-            fundingBias = 'SHORT_HEAVY'
-        }
+        const fundingBias =
+          resolveFundingBias(fundingRate)
 
         scheduleVIPMarketUpdate({
+          ...realtimeAlivePatch(),
           ...(fundingRate !== undefined && {
             fundingRate,
           }),
@@ -192,23 +314,19 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= WHALE INTENSITY ========================= */
     const unsubWhaleIntensity = sseManager.subscribe(
       SSE_EVENT.WHALE_INTENSITY,
       (msg: any) => {
         if (!shouldUpdate('whaleIntensity')) return
         if (msg.symbol?.toUpperCase() !== safeSymbol) return
 
-        /**
-         * 🔥 whaleIntensity SSOT = 0~100
-         * legacy 0~1 SSE payload는 여기서 자동 승격합니다.
-         */
         const intensity =
           msg.intensity !== undefined
             ? normalizeWhaleIntensityScale(msg.intensity)
             : undefined
 
         scheduleVIPMarketUpdate({
+          ...realtimeAlivePatch(),
           ...(intensity !== undefined && {
             whaleIntensity: intensity,
           }),
@@ -221,7 +339,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= WHALE NET ========================= */
     const unsubWhaleNet = sseManager.subscribe(
       SSE_EVENT.WHALE_NET_PRESSURE,
       (msg: any) => {
@@ -239,6 +356,7 @@ export function useVIPMarketStream(
             : undefined
 
         scheduleVIPMarketUpdate({
+          ...realtimeAlivePatch(),
           ...(whaleNet !== undefined && { whaleNet }),
           ...(whaleNetRatio !== undefined && {
             whaleNetRatio,
@@ -247,7 +365,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= TRADE FLOW ========================= */
     const unsubTradeFlow = sseManager.subscribe(
       SSE_EVENT.WHALE_TRADE_FLOW,
       (msg: any) => {
@@ -259,7 +376,12 @@ export function useVIPMarketStream(
 
         if (ratio !== undefined) {
           scheduleVIPMarketUpdate({
+            ...realtimeAlivePatch(),
             whaleRatio: ratio,
+          })
+        } else {
+          scheduleVIPMarketUpdate({
+            ...realtimeAlivePatch(),
           })
         }
 
@@ -282,7 +404,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= FMAI ========================= */
     const unsubFMAI = subscribeVIPChannel(
       safeSymbol,
       (score) => {
@@ -294,7 +415,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= ABSORPTION ========================= */
     const unsubAbsorption = subscribeWhaleAbsorption(
       safeSymbol,
       (_, strength) => {
@@ -308,7 +428,6 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= SWEEP ========================= */
     const unsubSweep = subscribeLiquiditySweep(
       safeSymbol,
       (_, strength) => {
@@ -320,27 +439,39 @@ export function useVIPMarketStream(
       },
     )
 
-    /* ========================= MARKET STATE ========================= */
     const unsubMarketState = sseManager.subscribe(
       'MARKET_STATE',
       (msg: any) => {
         if (!shouldUpdate('marketState')) return
-        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
+        if (
+          msg.symbol &&
+          msg.symbol.toUpperCase() !== safeSymbol
+        ) {
+          return
+        }
+
+        const hasActionGateState =
+          msg.actionGateState !== undefined
 
         scheduleVIPMarketUpdate({
-          actionGateState:
-            msg.actionGateState ?? 'OBSERVE',
+          ...(hasActionGateState && {
+            actionGateState: msg.actionGateState,
+          }),
           ...(msg.macd && { macd: msg.macd }),
         })
       },
     )
 
-    /* ========================= FINAL DECISION ========================= */
     const unsubFinalDecision = sseManager.subscribe(
       'FINAL_DECISION',
       (msg: any) => {
         if (!shouldUpdate('finalDecision')) return
-        if (msg.symbol && msg.symbol.toUpperCase() !== safeSymbol) return
+        if (
+          msg.symbol &&
+          msg.symbol.toUpperCase() !== safeSymbol
+        ) {
+          return
+        }
 
         scheduleVIPMarketUpdate({
           ...(msg.decision && { decision: msg.decision }),
@@ -353,6 +484,8 @@ export function useVIPMarketStream(
     )
 
     return () => {
+      window.clearInterval(staleTimer)
+
       unsubPrice()
       unsubOI()
       unsubVolume()

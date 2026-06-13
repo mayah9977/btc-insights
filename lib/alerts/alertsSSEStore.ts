@@ -443,557 +443,599 @@ export const useAlertsSSEStore =
           !!SSE_EVENT,
         )
 
-        const es = new EventSource(
-          '/api/alerts/sse',
-        )
-
-        runtime.eventSource = es
-
-        es.onopen = () => {
-          console.log(
-            '[alerts-sse] connected: /api/alerts/sse',
-          )
-
-          set({
-            connected: true,
-            systemRisk: 'SAFE',
-            lastEventAt: Date.now(),
-          })
-        }
-
-        es.onmessage = async event => {
-          let data: any
-
-          try {
-            data = JSON.parse(
-              event.data,
-            )
-          } catch (error) {
-            console.error(
-              '[alerts-sse] parse error:',
-              error,
-            )
-
-            return
-          }
-
-          console.log(
-            'SSE RAW DATA:',
-            data,
-          )
-
-          set({
-            connected: true,
-            systemRisk: 'SAFE',
-            lastEventAt: Date.now(),
-          })
-
-          if (
-            data?.type ===
-            'ALERT_TRIGGERED'
-          ) {
-            const dedupeKey =
-              buildAlertDedupeKey(
-                data,
-              )
-
-            if (
-              markIfDuplicate(
-                runtime.processedEventMap,
-                dedupeKey,
-                CLIENT_DEDUPE_TTL_MS,
-              )
-            ) {
-              console.log(
-                '[alerts-sse] duplicate alert ignored:',
-                dedupeKey,
-              )
-
-              return
-            }
-
-            const payload = {
-              type: 'ALERT_TRIGGERED',
-              alertId:
-                data.alertId,
-              symbol:
-                data.symbol,
-              price: data.price,
-              ts:
-                data.ts ??
-                Date.now(),
-            }
-
-            console.log(
-              'SSE PAYLOAD:',
-              payload,
-            )
-
-            renderAlertToast({
-              symbol:
-                payload.symbol,
-              price:
-                payload.price,
-            })
-
-            void fetch(
-              '/api/notification/save',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type':
-                    'application/json',
-                },
-                body: JSON.stringify(
-                  {
-                    id: String(
-                      payload.alertId,
-                    ),
-
-                    type: 'BTC_ALERT',
-
-                    title: `${payload.symbol} price notification`,
-
-                    body: `Price ${payload.price} reached`,
-
-                    createdAt:
-                      payload.ts,
-                  },
-                ),
-              },
-            )
-
-            void startNotificationLoop(
-              dedupeKey,
-            )
-
-            window.dispatchEvent(
-              new CustomEvent(
-                'alerts:sse',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-
-            window.dispatchEvent(
-              new CustomEvent(
-                'alert:triggered',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-          }
-
-          if (
-            data?.type ===
-            'INDICATOR_SIGNAL'
-          ) {
-            const dedupeKey =
-              buildIndicatorDedupeKey(
-                data,
-              )
-
-            if (
-              markIfDuplicate(
-                runtime.processedEventMap,
-                dedupeKey,
-                CLIENT_DEDUPE_TTL_MS,
-              )
-            ) {
-              console.log(
-                '[alerts-sse] duplicate indicator ignored:',
-                dedupeKey,
-              )
-
-              return
-            }
-
-            console.log(
-              'INDICATOR SIGNAL:',
-              data,
-            )
-
-            const isVIP =
-              await getUserVIP()
-
-            if (!isVIP) {
-              return
-            }
-
-            const settings =
-              await getUserNotificationSettings(
-                'local',
-              )
-
-            const indicator =
-              normalizeIndicatorType(
-                data.indicator,
-              )
-
-            if (!indicator) {
-              console.log(
-                '[alerts-sse] invalid indicator ignored:',
-                data.indicator,
-              )
-
-              return
-            }
-
-            const timeframe =
-              normalizeIndicatorTimeframe(
-                data.timeframe,
-              )
-
-            if (
-              settings.indicatorEnabled?.[
-                indicator
-              ]?.[timeframe] === false
-            ) {
-              console.log(
-                '[alerts-sse] indicator disabled by timeframe settings:',
-                {
-                  indicator,
-                  timeframe,
-                },
-              )
-
-              return
-            }
-
-            const eventCandleTs =
-              Number(
-                data.eventCandleTs ??
-                  data.ts ??
-                  Date.now(),
-              )
-
-            const SIGNAL_MAP: Record<
-              IndicatorType,
-              Record<
-                string,
-                string
-              >
-            > = {
-              RSI: {
-                RSI_OVERBOUGHT:
-                  timeframe === '1h'
-                    ? 'RSI 과매수 진입'
-                    : 'RSI 과매수 진입',
-
-                RSI_OVERSOLD:
-                  timeframe === '1h'
-                    ? 'RSI 과매도 진입'
-                    : 'RSI 과매도 진입',
-              },
-
-              MACD: {
-                GOLDEN_CROSS:
-                  timeframe === '1h'
-                    ? 'MACD 골든크로스'
-                    : 'MACD 골든크로스',
-
-                DEAD_CROSS:
-                  timeframe === '1h'
-                    ? 'MACD 데드크로스'
-                    : 'MACD 데드크로스',
-              },
-
-              EMA: {
-                BULLISH_TREND:
-                  timeframe === '1h'
-                    ? 'EMA 상방 추세 전환'
-                    : 'EMA 상방 추세 전환',
-
-                BEARISH_TREND:
-                  timeframe === '1h'
-                    ? 'EMA 하방 추세 전환'
-                    : 'EMA 하방 추세 전환',
-              },
-            }
-
-            const label =
-              SIGNAL_MAP[
-                indicator
-              ]?.[
-                String(
-                  data.signal ?? '',
-                )
-              ] ??
-              `${indicator} ${String(
-                data.signal ?? '',
-              )}`
-
-            const payload = {
-              type: 'INDICATOR_SIGNAL',
-              symbol: String(
-                data.symbol ?? '',
-              ),
-              indicator,
-              signal: String(
-                data.signal ?? '',
-              ),
-              timeframe,
-              value: Number(
-                data.value,
-              ),
-              ts:
-                data.ts ??
-                Date.now(),
-              eventCandleTs,
-            }
-
-            renderIndicatorToast({
-              symbol:
-                payload.symbol,
-
-              indicator:
-                payload.indicator,
-
-              label,
-
-              signal:
-                payload.signal,
-
-              value:
-                payload.value,
-
-              timeframe:
-                payload.timeframe,
-            })
-
-            void fetch(
-              '/api/notification/save',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type':
-                    'application/json',
-                },
-
-                body: JSON.stringify(
-                  {
-                    id: dedupeKey,
-
-                    type: 'INDICATOR',
-
-                    title: `${payload.timeframe.toUpperCase()} ${payload.indicator} signal`,
-
-                    body: label,
-
-                    createdAt:
-                      payload.ts,
-                  },
-                ),
-              },
-            )
-
-            void startNotificationLoop(
-              dedupeKey,
-            )
-
-            window.dispatchEvent(
-              new CustomEvent(
-                'alerts:sse',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-
-            window.dispatchEvent(
-              new CustomEvent(
-                'indicator:triggered',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-          }
-
-          if (
-            data?.type ===
-            'INSTITUTIONAL_PATTERN_SIGNAL'
-          ) {
-            const dedupeKey =
-              buildInstitutionalPatternDedupeKey(
-                data,
-              )
-
-            if (
-              markIfDuplicate(
-                runtime.processedEventMap,
-                dedupeKey,
-                CLIENT_DEDUPE_TTL_MS,
-              )
-            ) {
-              console.log(
-                '[alerts-sse] duplicate institutional pattern ignored:',
-                dedupeKey,
-              )
-
-              return
-            }
-
-            console.log(
-              'INSTITUTIONAL PATTERN SIGNAL:',
-              data,
-            )
-
-            const isVIP =
-              await getUserVIP()
-
-            if (!isVIP) {
-              return
-            }
-
-            const settings =
-              await getUserNotificationSettings(
-                'local',
-              )
-
-            /**
-             * institutional realtime alert runtime gating
-             */
-            if (
-              settings.institutionalPatternEnabled ===
-              false
-            ) {
-              console.log(
-                '[alerts-sse] institutional pattern disabled by settings',
-              )
-
-              return
-            }
-
-            const payload = {
-              type: 'INSTITUTIONAL_PATTERN_SIGNAL',
-
-              pattern: String(
-                data.pattern ?? '',
-              ),
-
-              intensity: String(
-                data.intensity ??
-                  '',
-              ),
-
-              risk: String(
-                data.risk ?? '',
-              ),
-
-              summary: String(
-                data.summary ??
-                  '',
-              ),
-
-              confirmedCandleTs:
-                Number(
-                  data.confirmedCandleTs,
-                ),
-
-              ts:
-                data.ts ??
-                Date.now(),
-            }
-
-            renderInstitutionalPatternToast(
-              {
-                pattern:
-                  payload.pattern,
-
-                intensity:
-                  payload.intensity,
-
-                risk:
-                  payload.risk,
-
-                summary:
-                  payload.summary,
-              },
-            )
-
-            void fetch(
-              '/api/notification/save',
-              {
-                method: 'POST',
-
-                headers: {
-                  'Content-Type':
-                    'application/json',
-                },
-
-                body: JSON.stringify(
-                  {
-                    id: dedupeKey,
-
-                    type: 'INSTITUTIONAL_PATTERN',
-
-                    title:
-                      'Institutional Flow Signal',
-
-                    body: `${payload.pattern} · ${payload.intensity}`,
-
-                    createdAt:
-                      payload.ts,
-                  },
-                ),
-              },
-            )
-
-            void startNotificationLoop(
-              dedupeKey,
-            )
-
-            window.dispatchEvent(
-              new CustomEvent(
-                'alerts:sse',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-
-            // MODIFIED: Institutional notification history ingestion event.
-            window.dispatchEvent(
-              new CustomEvent(
-                'institutional-pattern:triggered',
-                {
-                  detail:
-                    payload,
-                },
-              ),
-            )
-          }
-        }
-
-        es.onerror = error => {
-          console.error(
-            '[alerts-sse] connection error:',
-            error,
-          )
-
-          set({
-            connected: false,
-            systemRisk: 'CRITICAL',
-          })
-        }
+        let connectTimer:
+          | ReturnType<typeof setTimeout>
+          | null = null
+
+        let activeEventSource:
+          | EventSource
+          | null = null
 
         runtime.unsubscribe = () => {
-          es.close()
+          if (connectTimer) {
+            clearTimeout(connectTimer)
+            connectTimer = null
+          }
+
+          if (activeEventSource) {
+            activeEventSource.close()
+          }
 
           if (
-            runtime.eventSource === es
+            runtime.eventSource ===
+            activeEventSource
           ) {
             runtime.eventSource = null
           }
+
+          activeEventSource = null
         }
+
+        const connectAlertsSSE = () => {
+          const es = new EventSource(
+            '/api/alerts/sse',
+          )
+
+          activeEventSource = es
+          runtime.eventSource = es
+
+          es.onopen = () => {
+            console.log(
+              '[alerts-sse] connected: /api/alerts/sse',
+            )
+
+            set({
+              connected: true,
+              systemRisk: 'SAFE',
+              lastEventAt: Date.now(),
+            })
+          }
+
+          es.onmessage = async event => {
+            let data: any
+
+            try {
+              data = JSON.parse(
+                event.data,
+              )
+            } catch (error) {
+              console.error(
+                '[alerts-sse] parse error:',
+                error,
+              )
+
+              return
+            }
+
+            console.log(
+              'SSE RAW DATA:',
+              data,
+            )
+
+            set({
+              connected: true,
+              systemRisk: 'SAFE',
+              lastEventAt: Date.now(),
+            })
+
+            if (
+              data?.type ===
+              'ALERT_TRIGGERED'
+            ) {
+              const dedupeKey =
+                buildAlertDedupeKey(
+                  data,
+                )
+
+              if (
+                markIfDuplicate(
+                  runtime.processedEventMap,
+                  dedupeKey,
+                  CLIENT_DEDUPE_TTL_MS,
+                )
+              ) {
+                console.log(
+                  '[alerts-sse] duplicate alert ignored:',
+                  dedupeKey,
+                )
+
+                return
+              }
+
+              const payload = {
+                type: 'ALERT_TRIGGERED',
+                alertId:
+                  data.alertId,
+                symbol:
+                  data.symbol,
+                price: data.price,
+                ts:
+                  data.ts ??
+                  Date.now(),
+              }
+
+              console.log(
+                'SSE PAYLOAD:',
+                payload,
+              )
+
+              renderAlertToast({
+                symbol:
+                  payload.symbol,
+                price:
+                  payload.price,
+              })
+
+              void fetch(
+                '/api/notification/save',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+                  body: JSON.stringify(
+                    {
+                      id: String(
+                        payload.alertId,
+                      ),
+
+                      type: 'BTC_ALERT',
+
+                      title: `${payload.symbol} price notification`,
+
+                      body: `Price ${payload.price} reached`,
+
+                      createdAt:
+                        payload.ts,
+                    },
+                  ),
+                },
+              )
+
+              void startNotificationLoop(
+                dedupeKey,
+              )
+
+              window.dispatchEvent(
+                new CustomEvent(
+                  'alerts:sse',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+
+              window.dispatchEvent(
+                new CustomEvent(
+                  'alert:triggered',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+            }
+
+            if (
+              data?.type ===
+              'INDICATOR_SIGNAL'
+            ) {
+              const dedupeKey =
+                buildIndicatorDedupeKey(
+                  data,
+                )
+
+              if (
+                markIfDuplicate(
+                  runtime.processedEventMap,
+                  dedupeKey,
+                  CLIENT_DEDUPE_TTL_MS,
+                )
+              ) {
+                console.log(
+                  '[alerts-sse] duplicate indicator ignored:',
+                  dedupeKey,
+                )
+
+                return
+              }
+
+              console.log(
+                'INDICATOR SIGNAL:',
+                data,
+              )
+
+              const isVIP =
+                await getUserVIP()
+
+              if (!isVIP) {
+                return
+              }
+
+              const settings =
+                await getUserNotificationSettings(
+                  'local',
+                )
+
+              const indicator =
+                normalizeIndicatorType(
+                  data.indicator,
+                )
+
+              if (!indicator) {
+                console.log(
+                  '[alerts-sse] invalid indicator ignored:',
+                  data.indicator,
+                )
+
+                return
+              }
+
+              const timeframe =
+                normalizeIndicatorTimeframe(
+                  data.timeframe,
+                )
+
+              if (
+                settings.indicatorEnabled?.[
+                  indicator
+                ]?.[timeframe] === false
+              ) {
+                console.log(
+                  '[alerts-sse] indicator disabled by timeframe settings:',
+                  {
+                    indicator,
+                    timeframe,
+                  },
+                )
+
+                return
+              }
+
+              const eventCandleTs =
+                Number(
+                  data.eventCandleTs ??
+                    data.ts ??
+                    Date.now(),
+                )
+
+              const SIGNAL_MAP: Record<
+                IndicatorType,
+                Record<
+                  string,
+                  string
+                >
+              > = {
+                RSI: {
+                  RSI_OVERBOUGHT:
+                    timeframe === '1h'
+                      ? 'RSI 과매수 진입'
+                      : 'RSI 과매수 진입',
+
+                  RSI_OVERSOLD:
+                    timeframe === '1h'
+                      ? 'RSI 과매도 진입'
+                      : 'RSI 과매도 진입',
+                },
+
+                MACD: {
+                  GOLDEN_CROSS:
+                    timeframe === '1h'
+                      ? 'MACD 골든크로스'
+                      : 'MACD 골든크로스',
+
+                  DEAD_CROSS:
+                    timeframe === '1h'
+                      ? 'MACD 데드크로스'
+                      : 'MACD 데드크로스',
+                },
+
+                EMA: {
+                  BULLISH_TREND:
+                    timeframe === '1h'
+                      ? 'EMA 상방 추세 전환'
+                      : 'EMA 상방 추세 전환',
+
+                  BEARISH_TREND:
+                    timeframe === '1h'
+                      ? 'EMA 하방 추세 전환'
+                      : 'EMA 하방 추세 전환',
+                },
+              }
+
+              const label =
+                SIGNAL_MAP[
+                  indicator
+                ]?.[
+                  String(
+                    data.signal ?? '',
+                  )
+                ] ??
+                `${indicator} ${String(
+                  data.signal ?? '',
+                )}`
+
+              const payload = {
+                type: 'INDICATOR_SIGNAL',
+                symbol: String(
+                  data.symbol ?? '',
+                ),
+                indicator,
+                signal: String(
+                  data.signal ?? '',
+                ),
+                timeframe,
+                value: Number(
+                  data.value,
+                ),
+                ts:
+                  data.ts ??
+                  Date.now(),
+                eventCandleTs,
+              }
+
+              renderIndicatorToast({
+                symbol:
+                  payload.symbol,
+
+                indicator:
+                  payload.indicator,
+
+                label,
+
+                signal:
+                  payload.signal,
+
+                value:
+                  payload.value,
+
+                timeframe:
+                  payload.timeframe,
+              })
+
+              void fetch(
+                '/api/notification/save',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+
+                  body: JSON.stringify(
+                    {
+                      id: dedupeKey,
+
+                      type: 'INDICATOR',
+
+                      title: `${payload.timeframe.toUpperCase()} ${payload.indicator} signal`,
+
+                      body: label,
+
+                      createdAt:
+                        payload.ts,
+                    },
+                  ),
+                },
+              )
+
+              void startNotificationLoop(
+                dedupeKey,
+              )
+
+              window.dispatchEvent(
+                new CustomEvent(
+                  'alerts:sse',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+
+              window.dispatchEvent(
+                new CustomEvent(
+                  'indicator:triggered',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+            }
+
+            if (
+              data?.type ===
+              'INSTITUTIONAL_PATTERN_SIGNAL'
+            ) {
+              const dedupeKey =
+                buildInstitutionalPatternDedupeKey(
+                  data,
+                )
+
+              if (
+                markIfDuplicate(
+                  runtime.processedEventMap,
+                  dedupeKey,
+                  CLIENT_DEDUPE_TTL_MS,
+                )
+              ) {
+                console.log(
+                  '[alerts-sse] duplicate institutional pattern ignored:',
+                  dedupeKey,
+                )
+
+                return
+              }
+
+              console.log(
+                'INSTITUTIONAL PATTERN SIGNAL:',
+                data,
+              )
+
+              const isVIP =
+                await getUserVIP()
+
+              if (!isVIP) {
+                return
+              }
+
+              const settings =
+                await getUserNotificationSettings(
+                  'local',
+                )
+
+              /**
+               * institutional realtime alert runtime gating
+               */
+              if (
+                settings.institutionalPatternEnabled ===
+                false
+              ) {
+                console.log(
+                  '[alerts-sse] institutional pattern disabled by settings',
+                )
+
+                return
+              }
+
+              const payload = {
+                type: 'INSTITUTIONAL_PATTERN_SIGNAL',
+
+                pattern: String(
+                  data.pattern ?? '',
+                ),
+
+                intensity: String(
+                  data.intensity ??
+                    '',
+                ),
+
+                risk: String(
+                  data.risk ?? '',
+                ),
+
+                summary: String(
+                  data.summary ??
+                    '',
+                ),
+
+                confirmedCandleTs:
+                  Number(
+                    data.confirmedCandleTs,
+                  ),
+
+                ts:
+                  data.ts ??
+                  Date.now(),
+              }
+
+              renderInstitutionalPatternToast(
+                {
+                  pattern:
+                    payload.pattern,
+
+                  intensity:
+                    payload.intensity,
+
+                  risk:
+                    payload.risk,
+
+                  summary:
+                    payload.summary,
+                },
+              )
+
+              void fetch(
+                '/api/notification/save',
+                {
+                  method: 'POST',
+
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+
+                  body: JSON.stringify(
+                    {
+                      id: dedupeKey,
+
+                      type: 'INSTITUTIONAL_PATTERN',
+
+                      title:
+                        'Institutional Flow Signal',
+
+                      body: `${payload.pattern} · ${payload.intensity}`,
+
+                      createdAt:
+                        payload.ts,
+                    },
+                  ),
+                },
+              )
+
+              void startNotificationLoop(
+                dedupeKey,
+              )
+
+              window.dispatchEvent(
+                new CustomEvent(
+                  'alerts:sse',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+
+              // MODIFIED: Institutional notification history ingestion event.
+              window.dispatchEvent(
+                new CustomEvent(
+                  'institutional-pattern:triggered',
+                  {
+                    detail:
+                      payload,
+                  },
+                ),
+              )
+            }
+          }
+
+          es.onerror = error => {
+            console.warn(
+              '[alerts-sse] connection error:',
+              error,
+            )
+
+            set({
+              connected: false,
+              systemRisk: 'CRITICAL',
+            })
+          }
+
+          runtime.unsubscribe = () => {
+            if (connectTimer) {
+              clearTimeout(connectTimer)
+              connectTimer = null
+            }
+
+            es.close()
+
+            if (
+              runtime.eventSource === es
+            ) {
+              runtime.eventSource = null
+            }
+
+            activeEventSource = null
+          }
+        }
+
+        connectTimer = setTimeout(() => {
+          connectAlertsSSE()
+        }, 1500)
 
         runtime.watchdogTimer =
           setInterval(() => {
@@ -1058,4 +1100,4 @@ export const useAlertsSSEStore =
       },
     }),
   )
-
+  

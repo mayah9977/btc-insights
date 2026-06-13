@@ -1,3 +1,5 @@
+// lib/market/candleAggregator30m.ts
+
 import { calculateBollingerBands } from './bollinger'
 import { evaluateConfirmedBollinger } from './evaluateConfirmedBollinger'
 import { evaluateRealtimeBollinger } from './evaluateRealtimeBollinger'
@@ -82,11 +84,6 @@ export class CandleAggregator30m {
       const closes = await preload30mCloses(this.symbol, 50)
 
       this.closes = closes
-
-      console.log('[BB_PRELOAD_DONE]', {
-        symbol: this.symbol,
-        loaded: closes.length,
-      })
     } catch (e) {
       console.error('[BB_PRELOAD_FAILED]', e)
     }
@@ -181,7 +178,10 @@ export class CandleAggregator30m {
         volume,
       }
 
-      return { finished, confirmedSignal }
+      return {
+        finished,
+        confirmedSignal,
+      }
     }
 
     this.current.high = Math.max(this.current.high, tick.price)
@@ -189,7 +189,10 @@ export class CandleAggregator30m {
     this.current.close = tick.price
     this.current.volume += volume
 
-    const realtimeCloses = [...this.closes, this.current.close]
+    const realtimeCloses = [
+      ...this.closes,
+      this.current.close,
+    ]
 
     const bbRealtime = calculateBollingerBands({
       closes: realtimeCloses,
@@ -229,6 +232,8 @@ export class CandleAggregator30m {
       at: Date.now(),
     }
 
-    return { liveCommentary }
+    return {
+      liveCommentary,
+    }
   }
 }

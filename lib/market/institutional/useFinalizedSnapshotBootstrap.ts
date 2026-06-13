@@ -125,8 +125,18 @@ function shouldApplySnapshot(
 
 export function useFinalizedSnapshotBootstrap() {
   useEffect(() => {
+    const current30mSnapshot =
+      useInstitutionalEvidenceStore.getState().snapshot
+
+    const current1hSnapshot =
+      useInstitutionalEvidenceStore1h.getState().snapshot
+
+    const storeHydrated =
+      Boolean(current30mSnapshot) &&
+      Boolean(current1hSnapshot)
+
     const shouldRunBootstrap =
-      !bootstrapped
+      !bootstrapped || !storeHydrated
 
     if (shouldRunBootstrap) {
       bootstrapped = true
@@ -254,29 +264,6 @@ export function useFinalizedSnapshotBootstrap() {
                     : 'FINGERPRINT_EQUAL',
               },
             )
-          } else {
-            console.log(
-              '[FINALIZED_SNAPSHOT_REFRESH_SKIPPED_30M]',
-              {
-                ts: Date.now(),
-                currentConfirmedCandleTs:
-                  current30m?.confirmedCandleTs,
-                serverConfirmedCandleTs:
-                  snapshot30m?.confirmedCandleTs,
-                currentSampleCount:
-                  current30m?.sampleCount,
-                serverSampleCount:
-                  snapshot30m?.sampleCount,
-                currentFingerprint:
-                  current30mFingerprint,
-                serverFingerprint:
-                  server30mFingerprint,
-                reason:
-                  snapshot30m === null
-                    ? 'NO_SERVER_SNAPSHOT'
-                    : 'FINGERPRINT_EQUAL',
-              },
-            )
           }
         }
 
@@ -321,7 +308,7 @@ export function useFinalizedSnapshotBootstrap() {
                 server1hFingerprint,
             },
           )
-        } else {
+        } else if (source === 'BOOTSTRAP') {
           console.log(
             '[FINALIZED_SNAPSHOT_BOOTSTRAP_SKIPPED_1H]',
             {

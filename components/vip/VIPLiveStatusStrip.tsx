@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 const FLASH_DURATION = 200
 
@@ -17,6 +18,11 @@ type MarketState = {
 }
 
 function VIPLiveStatusStripComponent() {
+  const realtimeDelayed =
+    useVIPMarketStore(
+      (state) => state.realtimeDelayed,
+    )
+
   const marketRef = useRef<MarketState>({
     oi: null,
     oiDelta: null,
@@ -292,6 +298,12 @@ function VIPLiveStatusStripComponent() {
           Whale Energy (고래 개입 강도){' '}
           {whaleIntensity?.toFixed(2) ?? '--'}
         </div>
+
+        {realtimeDelayed && (
+          <div className="text-[11px] font-semibold text-yellow-400">
+            Real-time data delayed
+          </div>
+        )}
       </div>
 
       <motion.div

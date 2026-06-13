@@ -1,3 +1,5 @@
+//lib/market/marketLastStateStore.ts  
+
 /**
  * =========================
  * Market SSOT (In-Memory)

@@ -129,16 +129,19 @@ export function InstitutionalPatternAlertCard() {
       return null
     }
 
+    const confirmationSnapshot1h =
+      snapshot1h?.confirmedCandleTs ===
+      finalized.confirmedCandleTs
+        ? snapshot1h
+        : null
+
     const confirmation1h =
       buildInstitutionalConfirmation1h(
         detected.type,
-        snapshot1h,
+        confirmationSnapshot1h,
       )
 
-    if (
-      confirmation1h.action === 'BLOCK' ||
-      confirmation1h.action === 'WATCH'
-    ) {
+    if (confirmation1h.action !== 'ALLOW') {
       return null
     }
 

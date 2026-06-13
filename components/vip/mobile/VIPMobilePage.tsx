@@ -1,19 +1,20 @@
-//components/vip/mobile/VIPMobilePage.tsx
+// components/vip/mobile/VIPMobilePage.tsx
 
 'use client'
 
 import dynamic from 'next/dynamic'
-import { memo, useMemo } from 'react'
+import {
+  memo,
+  useMemo,
+} from 'react'
 import { getMarketSnapshot } from '@/lib/market/engine/marketSnapshot'
 
 import VIPTopKPIBar from '@/components/vip/VIPTopKPIBar'
 import VIPRiskEngineBannerMobile from './VIPRiskEngineBannerMobile'
 import VIPLiveStatusStripMobile from './VIPLiveStatusStripMobile'
 import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
-import VIPActionGateContextBarMobile from './VIPActionGateContextBarMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-import { useVIPMarketStream } from '@/lib/realtime/useVIPMarketStream'
 import { useFinalizedSnapshotBootstrap } from '@/lib/market/institutional/useFinalizedSnapshotBootstrap'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
@@ -23,6 +24,15 @@ import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import type { FinalNarrativeReport } from '@/lib/market/narrative/types'
+
+const VIPActionGateContextBarMobileInner = dynamic(
+  () => import('./VIPActionGateContextBarMobile'),
+  { ssr: false },
+)
+
+const VIPActionGateContextBarMobileMemo = memo(
+  VIPActionGateContextBarMobileInner,
+)
 
 const VIPWhaleMiniCharts = dynamic(
   () => import('./VIPWhaleMiniCharts'),
@@ -108,19 +118,13 @@ type Props = {
 export default function VIPMobilePage(props: Props) {
   const symbol = 'BTCUSDT'
 
-  /* ===============================
-     Finalized Snapshot Bootstrap
-  =============================== */
   useFinalizedSnapshotBootstrap()
 
-  /* ===============================
-     SSE (1곳만 유지)
-  =============================== */
-  useVIPMarketStream(symbol, { throttle: 1500 })
+  /*
+   * SSE는 app/[locale]/casino/vip/vipClientPage.tsx에서만 실행합니다.
+   * VIPMobilePage는 VIP market store를 read-only로 사용합니다.
+   */
 
-  /* ===============================
-     준비 상태
-  =============================== */
   const isReady = useVIPMarketStore((s) => {
     return (
       s.ts > 0 &&
@@ -131,9 +135,6 @@ export default function VIPMobilePage(props: Props) {
     )
   })
 
-  /* ===============================
-     Bollinger Hook (1곳만)
-  =============================== */
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
@@ -148,9 +149,6 @@ export default function VIPMobilePage(props: Props) {
     return confirmed?.signalType ?? live?.signalType
   }, [confirmed?.signalType, live?.signalType])
 
-  /* ===============================
-     Narrative 생성 (1곳만)
-  =============================== */
   const sentence = useMemo<FinalNarrativeReport | null>(() => {
     if (!signalType || !isReady) return null
 
@@ -160,17 +158,13 @@ export default function VIPMobilePage(props: Props) {
     )
   }, [signalType, isReady])
 
-  /* ===============================
-     Render
-  =============================== */
   return (
     <main className="space-y-6 pb-20">
-
       <VIPTopKPIBar avoidedExtremeCount={0} />
 
       <VIPRiskEngineBannerMobile />
 
-      <VIPActionGateContextBarMobile
+      <VIPActionGateContextBarMobileMemo
         symbol={symbol}
         signalType={signalType}
         sentence={sentence}

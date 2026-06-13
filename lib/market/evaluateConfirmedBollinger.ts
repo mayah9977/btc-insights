@@ -75,20 +75,6 @@ export function evaluateConfirmedBollinger(
   if (closeAbove) {
     if (prevUpperOutside) {
       if (isBearish) {
-        console.log(
-          '[CONFIRMED_BOLLINGER_EVAL]',
-          {
-            ts: Date.now(),
-            confirmed: true,
-            signalType:
-              BollingerSignalType.OUTSIDE_UPPER_RETRACE_OVER_UPPER,
-            close,
-            upperBand,
-            lowerBand,
-            prevSignalType,
-          },
-        )
-
         return {
           enabled: true,
           signalType:
@@ -96,40 +82,12 @@ export function evaluateConfirmedBollinger(
         }
       }
 
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.INSIDE_UPPER_BREAK_AND_DEVIATE,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
           BollingerSignalType.INSIDE_UPPER_BREAK_AND_DEVIATE,
       }
     }
-
-    console.log(
-      '[CONFIRMED_BOLLINGER_EVAL]',
-      {
-        ts: Date.now(),
-        confirmed: true,
-        signalType:
-          BollingerSignalType.INSIDE_UPPER_CLOSE_ABOVE,
-        close,
-        upperBand,
-        lowerBand,
-        prevSignalType,
-      },
-    )
 
     return {
       enabled: true,
@@ -143,40 +101,12 @@ export function evaluateConfirmedBollinger(
    * ========================================================== */
   if (closeBelow) {
     if (prevLowerOutside) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.INSIDE_LOWER_BREAK_AND_DEVIATE,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
           BollingerSignalType.INSIDE_LOWER_BREAK_AND_DEVIATE,
       }
     }
-
-    console.log(
-      '[CONFIRMED_BOLLINGER_EVAL]',
-      {
-        ts: Date.now(),
-        confirmed: true,
-        signalType:
-          BollingerSignalType.INSIDE_LOWER_CLOSE_BELOW,
-        close,
-        upperBand,
-        lowerBand,
-        prevSignalType,
-      },
-    )
 
     return {
       enabled: true,
@@ -193,20 +123,6 @@ export function evaluateConfirmedBollinger(
      * 3-1️⃣ Upper RETURN
      * ---------------------------------------------------------- */
     if (prevUpperOutside) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.OUTSIDE_UPPER_RETURN_INSIDE,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
@@ -223,20 +139,6 @@ export function evaluateConfirmedBollinger(
       isBullish &&
       bodyRatio >= 0.5
     ) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.OUTSIDE_LOWER_CROSS_UP_OVER_LOWER,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
@@ -248,20 +150,6 @@ export function evaluateConfirmedBollinger(
      * 3-3️⃣ Lower RETURN
      * ---------------------------------------------------------- */
     if (prevLowerOutside) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.OUTSIDE_LOWER_RETURN_INSIDE,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
@@ -283,20 +171,6 @@ export function evaluateConfirmedBollinger(
 
     // 중앙 30% 구간 (0.35 ~ 0.65)
     if (positionRatio >= 0.35 && positionRatio <= 0.65) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.INSIDE_CENTER,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
@@ -306,40 +180,12 @@ export function evaluateConfirmedBollinger(
 
     // 중앙 밖은 구조적으로 상/하단 쪽으로 분류
     if (positionRatio > 0.65) {
-      console.log(
-        '[CONFIRMED_BOLLINGER_EVAL]',
-        {
-          ts: Date.now(),
-          confirmed: true,
-          signalType:
-            BollingerSignalType.INSIDE_UPPER_TOUCH,
-          close,
-          upperBand,
-          lowerBand,
-          prevSignalType,
-        },
-      )
-
       return {
         enabled: true,
         signalType:
           BollingerSignalType.INSIDE_UPPER_TOUCH,
       }
     }
-
-    console.log(
-      '[CONFIRMED_BOLLINGER_EVAL]',
-      {
-        ts: Date.now(),
-        confirmed: true,
-        signalType:
-          BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK,
-        close,
-        upperBand,
-        lowerBand,
-        prevSignalType,
-      },
-    )
 
     return {
       enabled: true,
@@ -351,20 +197,6 @@ export function evaluateConfirmedBollinger(
   /* ==========================================================
    * 4️⃣ Fallback
    * ========================================================== */
-
-  console.log(
-    '[CONFIRMED_BOLLINGER_EVAL]',
-    {
-      ts: Date.now(),
-      confirmed: true,
-      signalType:
-        BollingerSignalType.INSIDE_CENTER,
-      close,
-      upperBand,
-      lowerBand,
-      prevSignalType,
-    },
-  )
 
   return {
     enabled: true,

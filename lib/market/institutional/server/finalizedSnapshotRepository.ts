@@ -1,4 +1,4 @@
-//lib/market/institutional/sever/finalizedSnapshotRepository.ts   
+// lib/market/institutional/server/finalizedSnapshotRepository.ts
 
 import { redis } from '@/lib/redis/server'
 
@@ -25,25 +25,12 @@ async function saveFinalizedSnapshot(
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_1H]',
 ) {
+  void logLabel
+
   try {
     await redis.set(
       key,
       JSON.stringify(snapshot),
-    )
-
-    console.log(
-      logLabel,
-      {
-        key,
-        confirmedCandleTs:
-          snapshot.confirmedCandleTs,
-        sampleCount:
-          snapshot.sampleCount,
-        startTs:
-          snapshot.startTs,
-        endTs:
-          snapshot.endTs,
-      },
     )
   } catch (error) {
     console.error(
@@ -66,39 +53,16 @@ async function loadFinalizedSnapshot<
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
 ): Promise<TSnapshot | null> {
+  void logLabel
+
   try {
     const raw = await redis.get(key)
 
     if (!raw) {
-      console.log(
-        logLabel,
-        {
-          key,
-          found: false,
-        },
-      )
-
       return null
     }
 
     if (typeof raw === 'object') {
-      console.log(
-        logLabel,
-        {
-          key,
-          found: true,
-          parsedFromObject: true,
-          confirmedCandleTs:
-            (raw as any).confirmedCandleTs,
-          sampleCount:
-            (raw as any).sampleCount,
-          startTs:
-            (raw as any).startTs,
-          endTs:
-            (raw as any).endTs,
-        },
-      )
-
       return raw as TSnapshot
     }
 
@@ -106,24 +70,6 @@ async function loadFinalizedSnapshot<
       const parsed = JSON.parse(
         String(raw),
       ) as TSnapshot
-
-      console.log(
-        logLabel,
-        {
-          key,
-          found: true,
-          parsedFromString: true,
-          confirmedCandleTs:
-            (parsed as any)
-              ?.confirmedCandleTs,
-          sampleCount:
-            (parsed as any)?.sampleCount,
-          startTs:
-            (parsed as any)?.startTs,
-          endTs:
-            (parsed as any)?.endTs,
-        },
-      )
 
       return parsed
     } catch (error) {

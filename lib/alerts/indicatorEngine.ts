@@ -139,6 +139,11 @@ const KLINE_CACHE_TTL_MS = 15_000
 
 const EMA_SPREAD_MIN_RATIO = 0.00035
 
+const MACD_ALERT_COOLDOWN_MS =
+  60 * 60 * 1000
+
+const lastMacdAlertMap: Record<string, number> = {}
+
 function isBoolean(value: unknown): value is boolean {
   return typeof value === 'boolean'
 }
@@ -250,11 +255,6 @@ async function initIndicatorSettings() {
       indicatorEnabled =
         normalizeIndicatorEnabled(parsed)
 
-      console.log(
-        '[indicatorEngine][Redis Loaded]',
-        indicatorEnabled,
-      )
-
       /**
        * Migration-safe writeback.
        *
@@ -288,9 +288,6 @@ async function initIndicatorSettings() {
         REDIS_KEY,
         JSON.stringify(fallback),
       )
-      console.log(
-        '[indicatorEngine][Fallback Saved to Redis]',
-      )
     } catch (err) {
       console.error(
         '[indicatorEngine][Fallback Save Error]',
@@ -314,6 +311,50 @@ function buildTimeframeKey(
   timeframe: Timeframe,
 ) {
   return `${symbol}:${timeframe}`
+}
+
+function buildMacdAlertKey(
+  symbol: string,
+  timeframe: Timeframe,
+  signal: string,
+) {
+  return `${symbol}:${timeframe}:MACD:${signal}`
+}
+
+function isMacdAlertCoolingDown(
+  symbol: string,
+  timeframe: Timeframe,
+  signal: string,
+) {
+  const key =
+    buildMacdAlertKey(
+      symbol,
+      timeframe,
+      signal,
+    )
+
+  const last =
+    lastMacdAlertMap[key] ?? 0
+
+  return (
+    Date.now() - last <
+    MACD_ALERT_COOLDOWN_MS
+  )
+}
+
+function markMacdAlertSent(
+  symbol: string,
+  timeframe: Timeframe,
+  signal: string,
+) {
+  const key =
+    buildMacdAlertKey(
+      symbol,
+      timeframe,
+      signal,
+    )
+
+  lastMacdAlertMap[key] = Date.now()
 }
 
 function getCloses(klines: Kline[]) {
@@ -780,6 +821,7 @@ export function detectSignals(args: {
   eventCandleTs?: number
   rsi: number | null
   macd: MACDResult | null
+  macd1h?: MACDResult | null
   ema: ReturnType<typeof calculateEMASet>
 }): IndicatorEvent[] {
   const {
@@ -788,6 +830,7 @@ export function detectSignals(args: {
     eventCandleTs = Date.now(),
     rsi,
     macd,
+    macd1h,
     ema,
   } = args
 
@@ -873,6 +916,28 @@ export function detectSignals(args: {
     Number.isFinite(macd.prevMacd) &&
     Number.isFinite(macd.prevSignal)
   ) {
+    const macd1hBullish =
+      macd1h !== null &&
+      macd1h !== undefined &&
+      Number.isFinite(macd1h.macd) &&
+      Number.isFinite(macd1h.signal) &&
+      macd1h.macd > macd1h.signal
+
+    const macd1hBearish =
+      macd1h !== null &&
+      macd1h !== undefined &&
+      Number.isFinite(macd1h.macd) &&
+      Number.isFinite(macd1h.signal) &&
+      macd1h.macd < macd1h.signal
+
+    const macdGoldenConfirmationOk =
+      timeframe === '1h' ||
+      macd1hBullish
+
+    const macdDeadConfirmationOk =
+      timeframe === '1h' ||
+      macd1hBearish
+
     let nextTrend: SignalState['macdTrend'] =
       'EQUAL'
 
@@ -885,9 +950,21 @@ export function detectSignals(args: {
     if (
       prevState.macdTrend !== nextTrend &&
       macd.crossedUp &&
+      macdGoldenConfirmationOk &&
+      !isMacdAlertCoolingDown(
+        symbol,
+        timeframe,
+        'GOLDEN_CROSS',
+      ) &&
       lastSignals[stateKey].MACD !==
         'GOLDEN_CROSS'
     ) {
+      markMacdAlertSent(
+        symbol,
+        timeframe,
+        'GOLDEN_CROSS',
+      )
+
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'MACD',
@@ -906,9 +983,21 @@ export function detectSignals(args: {
     if (
       prevState.macdTrend !== nextTrend &&
       macd.crossedDown &&
+      macdDeadConfirmationOk &&
+      !isMacdAlertCoolingDown(
+        symbol,
+        timeframe,
+        'DEAD_CROSS',
+      ) &&
       lastSignals[stateKey].MACD !==
         'DEAD_CROSS'
     ) {
+      markMacdAlertSent(
+        symbol,
+        timeframe,
+        'DEAD_CROSS',
+      )
+
       events.push({
         type: 'INDICATOR_SIGNAL',
         indicator: 'MACD',
@@ -1082,6 +1171,28 @@ export async function handleIndicatorTick(
 
     const signals: IndicatorEvent[] = []
 
+    let macd1hForConfirmation:
+      | MACDResult
+      | null = null
+
+    try {
+      const klines1h =
+        await fetchKlines(
+          normalizedSymbol,
+          '1h',
+        )
+
+      if (klines1h.length >= 50) {
+        macd1hForConfirmation =
+          calculateMACD(
+            getCloses(klines1h),
+            12,
+            26,
+            9,
+          )
+      }
+    } catch {}
+
     for (const timeframe of SUPPORTED_TIMEFRAMES) {
       const stateKey = buildTimeframeKey(
         normalizedSymbol,
@@ -1127,6 +1238,8 @@ export async function handleIndicatorTick(
         eventCandleTs,
         rsi,
         macd,
+        macd1h:
+          macd1hForConfirmation,
         ema,
       })
 

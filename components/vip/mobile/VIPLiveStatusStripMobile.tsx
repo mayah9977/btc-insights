@@ -4,6 +4,7 @@
 
 import React, { useRef } from 'react'
 import { useRealtimeMarketComposite } from '@/lib/realtime/useRealtimeMarketComposite'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 interface Props {
   symbol: string
@@ -17,6 +18,11 @@ export default function VIPLiveStatusStripMobile({
     volume,
     whaleIntensity,
   } = useRealtimeMarketComposite(symbol)
+
+  const realtimeDelayed =
+    useVIPMarketStore(
+      (state) => state.realtimeDelayed,
+    )
 
   const prevVolumeRef = useRef<number | null>(null)
 
@@ -62,9 +68,17 @@ export default function VIPLiveStatusStripMobile({
       <div className="flex flex-col">
         <span className="text-gray-400">WHALE</span>
         <span className="text-yellow-400 font-semibold">
-          {Math.round(whaleIntensity ?? 0)}
+          {whaleIntensity != null
+            ? Math.round(whaleIntensity)
+            : '--'}
         </span>
       </div>
+
+      {realtimeDelayed && (
+        <div className="text-[10px] text-yellow-400">
+          실시간 데이터 지연 중
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-//components/syststem/ActionGateStatus.tsx  
+// components/system/ActionGateStatus.tsx
 
 'use client'
 
@@ -15,10 +15,39 @@ interface ActionGateStatusProps {
 export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
   symbol,
 }) => {
-
   const state = useVIPMarketStore(
     (s) => s.actionGateState
   ) as ActionGateState
+
+  const lastUiRenderLogTsRef = useRef(0)
+  const lastAnimationTraceLogTsRef = useRef(0)
+
+  console.log('[AI_GATE_UI_RENDER]', {
+    ts: Date.now(),
+    component: 'ActionGateStatus',
+    gateState: state,
+    rgb: undefined,
+    symbol,
+  })
+
+  useEffect(() => {
+    console.log('[AI_GATE_UI_MOUNT]', {
+      ts: Date.now(),
+      component: 'ActionGateStatus',
+      gateState: state,
+      symbol,
+    })
+
+    return () => {
+      console.log('[AI_GATE_UI_UNMOUNT]', {
+        ts: Date.now(),
+        component: 'ActionGateStatus',
+        gateState: state,
+        symbol,
+      })
+    }
+  }, [])
+
   /* =========================
      상태 색상
   ========================= */
@@ -118,11 +147,27 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
         1
       ).data
 
-      setRgb({
+      const nextRgb = {
         r: pixel[0],
         g: pixel[1],
         b: pixel[2],
-      })
+      }
+
+      const now = Date.now()
+
+      if (now - lastAnimationTraceLogTsRef.current >= 1000) {
+        lastAnimationTraceLogTsRef.current = now
+
+        console.log('[AI_GATE_ANIMATION_KEY_TRACE]', {
+          ts: now,
+          component: 'ActionGateStatus',
+          gateState: state,
+          rgb: nextRgb,
+          reason: 'requestAnimationFrame_setRgb',
+        })
+      }
+
+      setRgb(nextRgb)
 
       rafRef.current = requestAnimationFrame(draw)
     }
@@ -134,6 +179,22 @@ export const ActionGateStatus: React.FC<ActionGateStatusProps> = ({
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    const now = Date.now()
+
+    if (now - lastUiRenderLogTsRef.current >= 1000) {
+      lastUiRenderLogTsRef.current = now
+
+      console.log('[AI_GATE_UI_RENDER]', {
+        ts: now,
+        component: 'ActionGateStatus',
+        gateState: state,
+        rgb,
+        symbol,
+      })
+    }
+  })
 
   const hex =
     '#' +

@@ -1,4 +1,4 @@
-//components/vip/VIPActionGateContextBar.tsx   
+// components/vip/VIPActionGateContextBar.tsx
 
 'use client'
 
@@ -24,7 +24,6 @@ export default function VIPActionGateContextBar({
   signalType,
   sentence,
 }: Props) {
-
   const vipGate = useVIPMarketStore(
     (s) => s.actionGateState
   )

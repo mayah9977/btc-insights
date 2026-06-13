@@ -1,3 +1,5 @@
+//lib/market/bollinger.ts  
+
 /* ======================================================
  * Bollinger Bands Calculation Utility
  * Timeframe: 30m Candle Close

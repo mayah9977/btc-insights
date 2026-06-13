@@ -1,3 +1,5 @@
+//components/market/interpretation/ActionGateDescriptionHero.tsx   
+
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'

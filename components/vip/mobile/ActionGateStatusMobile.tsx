@@ -1,4 +1,4 @@
-//components/vip/mobile/ActionGateStatusMobile.tsx 
+// components/vip/mobile/ActionGateStatusMobile.tsx
 
 'use client'
 
@@ -15,9 +15,8 @@ interface Props {
 }
 
 export default function ActionGateStatusMobile({
-  symbol
+  symbol,
 }: Props) {
-
   const state = useVIPMarketStore(
     (s) => s.actionGateState
   ) as ActionGateState
@@ -78,4 +77,4 @@ export default function ActionGateStatusMobile({
       </div>
     </div>
   )
-} 
+}

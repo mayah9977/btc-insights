@@ -1,3 +1,5 @@
+//hooks/usePremiumSignalAnimation.ts   
+
 'use client'
 
 import { useEffect, useRef, useState } from 'react'

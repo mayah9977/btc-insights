@@ -1,4 +1,4 @@
-//app/api/institutional/finalized/route.ts  
+// app/api/institutional/finalized/route.ts
 
 import { NextResponse } from 'next/server'
 
@@ -12,15 +12,6 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const ts = Date.now()
-
-    console.log(
-      '[FINALIZED_SNAPSHOT_API_REQUEST]',
-      {
-        ts,
-      },
-    )
-
     const [
       snapshot30m,
       snapshot1h,
@@ -28,36 +19,6 @@ export async function GET() {
       loadFinalized30mSnapshot(),
       loadFinalized1hSnapshot(),
     ])
-
-    console.log(
-      '[FINALIZED_SNAPSHOT_API_RESPONSE]',
-      {
-        ts: Date.now(),
-        requestTs: ts,
-
-        snapshot30mReady:
-          snapshot30m !== null,
-
-        snapshot30mConfirmedCandleTs:
-          snapshot30m
-            ?.confirmedCandleTs,
-
-        snapshot30mSampleCount:
-          snapshot30m
-            ?.sampleCount,
-
-        snapshot1hReady:
-          snapshot1h !== null,
-
-        snapshot1hConfirmedCandleTs:
-          snapshot1h
-            ?.confirmedCandleTs,
-
-        snapshot1hSampleCount:
-          snapshot1h
-            ?.sampleCount,
-      },
-    )
 
     return NextResponse.json(
       {

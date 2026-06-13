@@ -1,3 +1,5 @@
+//lib/market/actionGate/actionGateInput.ts  
+
 /* =====================================================
  * ActionGateInput (SSOT) - V3 (FMAI 확장 포함)
  *

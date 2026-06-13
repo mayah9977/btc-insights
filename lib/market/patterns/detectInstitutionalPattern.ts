@@ -516,20 +516,6 @@ export function detectInstitutionalPattern(
   input: InstitutionalPatternInput,
 ): InstitutionalPatternResult {
   if (!input.snapshotReady) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[INSTITUTIONAL_PATTERN_DEBUG]', {
-        FINAL_RESULT: {
-          detectedPattern: 'NONE',
-          reason: 'snapshotReady is false',
-          threshold: THRESHOLDS.MIN_VISIBLE_SCORE,
-          finalScore: 0,
-          confidence: 'LOW',
-          intensity: 'WEAK',
-        },
-        THRESHOLDS,
-      })
-    }
-
     return createNonePattern()
   }
 
@@ -1069,12 +1055,12 @@ export function detectInstitutionalPattern(
         note: '고래 활동 강도',
       },
       {
-        label: 'Volume',
+        label: 'Volume Avg',
         value: `${formatNumber(
           volumeRatioAverage,
           2,
         )}x`,
-        note: '거래량 확장 상태',
+        note: `tick frequency ${volumeState}`,
       },
     ],
   })
@@ -1232,138 +1218,6 @@ export function detectInstitutionalPattern(
         })
       : null
 
-  if (process.env.NODE_ENV !== 'production') {
-    const finalScore = top?.score ?? 0
-    const confidence = confidenceFromScore(finalScore)
-    const intensity = intensityFromScore(finalScore)
-    const detectedPattern =
-      top && finalScore >= THRESHOLDS.MIN_VISIBLE_SCORE
-        ? top.type
-        : 'NONE'
-
-    const sortedCandidates = sorted.map(
-      (candidate) => ({
-        type: candidate.type,
-        score: Number(candidate.score.toFixed(2)),
-        passedThreshold:
-          candidate.score >=
-          THRESHOLDS.MIN_VISIBLE_SCORE,
-      }),
-    )
-
-    console.group('[INSTITUTIONAL_PATTERN_DEBUG]')
-
-    console.log('FINAL_RESULT', {
-      detectedPattern,
-      finalScore: Number(finalScore.toFixed(2)),
-      threshold: THRESHOLDS.MIN_VISIBLE_SCORE,
-      passed:
-        finalScore >= THRESHOLDS.MIN_VISIBLE_SCORE,
-      confirmationPassed:
-        confirmation?.passed ?? false,
-      confirmationScore:
-        confirmation?.score ?? 0,
-      confirmationRequired:
-        confirmation?.required ?? 0,
-      confirmationDirection:
-        confirmation?.direction ?? 'NONE',
-      fmaiOnly:
-        confirmation?.fmaiOnly ?? false,
-    })
-
-    console.log('CONFIDENCE_FLOW', {
-      finalScore: Number(finalScore.toFixed(2)),
-      confidenceThresholds: {
-        MEDIUM_CONFIDENCE:
-          THRESHOLDS.MEDIUM_CONFIDENCE,
-        HIGH_CONFIDENCE:
-          THRESHOLDS.HIGH_CONFIDENCE,
-      },
-      confidence,
-      intensityThresholds: {
-        BUILDING_INTENSITY:
-          THRESHOLDS.BUILDING_INTENSITY,
-        AGGRESSIVE_INTENSITY:
-          THRESHOLDS.AGGRESSIVE_INTENSITY,
-        EXTREME_INTENSITY:
-          THRESHOLDS.EXTREME_INTENSITY,
-      },
-      intensity,
-    })
-
-    console.table(sortedCandidates)
-
-    console.log('SORTED_CANDIDATES', sortedCandidates)
-
-    console.log('NORMALIZED_INPUTS', {
-      dominantFlow,
-      oiDirectionalPressure,
-      fmaiDirectionalPressure,
-      whaleBias,
-      fundingState,
-      volumeState,
-    })
-
-    console.log('CONFIRMATION_GATE', {
-      confirmation,
-    })
-
-    console.log('INPUT_METRICS', {
-      oiDeltaAverage,
-      oiDirectionalPersistenceAverage,
-      fundingAverage,
-      volumeRatioAverage,
-      whaleIntensityAverage,
-      whaleBuyPressure,
-      whaleSellPressure,
-      longLiquidationPressure,
-      shortLiquidationPressure,
-      absorptionAccum,
-      absorptionAverage,
-      sweepAccum,
-      sweepAverage,
-    })
-
-    console.log('EVENT_METRICS', {
-      whaleBurstCount,
-      longAggressionPersistence,
-      shortAggressionPersistence,
-      fundingOverheatDuration,
-      oiExpansionEventCount,
-      whaleAbsorptionCount,
-      liquiditySweepCount,
-      volatilityShockCount,
-    })
-
-    console.log('SCORE_COMPONENTS', {
-      volumeExpansionScore,
-      whaleMagnitudeScore,
-      persistenceMagnitudeScore,
-      longLiquidationMagnitudeScore,
-      shortLiquidationMagnitudeScore,
-      sweepMagnitudeScore,
-      fundingDurationScore,
-      longAggressionScore,
-      shortAggressionScore,
-      absorptionMagnitudeScore,
-      whaleAbsorptionScore,
-    })
-
-    console.log('PATTERN_SCORES', {
-      longPressureScore,
-      shortPressureScore,
-      longSqueezeScore,
-      shortSqueezeScore,
-      whaleDistributionScore,
-      liquiditySweepScore,
-      institutionalAbsorptionScore,
-    })
-
-    console.log('THRESHOLDS', THRESHOLDS)
-
-    console.groupEnd()
-  }
-
   if (
     !top ||
     top.score < THRESHOLDS.MIN_VISIBLE_SCORE
@@ -1414,12 +1268,12 @@ export function detectInstitutionalPattern(
         )}%`,
       },
       {
-        label: 'OI Delta',
+        label: 'OI Avg',
         value: formatNumber(
           oiDeltaAverage,
           4,
         ),
-        note: `pressure ${oiDirectionalPressure}`,
+        note: `directional pressure ${oiDirectionalPressure}`,
       },
     ],
   }

@@ -13,10 +13,16 @@ export type FundingBias =
   | 'SHORT_HEAVY'
   | 'NEUTRAL'
 
+const ACTION_GATE_DEBOUNCE_MS = 1200
+const ACTION_GATE_DOWNGRADE_DEBOUNCE_MS = 2500
+
+const ACTION_GATE_RANK: Record<ActionGateState, number> = {
+  OBSERVE: 0,
+  CAUTION: 1,
+  IGNORE: 2,
+}
+
 type VIPMarketState = {
-  /* =========================
-     Core Market
-  ========================= */
   oi: number
   oiDelta: number
 
@@ -29,35 +35,16 @@ type VIPMarketState = {
   price: number
   priceChangePercent: number
 
-  /* =========================
-     Whale
-  ========================= */
-
-  /**
-   * 🔥 whaleIntensity SSOT = 0~100
-   *
-   * Redis history = 0~100
-   * SSE = 0~100
-   * VIP store = 0~100
-   * chart bridge = 0~100
-   * UI 계산에서만 /100 normalize
-   */
   whaleIntensity: number
 
   whaleRatio: number
   whaleNet: number
   whaleNetRatio: number
 
-  /* =========================
-     Derived Signals
-  ========================= */
   fmai: number
   absorption: number
   sweep: number
 
-  /* =========================
-     Action Gate
-  ========================= */
   actionGateState: ActionGateState
 
   macd?: any
@@ -65,26 +52,32 @@ type VIPMarketState = {
   dominant?: string
   confidence?: number
 
-  /* =========================
-     Timestamp
-  ========================= */
   ts: number
 
-  /* =========================
-     Narrative (NEW)
-  ========================= */
+  /**
+   * Market-feed freshness state.
+   *
+   * Do not update these fields on every store update.
+   * They are updated only when useVIPMarketStream receives
+   * primary market-feed ticks through realtimeAlivePatch().
+   *
+   * Primary market-feed ticks:
+   * PRICE / OI / VOLUME / FUNDING / WHALE.
+   */
+  lastRealtimeTs: number
+  realtimeDelayed: boolean
+
   narrative: FinalNarrativeReport | null
   lastMetaKey: string
 
-  /* =========================
-     Decision Stabilization
-  ========================= */
   lastDecisionTs: number
+  lastActionGateTs: number
 
-  /* =========================
-     Store Update
-  ========================= */
   update: (data: Partial<VIPMarketState>) => void
+
+  markRealtimeDelayed: (
+    delayed: boolean,
+  ) => void
 
   setNarrative: (
     signalType: string,
@@ -95,9 +88,6 @@ type VIPMarketState = {
 
 export const useVIPMarketStore =
   create<VIPMarketState>((set, get) => ({
-    /* =========================
-       Core Market
-    ========================= */
     oi: 0,
     oiDelta: 0,
 
@@ -110,29 +100,16 @@ export const useVIPMarketStore =
     price: 0,
     priceChangePercent: 0,
 
-    /* =========================
-       Whale
-    ========================= */
-
-    /**
-     * 🔥 whaleIntensity SSOT = 0~100
-     */
     whaleIntensity: 0,
 
     whaleRatio: 0,
     whaleNet: 0,
     whaleNetRatio: 0,
 
-    /* =========================
-       Derived Signals
-    ========================= */
     fmai: 0,
     absorption: 0,
     sweep: 0,
 
-    /* =========================
-       Action Gate
-    ========================= */
     actionGateState: 'OBSERVE',
 
     macd: null,
@@ -140,25 +117,16 @@ export const useVIPMarketStore =
     dominant: undefined,
     confidence: undefined,
 
-    /* =========================
-       Timestamp
-    ========================= */
     ts: 0,
+    lastRealtimeTs: 0,
+    realtimeDelayed: true,
 
-    /* =========================
-       Narrative (NEW)
-    ========================= */
     narrative: null,
     lastMetaKey: '',
 
-    /* =========================
-       Decision Stabilization
-    ========================= */
     lastDecisionTs: 0,
+    lastActionGateTs: 0,
 
-    /* =========================
-       Update Logic
-    ========================= */
     update: (data) =>
       set((state) => {
         let changed = false
@@ -172,6 +140,18 @@ export const useVIPMarketStore =
             const value = data[k]
 
             const isInvalidZero =
+              (k === 'price' &&
+                value === 0 &&
+                state.price !== 0) ||
+              (k === 'oi' &&
+                value === 0 &&
+                state.oi !== 0) ||
+              (k === 'volume' &&
+                value === 0 &&
+                state.volume !== 0) ||
+              (k === 'whaleIntensity' &&
+                value === 0 &&
+                state.whaleIntensity !== 0) ||
               (k === 'oiDelta' &&
                 value === 0 &&
                 state.oiDelta !== 0) ||
@@ -182,20 +162,62 @@ export const useVIPMarketStore =
                 value === 1 &&
                 state.volumeRatio !== 1)
 
-            if (!isInvalidZero && state[k] !== value) {
-              if (k === 'decision') {
-                if (now - state.lastDecisionTs < 300) {
+            if (!isInvalidZero) {
+              if (k === 'actionGateState') {
+                const previousState =
+                  state.actionGateState
+
+                const nextState =
+                  value as ActionGateState
+
+                const elapsedMs =
+                  now - state.lastActionGateTs
+
+                const isSameState =
+                  previousState === nextState
+
+                const isDowngrade =
+                  ACTION_GATE_RANK[nextState] <
+                  ACTION_GATE_RANK[previousState]
+
+                const requiredDebounceMs =
+                  isDowngrade
+                    ? ACTION_GATE_DOWNGRADE_DEBOUNCE_MS
+                    : ACTION_GATE_DEBOUNCE_MS
+
+                if (isSameState) {
+                  continue
+                }
+
+                if (
+                  state.lastActionGateTs > 0 &&
+                  elapsedMs < requiredDebounceMs
+                ) {
+                  continue
+                }
+
+                ;(next as any)[k] = nextState
+                next.lastActionGateTs = now
+                changed = true
+
+                continue
+              }
+
+              if (state[k] !== value) {
+                if (k === 'decision') {
+                  if (now - state.lastDecisionTs < 300) {
+                    continue
+                  }
+
+                  ;(next as any)[k] = value
+                  next.lastDecisionTs = now
+                  changed = true
                   continue
                 }
 
                 ;(next as any)[k] = value
-                next.lastDecisionTs = now
                 changed = true
-                continue
               }
-
-              ;(next as any)[k] = value
-              changed = true
             }
           }
         }
@@ -209,9 +231,17 @@ export const useVIPMarketStore =
           : state
       }),
 
-    /* =========================
-       Narrative Setter
-    ========================= */
+    markRealtimeDelayed: (delayed) => {
+      set((state) =>
+        state.realtimeDelayed === delayed
+          ? state
+          : {
+              ...state,
+              realtimeDelayed: delayed,
+            },
+      )
+    },
+
     setNarrative: (
       signalType: string,
       newNarrative: FinalNarrativeReport,
@@ -219,10 +249,8 @@ export const useVIPMarketStore =
     ) => {
       const current = get().narrative
 
-      // 🔥 1차 차단: metaKey 동일 → 완전 스킵
       if (get().lastMetaKey === metaKey) return
 
-      // 🔥 2차 차단: 의미 동일 → 스킵
       if (
         current &&
         current.tendency ===
@@ -242,23 +270,12 @@ export const useVIPMarketStore =
     },
   }))
 
-/* =========================================================
-   Scheduler (OPTIMIZED)
-========================================================= */
-
 let pending: Partial<VIPMarketState> = {}
 let scheduled = false
 
-// 🔥 핵심 변경 (250 → 50)
 const UPDATE_INTERVAL = 50
 
 let lastFlush = 0
-
-/* =========================================================
-   Institutional Accumulation Throttle
-   - tick accumulation 금지
-   - 30초 aggregation accumulation만 허용
-========================================================= */
 
 let lastAccumulationTs = 0
 
@@ -268,8 +285,6 @@ const INSTITUTIONAL_ACCUMULATION_INTERVAL =
 export function scheduleVIPMarketUpdate(
   data: Partial<VIPMarketState>,
 ) {
-  //console.log('[SCHEDULE CALL]', data) // 👈 추가
-
   pending = { ...pending, ...data }
 
   if (scheduled) return
@@ -286,18 +301,6 @@ export function scheduleVIPMarketUpdate(
     if (Object.keys(pending).length > 0) {
       useVIPMarketStore.getState().update(pending)
 
-      /**
-       * 🔥 institutional accumulation throttle
-       *
-       * SSE tick마다 accumulation 하지 않고
-       * 30초 aggregation 기반으로만 누적합니다.
-       *
-       * 목적:
-       * - sampleCount 안정화
-       * - micro noise 제거
-       * - 30분 freeze snapshot 품질 향상
-       * - ENUM / DecisionEngine / ActionGate 변경 없음
-       */
       const nowTs = Date.now()
 
       if (

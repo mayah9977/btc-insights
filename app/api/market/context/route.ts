@@ -1,3 +1,5 @@
+//app/api/market/context/route.ts  
+
 /* =========================================================
    API: Get Market Context (News + VIP OS 통합)
    ✔ latest 우선

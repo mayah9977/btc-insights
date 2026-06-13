@@ -1,3 +1,5 @@
+//lib/redis/index.ts   
+
 import Redis from 'ioredis'
 
 /* =========================
@@ -11,44 +13,44 @@ if (!process.env.REDIS_URL) {
  * Client-side Guard (중요)
  * ========================= */
 if (typeof window !== 'undefined') {
-  throw new Error('[Redis] lib/redis was imported on the client. This is forbidden.')
+  throw new Error(
+    '[Redis] lib/redis was imported on the client. This is forbidden.',
+  )
 }
 
 /* =========================
  * Redis Client (Base)
  * ========================= */
-export const redis = new Redis(process.env.REDIS_URL, {
-  maxRetriesPerRequest: null, // ✅ Pub/Sub, SSE 필수
-  enableReadyCheck: true,
+export const redis = new Redis(
+  process.env.REDIS_URL,
+  {
+    maxRetriesPerRequest: null, // ✅ Pub/Sub, SSE 필수
+    enableReadyCheck: true,
 
-  reconnectOnError(err) {
-    const message = err?.message || ''
+    reconnectOnError(err) {
+      const message = err?.message || ''
 
-    if (
-      message.includes('READONLY') ||
-      message.includes('ECONNRESET') ||
-      message.includes('ETIMEDOUT')
-    ) {
-      return true
-    }
+      if (
+        message.includes('READONLY') ||
+        message.includes('ECONNRESET') ||
+        message.includes('ETIMEDOUT')
+      ) {
+        return true
+      }
 
-    return false
+      return false
+    },
   },
-})
+)
 
 /* =========================
  * Logging
  * ========================= */
-redis.on('connect', () => {
-  console.log('[Redis] connected')
-})
-
-redis.on('ready', () => {
-  console.log('[Redis] ready')
-})
-
 redis.on('reconnecting', (delay: number) => {
-  console.warn('[Redis] reconnecting...', delay)
+  console.warn(
+    '[Redis] reconnecting...',
+    delay,
+  )
 })
 
 redis.on('error', err => {
@@ -56,7 +58,9 @@ redis.on('error', err => {
 })
 
 redis.on('close', () => {
-  console.warn('[Redis] connection closed')
+  console.warn(
+    '[Redis] connection closed',
+  )
 })
 
 /* =========================
@@ -69,12 +73,11 @@ redis.on('close', () => {
 export function createRedisSubscriber() {
   const sub = redis.duplicate()
 
-  sub.on('connect', () => {
-    console.log('[Redis:sub] connected')
-  })
-
   sub.on('error', err => {
-    console.error('[Redis:sub] error', err)
+    console.error(
+      '[Redis:sub] error',
+      err,
+    )
   })
 
   return sub

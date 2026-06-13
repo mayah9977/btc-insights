@@ -1,3 +1,5 @@
+//lib/market/evaluateRealtimeBollinger.ts   
+
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import type { BollingerSignalInput } from './bollingerSignal'
 

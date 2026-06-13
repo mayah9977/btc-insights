@@ -339,38 +339,6 @@ export const useInstitutionalEvidenceStore =
 
             return
           }
-
-          console.log(
-            '[INSTITUTIONAL_SNAPSHOT_REHYDRATED]',
-            {
-              ts: Date.now(),
-
-              confirmedCandleTs:
-                state?.snapshot
-                  ?.confirmedCandleTs,
-
-              confirmedSignalType:
-                state?.snapshot
-                  ?.confirmedSignalType,
-
-              sampleCount:
-                state?.snapshot?.sampleCount,
-
-              oiDeltaAccum:
-                state?.snapshot?.oiDeltaAccum,
-
-              fundingAccum:
-                state?.snapshot?.fundingAccum,
-
-              volumeRatioAccum:
-                state?.snapshot
-                  ?.volumeRatioAccum,
-
-              whaleIntensityAccum:
-                state?.snapshot
-                  ?.whaleIntensityAccum,
-            },
-          )
         },
       },
     ),

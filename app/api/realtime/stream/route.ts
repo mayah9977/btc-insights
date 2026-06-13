@@ -48,35 +48,11 @@ export async function GET(req: NextRequest) {
     start(controller) {
       const encoder = new TextEncoder()
 
-      /**
-       * 🔥 안정화 핵심:
-       * controller.close() 이후 enqueue 방지용 상태값.
-       *
-       * 기존 구조를 유지하면서:
-       * - abort 이후 enqueue 방지
-       * - timeout replay 방지
-       * - heartbeat enqueue 방지
-       *
-       * 최소 수정 원칙으로 적용.
-       */
       let closed = false
 
-      /**
-       * 🔥 replay timeout cleanup
-       *
-       * 기존 setTimeout replay 구조는 유지하고,
-       * 연결 종료 시 clearTimeout만 수행.
-       */
       const replayTimeouts: NodeJS.Timeout[] = []
 
-      /* =========================
-       * 🔥 Safe enqueue
-       * ========================= */
-
       function safeEnqueue(payload: string) {
-        /**
-         * 🔥 이미 종료된 stream이면 enqueue 금지
-         */
         if (closed) {
           return
         }
@@ -86,13 +62,6 @@ export async function GET(req: NextRequest) {
             encoder.encode(payload),
           )
         } catch (error) {
-          /**
-           * 🔥 enqueue 실패 시 stream 종료 상태로 전환
-           *
-           * 이유:
-           * controller.close() 이후 enqueue 시
-           * ERR_INVALID_STATE 발생 가능.
-           */
           closed = true
 
           console.error(
@@ -102,29 +71,27 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      /* =========================
-       * 🔥 VIP EVENT FILTER
-       * ========================= */
-
       function send(event: any) {
-        /**
-         * 🔥 stream 종료 후 enqueue 방지
-         */
         if (closed) {
           return
         }
 
         if (scope === 'VIP') {
           const VIP_EVENTS = new Set([
+            'PRICE_TICK',
+            'OI_TICK',
+            'VOLUME_TICK',
+            'FUNDING_RATE_TICK',
+
             'FMAI',
             'WHALE_INTENSITY',
             'WHALE_NET_PRESSURE',
+            'WHALE_TRADE_FLOW',
             'WHALE_ABSORPTION',
             'LIQUIDITY_SWEEP',
             'MARKET_REGIME',
             'FINAL_DECISION',
 
-            /* 🔥 Bollinger */
             'BB_SIGNAL',
             'BB_LIVE_COMMENTARY',
           ])
@@ -139,28 +106,13 @@ export async function GET(req: NextRequest) {
         )
       }
 
-      /* =========================
-       * 1️⃣ 연결 ACK
-       * ========================= */
-
       safeEnqueue(`: connected\n\n`)
-
-      /* =========================
-       * 2️⃣ SSE Hub 등록
-       * ========================= */
 
       const cleanup = addSSEClient(controller, {
         scope,
       })
 
-      /* =========================
-       * 3️⃣ Heartbeat
-       * ========================= */
-
       const heartbeat = setInterval(() => {
-        /**
-         * 🔥 종료된 stream heartbeat 차단
-         */
         if (closed) {
           return
         }
@@ -172,18 +124,11 @@ export async function GET(req: NextRequest) {
 
       const symbol = 'BTCUSDT'
 
-      /* =========================
-       * 🔥 replay helper
-       * ========================= */
-
       function scheduleReplay(
         callback: () => void,
         delay: number,
       ) {
         const timeout = setTimeout(() => {
-          /**
-           * 🔥 abort 이후 replay 실행 차단
-           */
           if (closed) {
             return
           }
@@ -193,10 +138,6 @@ export async function GET(req: NextRequest) {
 
         replayTimeouts.push(timeout)
       }
-
-      /* =========================
-       * 4️⃣ VIP Risk Replay
-       * ========================= */
 
       if (scope === 'VIP') {
         const lastRisk = getLastVipRisk()
@@ -210,10 +151,6 @@ export async function GET(req: NextRequest) {
           }, 100)
         }
       }
-
-      /* =========================
-       * 5️⃣ OI Replay
-       * ========================= */
 
       const oi = getLastOI(symbol)
       const prevOi = getPrevOI(symbol)
@@ -243,10 +180,6 @@ export async function GET(req: NextRequest) {
         }, 120)
       }
 
-      /* =========================
-       * 6️⃣ Volume Replay
-       * ========================= */
-
       const volume = getLastVolume(symbol)
 
       if (volume !== undefined) {
@@ -259,10 +192,6 @@ export async function GET(req: NextRequest) {
           })
         }, 140)
       }
-
-      /* =========================
-       * 7️⃣ Funding Replay
-       * ========================= */
 
       const fundingRate =
         getLastFundingRate(symbol)
@@ -277,10 +206,6 @@ export async function GET(req: NextRequest) {
           })
         }, 160)
       }
-
-      /* =========================
-       * 8️⃣ FINAL_DECISION Replay
-       * ========================= */
 
       if (scope === 'VIP') {
         const lastDecision =
@@ -303,10 +228,6 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      /* =========================
-       * 9️⃣ Sentiment Replay
-       * ========================= */
-
       const lastSentiment =
         getLastSentiment()
 
@@ -321,40 +242,21 @@ export async function GET(req: NextRequest) {
         }, 220)
       }
 
-      /* =========================
-       * 🔟 연결 종료 처리
-       * ========================= */
-
       const onAbort = () => {
-        /**
-         * 🔥 중복 abort 방지
-         */
         if (closed) {
           return
         }
 
         closed = true
 
-        /**
-         * 🔥 heartbeat cleanup
-         */
         clearInterval(heartbeat)
 
-        /**
-         * 🔥 replay timeout cleanup
-         */
         for (const timeout of replayTimeouts) {
           clearTimeout(timeout)
         }
 
-        /**
-         * 🔥 SSE Hub cleanup
-         */
         cleanup()
 
-        /**
-         * 🔥 controller.close() safe 처리
-         */
         try {
           controller.close()
         } catch {}

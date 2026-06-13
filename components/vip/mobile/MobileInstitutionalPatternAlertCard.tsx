@@ -68,17 +68,6 @@ export function MobileInstitutionalPatternAlertCard() {
 
   const pattern = useMemo(() => {
     if (!finalized.snapshotReady) {
-      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
-        ts: Date.now(),
-        reason: 'NO_FINALIZED_SNAPSHOT',
-        finalizedSnapshotReady:
-          finalized.snapshotReady,
-        finalizedConfirmedCandleTs:
-          finalized.confirmedCandleTs,
-        finalizedSampleCount:
-          finalized.sampleCount,
-      })
-
       return null
     }
 
@@ -151,53 +140,22 @@ export function MobileInstitutionalPatternAlertCard() {
       })
 
     if (!detected || detected.type === 'NONE') {
-      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
-        ts: Date.now(),
-        reason: 'NO_PATTERN_DETECTED',
-        detectedType:
-          detected?.type,
-        detectedScore:
-          (detected as any)?.score ??
-          (detected as any)?.finalScore,
-        finalizedConfirmedCandleTs:
-          finalized.confirmedCandleTs,
-        finalizedSampleCount:
-          finalized.sampleCount,
-      })
-
       return null
     }
+
+    const confirmationSnapshot1h =
+      snapshot1h?.confirmedCandleTs ===
+      finalized.confirmedCandleTs
+        ? snapshot1h
+        : null
 
     const confirmation1h =
       buildInstitutionalConfirmation1h(
         detected.type,
-        snapshot1h,
+        confirmationSnapshot1h,
       )
 
-    if (
-      confirmation1h.action === 'BLOCK' ||
-      confirmation1h.action === 'WATCH'
-    ) {
-      console.log('[PATTERN_ALERT_HIDDEN_REASON]', {
-        ts: Date.now(),
-        reason:
-          confirmation1h.action === 'BLOCK'
-            ? 'CONFIRMATION_BLOCK'
-            : 'CONFIRMATION_WATCH',
-        detectedType:
-          detected.type,
-        confirmationAction:
-          confirmation1h.action,
-        confirmationReason:
-          confirmation1h.reason,
-        confirmationDirection:
-          confirmation1h.direction,
-        patternDirection:
-          confirmation1h.patternDirection,
-        confirmationScore:
-          confirmation1h.score,
-      })
-
+    if (confirmation1h.action !== 'ALLOW') {
       return null
     }
 

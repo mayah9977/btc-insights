@@ -1,3 +1,5 @@
+//components/vip/mobile/interpretation/ActionGateDescriptionHeroMobile.tsx 
+
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'

@@ -1,4 +1,4 @@
-//components/vip/mobile/MobileFinalizedInstitutionalNumbers.tsx
+// components/vip/mobile/MobileFinalizedInstitutionalNumbers.tsx
 
 'use client'
 
@@ -207,24 +207,24 @@ export function MobileFinalizedInstitutionalNumbers() {
   return (
     <section className="mt-3 grid grid-cols-2 gap-2">
       <MobileExpandableCard
-        title="OI"
+        title="OI Avg"
         value={formatNumber(
           finalized.oiDeltaAverage,
           4,
         )}
-        subtitle={`Accum ${formatNumber(
+        subtitle={`OI Accum ${formatNumber(
           finalized.oiDeltaAccum,
           4,
         )}`}
         expanded={expanded === 'OI'}
         onToggle={() => toggle('OI')}
         accent="bg-emerald-500/10"
-        description=" 최근 약 30분동안 기관 포지션 에너지의 누적 변화입니다.
-        "
+        description="최근 약 30분 동안의 평균 OI 변화량입니다. 상태/압력 판단은 단순 크기가 아니라 방향 지속성과 velocity 기준입니다."
         interpretation={[
-          'OI 증가 = 신규 포지션 유입 가능성',
-          'OI 감소 = 포지션 청산 가능성',
-          'OI + Volume + Whale 상승 = 기관 개입 가능성',
+          'OI Avg = 평균 포지션 변화량',
+          'OI Accum = 30분 누적 변화량',
+          'Directional Pressure는 OI 크기보다 방향 지속성을 더 중요하게 봄',
+          'OI가 커도 지속성이 낮으면 NEUTRAL/WEAK로 해석될 수 있음',
         ]}
       />
 
@@ -238,8 +238,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'FUNDING'}
         onToggle={() => toggle('FUNDING')}
         accent="bg-yellow-500/10"
-        description=" 최근 약 30분동안 평균 펀딩 압력 변화입니다.
-        "
+        description="최근 약 30분동안 평균 펀딩 압력 변화입니다."
         interpretation={[
           '양수 = 롱 과열 가능성',
           '음수 = 숏 과열 가능성',
@@ -248,21 +247,21 @@ export function MobileFinalizedInstitutionalNumbers() {
       />
 
       <MobileExpandableCard
-        title="Volume"
+        title="Volume Avg"
         value={`${formatNumber(
           finalized.volumeRatioAverage,
           2,
         )}x`}
-        subtitle={finalized.volumeState}
+        subtitle={`Tick State ${finalized.volumeState}`}
         expanded={expanded === 'VOLUME'}
         onToggle={() => toggle('VOLUME')}
         accent="bg-blue-500/10"
-        description=" 최근 약 30분동안 거래량 확장 강도 변화입니다.
-        "
+        description="최근 약 30분 동안의 평균 거래량 배율입니다. 상태값은 평균 크기가 아니라 Expansion/Weak tick 빈도 기준입니다."
         interpretation={[
-          '1x 이하 = 거래량 부족',
-          '2x~3x 이상 = 기관 체결 가능성',
-          'Volume 증가 = 변동성 확장 가능성',
+          '1.0x = 기준 거래량 수준',
+          '1.2x 이상 = 거래량 확장 tick',
+          '0.85x 이하 = 약한 거래량 tick',
+          'State는 평균 배율이 아니라 30분 동안 어떤 tick이 더 많았는지를 의미',
         ]}
       />
 
@@ -276,8 +275,7 @@ export function MobileFinalizedInstitutionalNumbers() {
         expanded={expanded === 'WHALE'}
         onToggle={() => toggle('WHALE')}
         accent="bg-red-500/10"
-        description=" 최근 약 30분동안 고래/기관 개입 강도 변화입니다.
-        "
+        description="최근 약 30분동안 고래/기관 개입 강도 변화입니다."
         interpretation={[
           '0~30 = 낮음',
           '30~60 = 중간',

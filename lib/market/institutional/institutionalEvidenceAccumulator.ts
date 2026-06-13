@@ -374,12 +374,21 @@ function emitInstitutionalPatternSignal(
       return
     }
 
+    const snapshot1h =
+      useInstitutionalEvidenceStore1h
+        .getState()
+        .snapshot
+
+    const confirmationSnapshot1h =
+      snapshot1h?.confirmedCandleTs ===
+      snapshot.confirmedCandleTs
+        ? snapshot1h
+        : null
+
     const confirmation1h =
       buildInstitutionalConfirmation1h(
         detectedPattern.type,
-        useInstitutionalEvidenceStore1h
-          .getState()
-          .snapshot,
+        confirmationSnapshot1h,
       )
 
     console.log(
@@ -393,10 +402,7 @@ function emitInstitutionalPatternSignal(
       },
     )
 
-    if (
-      confirmation1h.action === 'BLOCK' ||
-      confirmation1h.action === 'WATCH'
-    ) {
+    if (confirmation1h.action !== 'ALLOW') {
       console.log(
         '[INSTITUTIONAL_PATTERN_EMIT_BLOCKED_BY_1H]',
         {
@@ -476,26 +482,7 @@ function emitInstitutionalPatternSignal(
 }
 
 export function accumulateInstitutionalEvidence() {
-  const beforeSampleCount =
-    accumulator.sampleCount
-
   const snapshot = getMarketSnapshot()
-
-  console.log(
-    '[ACCUMULATE_EVIDENCE_CALL]',
-    {
-      ts: Date.now(),
-
-      sampleCountBefore:
-        beforeSampleCount,
-
-      triggerSource:
-        'scheduleVIPMarketUpdate',
-
-      marketSnapshotTs:
-        snapshot.ts,
-    },
-  )
 
   const oiDelta = Number(snapshot.oiDelta ?? 0)
 
@@ -600,25 +587,6 @@ export function accumulateInstitutionalEvidence() {
   }
 
   accumulator.sampleCount += 1
-
-  console.log(
-    '[ACCUMULATE_EVIDENCE_CALL]',
-    {
-      ts: Date.now(),
-
-      sampleCountBefore:
-        beforeSampleCount,
-
-      sampleCountAfter:
-        accumulator.sampleCount,
-
-      triggerSource:
-        'scheduleVIPMarketUpdate',
-
-      marketSnapshotTs:
-        snapshot.ts,
-    },
-  )
 
   accumulator.oiDeltaAccum += oiDelta
 

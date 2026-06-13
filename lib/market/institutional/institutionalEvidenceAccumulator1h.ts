@@ -162,27 +162,8 @@ async function saveFinalized1hSnapshotViaRoute(
 }
 
 export function accumulateInstitutionalEvidence1h() {
-  const beforeSampleCount =
-    accumulator1h.sampleCount
-
   const snapshot =
     getMarketSnapshot()
-
-  console.log(
-    '[ACCUMULATE_EVIDENCE_1H_CALL]',
-    {
-      ts: Date.now(),
-
-      sampleCountBefore:
-        beforeSampleCount,
-
-      triggerSource:
-        'scheduleVIPMarketUpdate',
-
-      marketSnapshotTs:
-        snapshot.ts,
-    },
-  )
 
   const oiDelta =
     Number(snapshot.oiDelta ?? 0)
@@ -308,31 +289,6 @@ export function accumulateInstitutionalEvidence1h() {
     accumulator1h.shortLiquidationPressure +=
       Math.abs(sweep)
   }
-
-  console.log(
-    '[ACCUMULATE_EVIDENCE_1H_UPDATED]',
-    {
-      ts: Date.now(),
-
-      sampleCountBefore:
-        beforeSampleCount,
-
-      sampleCountAfter:
-        accumulator1h.sampleCount,
-
-      oiDeltaAccum:
-        accumulator1h.oiDeltaAccum,
-
-      fundingAccum:
-        accumulator1h.fundingAccum,
-
-      volumeRatioAccum:
-        accumulator1h.volumeRatioAccum,
-
-      whaleIntensityAccum:
-        accumulator1h.whaleIntensityAccum,
-    },
-  )
 }
 
 export function freezeInstitutionalSnapshot1h(

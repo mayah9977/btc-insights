@@ -604,8 +604,16 @@ export default function NotificationsPageClient({
       const detail = (event as CustomEvent)
         .detail
 
+      const eventCandleTs =
+        detail.confirmedCandleTs ??
+        detail.ts ??
+        Date.now()
+
+      const notificationId =
+        `institutional:${detail.pattern}:${eventCandleTs}`
+
       pushIncoming({
-        id: `institutional-${detail.pattern}-${detail.confirmedCandleTs ?? detail.ts ?? Date.now()}`,
+        id: notificationId,
         type: 'INSTITUTIONAL_PATTERN',
         title:
           'Institutional Flow Signal(기관흐름감지)',

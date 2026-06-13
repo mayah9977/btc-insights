@@ -12,10 +12,6 @@ import { applyLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCom
 
 type Handler = (data: any) => void
 
-/* =========================================================
-🔥 VIP EVENT LIST
-========================================================= */
-
 const VIP_EVENTS = new Set([
   SSE_EVENT.PRICE_TICK,
   SSE_EVENT.OI_TICK,
@@ -69,10 +65,6 @@ class SSEConnectionManager {
     return this.instance
   }
 
-  /* =========================
-  🔌 Connect
-  ========================= */
-
   private connect() {
     if (this.es) return
 
@@ -119,17 +111,9 @@ class SSEConnectionManager {
       ;(globalThis as any).__TYPE_COUNT__[type] =
         ((globalThis as any).__TYPE_COUNT__[type] ?? 0) + 1
 
-      /* =========================
-      VIP EVENT FILTER
-      ========================= */
-
       if (!VIP_EVENTS.has(type)) {
         return
       }
-
-      /* =========================
-      Throttle
-      ========================= */
 
       if (THROTTLE_EVENTS.has(type)) {
         const last = this.lastDispatchByType.get(type) ?? 0
@@ -141,19 +125,11 @@ class SSEConnectionManager {
         this.lastDispatchByType.set(type, now)
       }
 
-      /* =========================
-      VIP Risk
-      ========================= */
-
       if (type === 'RISK_UPDATE') {
         try {
           handleRiskUpdate(msg)
         } catch {}
       }
-
-      /* =========================
-      Whale Effects
-      ========================= */
 
       if (type === SSE_EVENT.WHALE_INTENSITY) {
         try {
@@ -180,10 +156,6 @@ class SSEConnectionManager {
         } catch {}
       }
 
-      /* =========================
-      Bollinger
-      ========================= */
-
       if (type === SSE_EVENT.BB_SIGNAL) {
         try {
           applyRealtimeBollingerSignal(msg)
@@ -195,10 +167,6 @@ class SSEConnectionManager {
           applyLiveBollingerCommentary(msg)
         } catch {}
       }
-
-      /* =========================
-      Fan-out
-      ========================= */
 
       this.handlers.get(type)?.forEach((handler) => {
         try {
@@ -212,10 +180,6 @@ class SSEConnectionManager {
         } catch {}
       })
     }
-
-    /* =========================
-    Auto Reconnect
-    ========================= */
 
     this.es.onerror = () => {
       this.es?.close()
@@ -232,10 +196,6 @@ class SSEConnectionManager {
       }, delay)
     }
   }
-
-  /* =========================
-  🔔 Subscribe
-  ========================= */
 
   subscribe(type: string, handler: Handler) {
     this.connect()

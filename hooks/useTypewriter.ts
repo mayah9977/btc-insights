@@ -1,58 +1,75 @@
+// hooks/useTypewriter.ts
+
 'use client'
 
 import { useEffect, useState } from 'react'
 import { vipSound } from '@/lib/sound/vipSoundSystem'
 
-/* =====================================================
-   🔥 고급 타자기 효과 (속도 멀티플라이어 적용 버전)
-===================================================== */
+/* ======================================================================
+   🔥 Advanced typewriter effect (version with speed multiplier)
+===================================================================== */
 
-/* 🚀 전역 배속 제어 */
+/* 🚀 Global speed control */
 const SPEED_MULTIPLIER = 1.5
+
+const completedTextCache = new Set<string>()
 
 export function useTypewriter(
   text: string,
   speed: number = 15
 ) {
-
   const [displayed, setDisplayed] = useState('')
   const [index, setIndex] = useState(0)
 
-  /* 실제 적용 속도 */
+  /* Actual application speed */
   const adjustedSpeed = speed / SPEED_MULTIPLIER
 
-  /* 🔄 텍스트 변경 시 초기화 */
-
+  /* 🔄 Reset when text changes */
   useEffect(() => {
+    if (!text) {
+      setDisplayed('')
+      setIndex(0)
+      return
+    }
+
+    if (completedTextCache.has(text)) {
+      setDisplayed(text)
+      setIndex(text.length)
+      return
+    }
+
     setDisplayed('')
     setIndex(0)
   }, [text])
 
-
-  /* ⌨️ 타자기 로직 */
-
+  /* ⌨️ Typewriter logic */
   useEffect(() => {
-
     if (!text) return
-    if (index >= text.length) return
+
+    if (completedTextCache.has(text)) {
+      return
+    }
+
+    if (index >= text.length) {
+      if (!completedTextCache.has(text)) {
+        completedTextCache.add(text)
+      }
+
+      return
+    }
 
     const timeout = setTimeout(() => {
+      setDisplayed((prev) => prev + text[index])
+      setIndex((prev) => prev + 1)
 
-      setDisplayed(prev => prev + text[index])
-      setIndex(prev => prev + 1)
-
-      /* 🔊 타이핑 사운드 */
-
+      /* 🔊 Typing sound */
       if (index % 2 === 0) {
         vipSound.play('typing')
       }
-
     }, adjustedSpeed)
 
     return () => clearTimeout(timeout)
-
   }, [index, text, adjustedSpeed])
-
 
   return displayed
 }

@@ -1,3 +1,5 @@
+//lib/market/actionGate/bollingerSentenceMap.ts  
+
 /**
  * Action Gate v2
  * Bollinger Signal → Sentence Mapping (SSOT)
