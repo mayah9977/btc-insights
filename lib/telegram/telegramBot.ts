@@ -36,7 +36,6 @@ if (!token) {
  * - Webhook route를 authoritative path로 유지
  * =====================================================
  */
-
 if (process.env.NODE_ENV === 'production') {
   console.warn(
     '[Telegram] ⚠️ Polling bot is disabled in production. Webhook route is authoritative.'
@@ -62,7 +61,18 @@ bot.on('message', async (msg: Message) => {
     msg.text
   )
 
-  if (msg.text === '/start') {
+  if (msg.text?.startsWith('/start')) {
+    const payload = msg.text.split(' ')[1]
+
+    if (payload === 'vip_report') {
+      await bot.sendMessage(
+        msg.chat.id,
+        '🚀 VIP 리포트 봇이 연결되었습니다. 매일 오전 7시에 주요 뉴스 브리핑, 온체인 데이터, 세력 흐름 분석 리포트를 보내드립니다.',
+      )
+
+      return
+    }
+
     await bot.sendMessage(
       msg.chat.id,
       '🚀 VIP 리포트 봇이 연결되었습니다.',

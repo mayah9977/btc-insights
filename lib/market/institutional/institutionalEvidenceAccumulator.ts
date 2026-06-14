@@ -19,6 +19,10 @@ import type {
   InstitutionalEvidenceSnapshot,
 } from '@/lib/market/institutional/institutionalEvidenceSnapshot'
 
+import type {
+  InstitutionalEvidenceSnapshot1h,
+} from '@/lib/market/institutional/institutionalEvidenceSnapshot1h'
+
 import {
   detectInstitutionalPattern,
 } from '@/lib/market/patterns/detectInstitutionalPattern'
@@ -287,6 +291,7 @@ async function saveFinalized30mSnapshotViaRoute(
 
 function emitInstitutionalPatternSignal(
   snapshot: InstitutionalEvidenceSnapshot,
+  preferredSnapshot1h?: InstitutionalEvidenceSnapshot1h | null,
 ) {
   try {
     const detectedPattern =
@@ -374,10 +379,25 @@ function emitInstitutionalPatternSignal(
       return
     }
 
-    const snapshot1h =
+    const storeSnapshot1h =
       useInstitutionalEvidenceStore1h
         .getState()
         .snapshot
+
+    const snapshot1h =
+      preferredSnapshot1h?.confirmedCandleTs ===
+      snapshot.confirmedCandleTs
+        ? preferredSnapshot1h
+        : storeSnapshot1h
+
+    const snapshot1hSource =
+      preferredSnapshot1h?.confirmedCandleTs ===
+      snapshot.confirmedCandleTs
+        ? 'PREFERRED_RETURN_VALUE'
+        : storeSnapshot1h?.confirmedCandleTs ===
+            snapshot.confirmedCandleTs
+          ? 'STORE'
+          : 'NONE'
 
     const confirmationSnapshot1h =
       snapshot1h?.confirmedCandleTs ===
@@ -390,6 +410,40 @@ function emitInstitutionalPatternSignal(
         detectedPattern.type,
         confirmationSnapshot1h,
       )
+
+    const dedupeKey =
+      `${detectedPattern.type}:${snapshot.confirmedCandleTs}`
+
+    console.log(
+      '[EMIT_PATTERN_CONDITION_CHECK]',
+      {
+        ts: Date.now(),
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        snapshot1hConfirmedCandleTs:
+          snapshot1h?.confirmedCandleTs,
+        preferredSnapshot1hConfirmedCandleTs:
+          preferredSnapshot1h
+            ?.confirmedCandleTs,
+        storeSnapshot1hConfirmedCandleTs:
+          storeSnapshot1h?.confirmedCandleTs,
+        snapshot1hSource,
+        confirmationSnapshotMatched:
+          snapshot1h?.confirmedCandleTs ===
+          snapshot.confirmedCandleTs,
+        detectedType:
+          detectedPattern.type,
+        confirmationAction:
+          confirmation1h.action,
+        confirmationReason:
+          confirmation1h.reason,
+        dedupeKey,
+        alreadyEmitted:
+          emittedInstitutionalPatternKeys.has(
+            dedupeKey,
+          ),
+      },
+    )
 
     console.log(
       '[INSTITUTIONAL_PATTERN_1H_CONFIRMATION]',
@@ -417,8 +471,36 @@ function emitInstitutionalPatternSignal(
       return
     }
 
-    const dedupeKey =
-      `${detectedPattern.type}:${snapshot.confirmedCandleTs}`
+    console.log(
+      '[INSTITUTIONAL_PATTERN_DEDUPE_CHECK]',
+      {
+        ts: Date.now(),
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        snapshot1hConfirmedCandleTs:
+          snapshot1h?.confirmedCandleTs,
+        preferredSnapshot1hConfirmedCandleTs:
+          preferredSnapshot1h
+            ?.confirmedCandleTs,
+        storeSnapshot1hConfirmedCandleTs:
+          storeSnapshot1h?.confirmedCandleTs,
+        snapshot1hSource,
+        confirmationSnapshotMatched:
+          snapshot1h?.confirmedCandleTs ===
+          snapshot.confirmedCandleTs,
+        detectedType:
+          detectedPattern.type,
+        confirmationAction:
+          confirmation1h.action,
+        confirmationReason:
+          confirmation1h.reason,
+        dedupeKey,
+        alreadyEmitted:
+          emittedInstitutionalPatternKeys.has(
+            dedupeKey,
+          ),
+      },
+    )
 
     if (
       emittedInstitutionalPatternKeys.has(
@@ -1018,15 +1100,20 @@ export function freezeInstitutionalSnapshot(
 
   void saveFinalized30mSnapshotViaRoute(snapshot)
 
+  let finalizedSnapshot1hForEmit:
+    | InstitutionalEvidenceSnapshot1h
+    | null = null
+
   if (
     new Date(
       snapshot.confirmedCandleTs,
     ).getUTCMinutes() === 0
   ) {
     try {
-      freezeInstitutionalSnapshot1h(
-        snapshot.confirmedCandleTs,
-      )
+      finalizedSnapshot1hForEmit =
+        freezeInstitutionalSnapshot1h(
+          snapshot.confirmedCandleTs,
+        )
     } catch (error) {
       console.error(
         '[FREEZE_INSTITUTIONAL_SNAPSHOT_1H_ERROR]',
@@ -1039,7 +1126,42 @@ export function freezeInstitutionalSnapshot(
     }
   }
 
-  emitInstitutionalPatternSignal(snapshot)
+  console.log(
+    '[FREEZE_TO_EMIT_TARGET]',
+    {
+      ts: Date.now(),
+      confirmedCandleTs:
+        snapshot.confirmedCandleTs,
+      returned1hConfirmedCandleTs:
+        finalizedSnapshot1hForEmit
+          ?.confirmedCandleTs,
+      returned1hMatches30m:
+        finalizedSnapshot1hForEmit
+          ?.confirmedCandleTs ===
+        snapshot.confirmedCandleTs,
+      snapshot1hConfirmedCandleTs:
+        useInstitutionalEvidenceStore1h
+          .getState()
+          .snapshot
+          ?.confirmedCandleTs,
+      confirmationSnapshotMatched:
+        useInstitutionalEvidenceStore1h
+          .getState()
+          .snapshot
+          ?.confirmedCandleTs ===
+        snapshot.confirmedCandleTs,
+      detectedType: null,
+      confirmationAction: null,
+      confirmationReason: null,
+      dedupeKey: null,
+      alreadyEmitted: null,
+    },
+  )
+
+  emitInstitutionalPatternSignal(
+    snapshot,
+    finalizedSnapshot1hForEmit,
+  )
 
   console.log(
     '[ACCUMULATOR_RESET]',

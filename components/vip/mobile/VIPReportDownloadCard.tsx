@@ -3,9 +3,23 @@
 'use client'
 
 export default function VIPReportDownloadCard() {
+  const telegramBotUsername =
+    process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+
+  const telegramBotUrl = telegramBotUsername
+    ? `https://t.me/${telegramBotUsername}?start=vip_report`
+    : null
+
+  const isTelegramConfigured =
+    Boolean(telegramBotUrl)
+
   const handleTelegramConnect = () => {
+    if (!telegramBotUrl) {
+      return
+    }
+
     window.open(
-      'https://t.me/YOUR_TELEGRAM_BOT_USERNAME',
+      telegramBotUrl,
       '_blank'
     )
   }
@@ -205,6 +219,7 @@ export default function VIPReportDownloadCard() {
             {/* button */}
             <button
               onClick={handleTelegramConnect}
+              disabled={!isTelegramConfigured}
               className="
               mt-4
               flex
@@ -224,10 +239,27 @@ export default function VIPReportDownloadCard() {
               transition-all
               duration-200
               active:scale-[0.985]
+              disabled:cursor-not-allowed
+              disabled:opacity-45
               "
             >
-              Telegram Bot 연결하기
+              {isTelegramConfigured
+                ? 'Telegram에서 VIP 리포트 받기'
+                : 'Telegram Bot 설정 필요'}
             </button>
+
+            <div
+              className="
+              mt-2
+              text-[10px]
+              leading-relaxed
+              text-white/45
+              "
+            >
+              {isTelegramConfigured
+                ? 'Telegram에서 Start를 눌러 연결을 완료하세요'
+                : '관리자가 Telegram Bot username을 설정하면 연결할 수 있습니다.'}
+            </div>
           </div>
         </div>
       </div>

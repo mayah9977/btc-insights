@@ -155,6 +155,28 @@ export function MobileInstitutionalPatternAlertCard() {
         confirmationSnapshot1h,
       )
 
+    console.log(
+      '[MOBILE_PATTERN_CARD_DISPLAY_CHECK]',
+      {
+        ts: Date.now(),
+        confirmedCandleTs:
+          finalized.confirmedCandleTs,
+        snapshot1hConfirmedCandleTs:
+          snapshot1h?.confirmedCandleTs,
+        confirmationSnapshotMatched:
+          snapshot1h?.confirmedCandleTs ===
+          finalized.confirmedCandleTs,
+        detectedType:
+          detected.type,
+        confirmationAction:
+          confirmation1h.action,
+        confirmationReason:
+          confirmation1h.reason,
+        dedupeKey:
+          `${detected.type}:${finalized.confirmedCandleTs}`,
+      },
+    )
+
     if (confirmation1h.action !== 'ALLOW') {
       return null
     }
