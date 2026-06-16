@@ -390,15 +390,6 @@ function emitInstitutionalPatternSignal(
         ? preferredSnapshot1h
         : storeSnapshot1h
 
-    const snapshot1hSource =
-      preferredSnapshot1h?.confirmedCandleTs ===
-      snapshot.confirmedCandleTs
-        ? 'PREFERRED_RETURN_VALUE'
-        : storeSnapshot1h?.confirmedCandleTs ===
-            snapshot.confirmedCandleTs
-          ? 'STORE'
-          : 'NONE'
-
     const confirmationSnapshot1h =
       snapshot1h?.confirmedCandleTs ===
       snapshot.confirmedCandleTs
@@ -413,37 +404,6 @@ function emitInstitutionalPatternSignal(
 
     const dedupeKey =
       `${detectedPattern.type}:${snapshot.confirmedCandleTs}`
-
-    console.log(
-      '[EMIT_PATTERN_CONDITION_CHECK]',
-      {
-        ts: Date.now(),
-        confirmedCandleTs:
-          snapshot.confirmedCandleTs,
-        snapshot1hConfirmedCandleTs:
-          snapshot1h?.confirmedCandleTs,
-        preferredSnapshot1hConfirmedCandleTs:
-          preferredSnapshot1h
-            ?.confirmedCandleTs,
-        storeSnapshot1hConfirmedCandleTs:
-          storeSnapshot1h?.confirmedCandleTs,
-        snapshot1hSource,
-        confirmationSnapshotMatched:
-          snapshot1h?.confirmedCandleTs ===
-          snapshot.confirmedCandleTs,
-        detectedType:
-          detectedPattern.type,
-        confirmationAction:
-          confirmation1h.action,
-        confirmationReason:
-          confirmation1h.reason,
-        dedupeKey,
-        alreadyEmitted:
-          emittedInstitutionalPatternKeys.has(
-            dedupeKey,
-          ),
-      },
-    )
 
     console.log(
       '[INSTITUTIONAL_PATTERN_1H_CONFIRMATION]',
@@ -470,37 +430,6 @@ function emitInstitutionalPatternSignal(
 
       return
     }
-
-    console.log(
-      '[INSTITUTIONAL_PATTERN_DEDUPE_CHECK]',
-      {
-        ts: Date.now(),
-        confirmedCandleTs:
-          snapshot.confirmedCandleTs,
-        snapshot1hConfirmedCandleTs:
-          snapshot1h?.confirmedCandleTs,
-        preferredSnapshot1hConfirmedCandleTs:
-          preferredSnapshot1h
-            ?.confirmedCandleTs,
-        storeSnapshot1hConfirmedCandleTs:
-          storeSnapshot1h?.confirmedCandleTs,
-        snapshot1hSource,
-        confirmationSnapshotMatched:
-          snapshot1h?.confirmedCandleTs ===
-          snapshot.confirmedCandleTs,
-        detectedType:
-          detectedPattern.type,
-        confirmationAction:
-          confirmation1h.action,
-        confirmationReason:
-          confirmation1h.reason,
-        dedupeKey,
-        alreadyEmitted:
-          emittedInstitutionalPatternKeys.has(
-            dedupeKey,
-          ),
-      },
-    )
 
     if (
       emittedInstitutionalPatternKeys.has(
@@ -1125,38 +1054,6 @@ export function freezeInstitutionalSnapshot(
       )
     }
   }
-
-  console.log(
-    '[FREEZE_TO_EMIT_TARGET]',
-    {
-      ts: Date.now(),
-      confirmedCandleTs:
-        snapshot.confirmedCandleTs,
-      returned1hConfirmedCandleTs:
-        finalizedSnapshot1hForEmit
-          ?.confirmedCandleTs,
-      returned1hMatches30m:
-        finalizedSnapshot1hForEmit
-          ?.confirmedCandleTs ===
-        snapshot.confirmedCandleTs,
-      snapshot1hConfirmedCandleTs:
-        useInstitutionalEvidenceStore1h
-          .getState()
-          .snapshot
-          ?.confirmedCandleTs,
-      confirmationSnapshotMatched:
-        useInstitutionalEvidenceStore1h
-          .getState()
-          .snapshot
-          ?.confirmedCandleTs ===
-        snapshot.confirmedCandleTs,
-      detectedType: null,
-      confirmationAction: null,
-      confirmationReason: null,
-      dedupeKey: null,
-      alreadyEmitted: null,
-    },
-  )
 
   emitInstitutionalPatternSignal(
     snapshot,

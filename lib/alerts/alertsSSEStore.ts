@@ -850,10 +850,30 @@ export const useAlertsSSEStore =
               data?.type ===
               'INSTITUTIONAL_PATTERN_SIGNAL'
             ) {
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_HANDLER_START]',
+                {
+                  ts: Date.now(),
+                  data,
+                },
+              )
+
               const dedupeKey =
                 buildInstitutionalPatternDedupeKey(
                   data,
                 )
+
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_DEDUPE_CHECK]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                  processedKeys:
+                    Array.from(
+                      runtime.processedEventMap.keys(),
+                    ),
+                },
+              )
 
               if (
                 markIfDuplicate(
@@ -867,6 +887,15 @@ export const useAlertsSSEStore =
                   dedupeKey,
                 )
 
+                console.log(
+                  '[INSTITUTIONAL_PATTERN_REALTIME_ABORTED]',
+                  {
+                    ts: Date.now(),
+                    dedupeKey,
+                    reason: 'CLIENT_DEDUPE',
+                  },
+                )
+
                 return
               }
 
@@ -878,7 +907,25 @@ export const useAlertsSSEStore =
               const isVIP =
                 await getUserVIP()
 
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_VIP_CHECK]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                  isVIP,
+                },
+              )
+
               if (!isVIP) {
+                console.log(
+                  '[INSTITUTIONAL_PATTERN_REALTIME_ABORTED]',
+                  {
+                    ts: Date.now(),
+                    dedupeKey,
+                    reason: 'VIP_FALSE',
+                  },
+                )
+
                 return
               }
 
@@ -886,6 +933,30 @@ export const useAlertsSSEStore =
                 await getUserNotificationSettings(
                   'local',
                 )
+
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_SETTING_CHECK]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                  institutionalPatternEnabled:
+                    settings.institutionalPatternEnabled,
+                  soundEnabled:
+                    settings.soundEnabled,
+                  vibrationEnabled:
+                    settings.vibrationEnabled,
+                  soundType:
+                    settings.soundType,
+                  documentHidden:
+                    typeof document !== 'undefined'
+                      ? document.hidden
+                      : null,
+                  notificationPermission:
+                    typeof Notification !== 'undefined'
+                      ? Notification.permission
+                      : null,
+                },
+              )
 
               /**
                * institutional realtime alert runtime gating
@@ -896,6 +967,15 @@ export const useAlertsSSEStore =
               ) {
                 console.log(
                   '[alerts-sse] institutional pattern disabled by settings',
+                )
+
+                console.log(
+                  '[INSTITUTIONAL_PATTERN_REALTIME_ABORTED]',
+                  {
+                    ts: Date.now(),
+                    dedupeKey,
+                    reason: 'SETTING_DISABLED',
+                  },
                 )
 
                 return
@@ -932,6 +1012,15 @@ export const useAlertsSSEStore =
                   Date.now(),
               }
 
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_TOAST_ATTEMPT]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                  payload,
+                },
+              )
+
               renderInstitutionalPatternToast(
                 {
                   pattern:
@@ -948,36 +1037,24 @@ export const useAlertsSSEStore =
                 },
               )
 
-              void fetch(
-                '/api/notification/save',
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_TOAST_RENDERED]',
                 {
-                  method: 'POST',
-
-                  headers: {
-                    'Content-Type':
-                      'application/json',
-                  },
-
-                  body: JSON.stringify(
-                    {
-                      id: dedupeKey,
-
-                      type: 'INSTITUTIONAL_PATTERN',
-
-                      title:
-                        'Institutional Flow Signal',
-
-                      body: `${payload.pattern} · ${payload.intensity}`,
-
-                      createdAt:
-                        payload.ts,
-                    },
-                  ),
+                  ts: Date.now(),
+                  dedupeKey,
                 },
               )
 
               void startNotificationLoop(
                 dedupeKey,
+              )
+
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_SOUND_REQUESTED]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                },
               )
 
               window.dispatchEvent(
@@ -999,6 +1076,15 @@ export const useAlertsSSEStore =
                       payload,
                   },
                 ),
+              )
+
+              console.log(
+                '[INSTITUTIONAL_PATTERN_REALTIME_DISPATCHED]',
+                {
+                  ts: Date.now(),
+                  dedupeKey,
+                  payload,
+                },
               )
             }
           }

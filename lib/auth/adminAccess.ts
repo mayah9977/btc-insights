@@ -1,3 +1,5 @@
+//lib/auth/adminAccess.ts  
+
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 
 export type AdminRole = 'ADMIN' | 'SUPER_ADMIN'
