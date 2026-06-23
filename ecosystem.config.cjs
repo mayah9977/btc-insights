@@ -22,5 +22,21 @@ module.exports = {
         NODE_ENV: 'production',
       },
     },
+    {
+      name: 'binance-stream-worker',
+      cwd: '/var/www/app',
+      script: './node_modules/.bin/tsx',
+      args: 'worker/binance-stream-worker.ts',
+      watch: false,
+      autorestart: true,
+      max_memory_restart: '300M',
+      restart_delay: 3000,
+      env: {
+        NODE_ENV: 'production',
+        BINANCE_SYMBOL: 'BTCUSDT',
+        BINANCE_WS_MODE: 'multi',
+        BINANCE_WS_DEBUG: 'false',
+      },
+    },
   ],
 }
