@@ -26,6 +26,9 @@ import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 import { useInstitutionalEvidenceStore } from '@/lib/market/institutional/institutionalEvidenceStore'
 import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
+import {
+  useRealtimeInstitutionalPatternStore,
+} from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
 
 import { InstitutionalPatternAlertCard } from '@/components/market/patterns/InstitutionalPatternAlertCard'
 
@@ -40,6 +43,14 @@ export const ActionGateRenderer: React.FC<
 > = ({ signalType }) => {
   const finalized =
     useFinalizedInstitutionalSnapshot()
+
+  const finalizedConfirmedCandleTs =
+    finalized.confirmedCandleTs ?? 0
+
+  const realtimePattern =
+    useRealtimeInstitutionalPatternStore(
+      (state) => state.pattern,
+    )
 
   const gate = useVIPMarketStore(
     (s) => s.actionGateState,
@@ -140,6 +151,20 @@ export const ActionGateRenderer: React.FC<
     IGNORE: 'ag-density-compact',
   }
 
+  const shouldShowRealtimePatternBeforeFinalized =
+    Boolean(
+      realtimePattern &&
+        (
+          !finalized.snapshotReady ||
+          realtimePattern.confirmedCandleTs >
+            finalizedConfirmedCandleTs
+        ),
+    )
+
+  const shouldShowPatternSection =
+    finalized.snapshotReady ||
+    shouldShowRealtimePatternBeforeFinalized
+
   return (
     <div
       className={`
@@ -219,7 +244,7 @@ export const ActionGateRenderer: React.FC<
               }}
               className="mt-8"
             >
-              {!finalized.snapshotReady ? (
+              {!shouldShowPatternSection ? (
                 <motion.section
                   layout
                   transition={{
@@ -309,7 +334,9 @@ export const ActionGateRenderer: React.FC<
                   >
                     <InstitutionalPatternAlertCard />
 
-                    <FinalizedInstitutionalNumbers />
+                    {finalized.snapshotReady ? (
+                      <FinalizedInstitutionalNumbers />
+                    ) : null}
                   </motion.section>
                 </>
               )}

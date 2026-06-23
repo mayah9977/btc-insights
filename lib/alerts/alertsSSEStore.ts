@@ -16,6 +16,10 @@ import {
   renderIndicatorToast,
   renderInstitutionalPatternToast,
 } from '@/app/[locale]/alerts/components/AlertToastRenderer'
+import {
+  useRealtimeInstitutionalPatternStore,
+  type RealtimeInstitutionalPattern,
+} from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
 
 export type SystemRiskLevel =
   | 'SAFE'
@@ -157,6 +161,35 @@ function normalizeIndicatorType(
   }
 
   return null
+}
+
+function normalizeInstitutionalPatternIntensity(
+  value: unknown,
+): RealtimeInstitutionalPattern['intensity'] {
+  if (
+    value === 'WEAK' ||
+    value === 'BUILDING' ||
+    value === 'AGGRESSIVE' ||
+    value === 'EXTREME'
+  ) {
+    return value
+  }
+
+  return 'WEAK'
+}
+
+function normalizeInstitutionalPatternRisk(
+  value: unknown,
+): RealtimeInstitutionalPattern['risk'] {
+  if (
+    value === 'LOW' ||
+    value === 'MEDIUM' ||
+    value === 'HIGH'
+  ) {
+    return value
+  }
+
+  return 'LOW'
 }
 
 function buildAlertDedupeKey(
@@ -1011,6 +1044,53 @@ export const useAlertsSSEStore =
                   data.ts ??
                   Date.now(),
               }
+
+              useRealtimeInstitutionalPatternStore
+                .getState()
+                .setPattern({
+                  type: payload.pattern,
+
+                  pattern:
+                    payload.pattern,
+
+                  title:
+                    payload.pattern,
+
+                  summary:
+                    payload.summary,
+
+                  intensity:
+                    normalizeInstitutionalPatternIntensity(
+                      payload.intensity,
+                    ),
+
+                  risk:
+                    normalizeInstitutionalPatternRisk(
+                      payload.risk,
+                    ),
+
+                  confirmedCandleTs:
+                    payload.confirmedCandleTs,
+
+                  ts:
+                    payload.ts,
+                })
+
+              console.log(
+                '[REALTIME_INSTITUTIONAL_PATTERN_STORE_SET]',
+                {
+                  pattern:
+                    payload.pattern,
+                  intensity:
+                    payload.intensity,
+                  risk:
+                    payload.risk,
+                  confirmedCandleTs:
+                    payload.confirmedCandleTs,
+                  ts:
+                    payload.ts,
+                },
+              )
 
               console.log(
                 '[INSTITUTIONAL_PATTERN_REALTIME_TOAST_ATTEMPT]',

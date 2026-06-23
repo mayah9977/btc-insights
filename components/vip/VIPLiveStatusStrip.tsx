@@ -2,8 +2,16 @@
 
 'use client'
 
-import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from 'react'
+import {
+  motion,
+  AnimatePresence,
+} from 'framer-motion'
 import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
@@ -31,7 +39,8 @@ function VIPLiveStatusStripComponent() {
     whaleSpike: false,
   })
 
-  const [renderState, setRenderState] = useState(marketRef.current)
+  const [renderState, setRenderState] =
+    useState(marketRef.current)
 
   const lastRenderRef = useRef(0)
 
@@ -108,17 +117,23 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   const normalized = useMemo(() => {
-    const volScore = volume ? Math.log10(volume + 1) / 6 : 0
+    const volScore = volume
+      ? Math.log10(volume + 1) / 6
+      : 0
 
     /**
      * 🔥 whaleIntensity SSOT = 0~100
      * UI composite score 계산에서만 /100 normalize합니다.
      */
-    const whaleScore = (whaleIntensity ?? 0) / 100
+    const whaleScore =
+      (whaleIntensity ?? 0) / 100
 
     const oiScore =
       oiDelta && Math.abs(oiDelta) > 0
-        ? Math.min(Math.abs(oiDelta) / 1_000_000, 1)
+        ? Math.min(
+            Math.abs(oiDelta) / 1_000_000,
+            1,
+          )
         : 0
 
     return Math.min(
@@ -154,8 +169,14 @@ function VIPLiveStatusStripComponent() {
   =============================== */
 
   const squeezeType = useMemo(() => {
-    if (!oi || !oiDelta || !volume || !whaleIntensity)
+    if (
+      !oi ||
+      !oiDelta ||
+      !volume ||
+      !whaleIntensity
+    ) {
       return null
+    }
 
     const oiRatio = oiDelta / oi
     const volCondition = volume > 600000
@@ -164,13 +185,24 @@ function VIPLiveStatusStripComponent() {
      * 🔥 whaleIntensity SSOT = 0~100
      * 기존 0.7 threshold를 70 기준으로 변경합니다.
      */
-    const whaleCondition = whaleIntensity > 70
+    const whaleCondition =
+      whaleIntensity > 70
 
-    if (oiRatio > 0.015 && volCondition && whaleCondition)
+    if (
+      oiRatio > 0.015 &&
+      volCondition &&
+      whaleCondition
+    ) {
       return 'SHORT SQUEEZE'
+    }
 
-    if (oiRatio < -0.015 && volCondition && whaleCondition)
+    if (
+      oiRatio < -0.015 &&
+      volCondition &&
+      whaleCondition
+    ) {
       return 'LONG SQUEEZE'
+    }
 
     return null
   }, [oi, oiDelta, volume, whaleIntensity])
@@ -235,7 +267,11 @@ function VIPLiveStatusStripComponent() {
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0, ...shake }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        ...shake,
+      }}
       transition={{ duration: 0.35 }}
       className="
       sticky top-[64px] z-50 mb-4
@@ -281,17 +317,69 @@ function VIPLiveStatusStripComponent() {
         }}
       />
 
+      <AnimatePresence>
+        {realtimeDelayed && (
+          <motion.div
+            initial={{
+              opacity: 0,
+              y: -10,
+            }}
+            animate={{
+              opacity: 1,
+              y: 0,
+            }}
+            exit={{
+              opacity: 0,
+              y: -10,
+            }}
+            transition={{
+              duration: 0.25,
+              ease: 'easeOut',
+            }}
+            className="
+              relative
+              z-20
+              border-b
+              border-amber-400/40
+              bg-gradient-to-r
+              from-amber-500/25
+              via-orange-500/20
+              to-yellow-500/25
+              px-4
+              py-2
+              text-center
+              text-xs
+              font-semibold
+              tracking-wide
+              text-amber-200
+              shadow-[0_0_24px_rgba(245,158,11,0.18)]
+            "
+          >
+            실시간 데이터 지연 중 · 자동 재연결 시도 중
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-8 gap-y-1 text-sm">
-        <div className={`font-semibold ${AI_COLOR[aiLevel]}`}>
-          AI is observing the market in real time : {aiLevel}
+        <div
+          className={`font-semibold ${AI_COLOR[aiLevel]}`}
+        >
+          AI is observing the market in real time :{' '}
+          {aiLevel}
         </div>
 
         <div className="text-zinc-200">
-          Open Interest {oi != null ? oi.toLocaleString() : '--'}
+          Open Interest{' '}
+          {oi != null ? oi.toLocaleString() : '--'}
         </div>
 
-        <div className={`font-bold text-red-400 ${volumeFlashClass}`}>
-          실시간 체결량 {volume != null ? volume.toLocaleString() : '--'}
+        <div
+          className={`font-bold text-red-400 ${volumeFlashClass}`}
+        >
+          실시간 체결량{' '}
+          {volume != null
+            ? volume.toLocaleString()
+            : '--'}
         </div>
 
         <div className="text-yellow-300">
@@ -300,8 +388,8 @@ function VIPLiveStatusStripComponent() {
         </div>
 
         {realtimeDelayed && (
-          <div className="text-[11px] font-semibold text-yellow-400">
-            Real-time data delayed
+          <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
+            Reconnecting realtime stream
           </div>
         )}
       </div>

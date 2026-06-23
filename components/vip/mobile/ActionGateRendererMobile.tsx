@@ -21,6 +21,9 @@ import { usePremiumSignalAnimation } from '@/hooks/usePremiumSignalAnimation'
 import { MobileInstitutionalPatternAlertCard } from '@/components/vip/mobile/MobileInstitutionalPatternAlertCard'
 import { MobileFinalizedInstitutionalNumbers } from '@/components/vip/mobile/MobileFinalizedInstitutionalNumbers'
 import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
+import {
+  useRealtimeInstitutionalPatternStore,
+} from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
 
 export type ActionGateState =
   | 'OBSERVE'
@@ -40,6 +43,14 @@ export default function ActionGateRendererMobile({
 }: Props) {
   const finalized =
     useFinalizedInstitutionalSnapshot()
+
+  const finalizedConfirmedCandleTs =
+    finalized.confirmedCandleTs ?? 0
+
+  const realtimePattern =
+    useRealtimeInstitutionalPatternStore(
+      (state) => state.pattern,
+    )
 
   const title = 'Whales dominate the market.'
 
@@ -119,6 +130,20 @@ export default function ActionGateRendererMobile({
 
   const how =
     '"확정된 분석"은 현재 비트코인 시장의 구조와 자금 흐름의 압력으로 해석해서 활용하시길 바랍니다.'
+
+  const shouldShowRealtimePatternBeforeFinalized =
+    Boolean(
+      realtimePattern &&
+        (
+          !finalized.snapshotReady ||
+          realtimePattern.confirmedCandleTs >
+            finalizedConfirmedCandleTs
+        ),
+    )
+
+  const shouldShowPatternSection =
+    finalized.snapshotReady ||
+    shouldShowRealtimePatternBeforeFinalized
 
   return (
     <div className="space-y-3">
@@ -327,7 +352,7 @@ export default function ActionGateRendererMobile({
               ${transition ? 'scale-[1.02]' : ''}
             `}
           >
-            {!finalized.snapshotReady ? (
+            {!shouldShowPatternSection ? (
               <div className="rounded-xl border border-zinc-800 bg-black/20 px-4 py-3 text-xs leading-relaxed text-zinc-400">
                 확정 데이터 수집 중입니다. 첫 번째 30분 확정 분석 이후 수치가 표시됩니다.
               </div>
@@ -355,7 +380,9 @@ export default function ActionGateRendererMobile({
                 <div className="space-y-3 pt-1">
                   <MobileInstitutionalPatternAlertCard />
 
-                  <MobileFinalizedInstitutionalNumbers />
+                  {finalized.snapshotReady ? (
+                    <MobileFinalizedInstitutionalNumbers />
+                  ) : null}
                 </div>
               </>
             )}

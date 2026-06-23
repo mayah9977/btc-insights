@@ -21,6 +21,11 @@ import {
   type InstitutionalPatternRisk,
 } from '@/lib/market/patterns/detectInstitutionalPattern'
 
+import {
+  useRealtimeInstitutionalPatternStore,
+  type RealtimeInstitutionalPattern,
+} from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
+
 const riskClassMap: Record<
   InstitutionalPatternRisk,
   string
@@ -57,16 +62,101 @@ const confidenceDescriptionMap: Record<
     '최근 30분 누적 데이터 기준, 높은 신뢰도의 세력 흐름이 감지되고 있습니다.',
 }
 
+function getRealtimeConfidencePercent(
+  risk: InstitutionalPatternRisk,
+) {
+  if (risk === 'HIGH') {
+    return 85
+  }
+
+  if (risk === 'MEDIUM') {
+    return 70
+  }
+
+  return 55
+}
+
+function formatRealtimePatternTitle(
+  pattern: string,
+) {
+  return pattern
+    .toLowerCase()
+    .split('_')
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1),
+    )
+    .join(' ')
+}
+
+function getRealtimeDominantFlow(
+  pattern: string,
+) {
+  if (pattern === 'LONG_PRESSURE_BUILDING') {
+    return 'LONG'
+  }
+
+  if (pattern === 'SHORT_PRESSURE_BUILDING') {
+    return 'SHORT'
+  }
+
+  return 'NEUTRAL'
+}
+
+function buildRealtimePatternForCard(
+  realtimePattern: RealtimeInstitutionalPattern,
+) {
+  return {
+    type: realtimePattern.type,
+    title: formatRealtimePatternTitle(
+      realtimePattern.title || realtimePattern.pattern,
+    ),
+    summary: realtimePattern.summary,
+    intensity: realtimePattern.intensity,
+    risk: realtimePattern.risk,
+    confidencePercent:
+      getRealtimeConfidencePercent(
+        realtimePattern.risk,
+      ),
+    reasons: realtimePattern.summary
+      ? [realtimePattern.summary]
+      : [],
+    metrics: [
+      {
+        label: 'Dominant Flow(우세 흐름)',
+        value: getRealtimeDominantFlow(
+          realtimePattern.pattern,
+        ),
+        note: 'Realtime inferred dominant flow',
+      },
+      {
+        label: 'Signal Strength',
+        value: `${realtimePattern.risk} / ${realtimePattern.intensity}`,
+        note: 'Realtime risk / intensity',
+      },
+    ],
+  }
+}
+
 export function MobileInstitutionalPatternAlertCard() {
   const finalized =
     useFinalizedInstitutionalSnapshot()
+
+  const finalizedConfirmedCandleTs =
+    finalized.confirmedCandleTs ?? 0
+
+  const realtimePattern =
+    useRealtimeInstitutionalPatternStore(
+      (state) => state.pattern,
+    )
 
   const snapshot1h =
     useInstitutionalEvidenceStore1h(
       (state) => state.snapshot,
     )
 
-  const pattern = useMemo(() => {
+  const finalizedPattern = useMemo(() => {
     if (!finalized.snapshotReady) {
       return null
     }
@@ -204,6 +294,28 @@ export function MobileInstitutionalPatternAlertCard() {
     snapshot1h?.fundingState,
     snapshot1h?.oiDirectionalPressure,
     snapshot1h?.fmaiDirectionalPressure,
+  ])
+
+  const pattern = useMemo(() => {
+    if (
+      realtimePattern &&
+      (
+        !finalized.snapshotReady ||
+        realtimePattern.confirmedCandleTs >
+          finalizedConfirmedCandleTs
+      )
+    ) {
+      return buildRealtimePatternForCard(
+        realtimePattern,
+      )
+    }
+
+    return finalizedPattern
+  }, [
+    realtimePattern,
+    finalizedPattern,
+    finalized.snapshotReady,
+    finalizedConfirmedCandleTs,
   ])
 
   if (!pattern || pattern.type === 'NONE') {

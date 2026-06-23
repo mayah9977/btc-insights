@@ -1,3 +1,5 @@
+// lib/market-context/generateKoreanContext.ts
+
 /* =========================================================
    Market Context - Korean Generator (Stable + GPT Cache)
 ========================================================= */
@@ -15,6 +17,39 @@ interface MarketContextResult {
   translatedHeadlines: string[]
   summary: string
   midLongTerm: string
+  fallbackUsed?: boolean
+}
+
+const GPT_RETRY_COUNT = 3
+const GPT_RETRY_BACKOFF_MS = 1500
+
+function sleep(ms: number) {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
+function buildFallbackContext(
+  headlines: HeadlineItem[]
+): MarketContextResult {
+  const translatedHeadlines = headlines
+    .slice(0, 5)
+    .map(h => h.title)
+
+  const headlineText = translatedHeadlines
+    .slice(0, 3)
+    .join(', ')
+
+  return {
+    translatedHeadlines,
+    summary:
+      headlineText.length > 0
+        ? `오늘 주요 암호화폐 뉴스는 ${headlineText} 등의 흐름을 중심으로 형성되고 있습니다. OpenAI 분석 호출이 일시적으로 실패했기 때문에, 현재 요약은 RSS 헤드라인 기반의 안전한 기본 해석으로 제공됩니다. 단기적으로는 뉴스 민감도와 변동성 확대 가능성을 함께 확인할 필요가 있습니다.`
+        : '오늘 주요 암호화폐 뉴스 흐름은 단기 변동성 확대 가능성을 시사하고 있습니다. OpenAI 분석 호출이 일시적으로 실패했기 때문에, 현재 요약은 RSS 기반의 안전한 기본 해석으로 제공됩니다.',
+    midLongTerm:
+      '중장기적으로는 거시 유동성, 비트코인 현물 ETF 수급, 주요 거래소 및 규제 관련 뉴스가 시장 방향성 판단의 핵심 변수로 작용할 수 있습니다. 현재 단계에서는 단일 뉴스보다 여러 헤드라인이 공통적으로 가리키는 위험 선호 변화와 자금 흐름을 함께 보는 것이 중요합니다. 시스템은 다음 cron 실행에서 GPT 기반 정밀 요약을 다시 시도합니다.',
+    fallbackUsed: true,
+  }
 }
 
 /* =========================================================
@@ -40,6 +75,7 @@ export async function generateKoreanContext(
       translatedHeadlines: [],
       summary: '',
       midLongTerm: '',
+      fallbackUsed: false,
     }
   }
 
@@ -52,8 +88,23 @@ export async function generateKoreanContext(
   const cached = await redis.get(cacheKey)
 
   if (cached) {
-    return JSON.parse(cached)
+    console.log('[MARKET_CONTEXT_GPT_CACHE_HIT]', {
+      ts: Date.now(),
+      cacheKey,
+      headlineCount: headlines.length,
+    })
+
+    return {
+      ...JSON.parse(cached),
+      fallbackUsed: false,
+    }
   }
+
+  console.log('[MARKET_CONTEXT_GPT_CACHE_MISS]', {
+    ts: Date.now(),
+    cacheKey,
+    headlineCount: headlines.length,
+  })
 
   /* 3️⃣ 포맷팅 */
   const formattedHeadlines = headlines
@@ -91,17 +142,68 @@ ${formattedHeadlines}
 `.trim()
 
   /* 5️⃣ GPT 호출 */
-  const content = await generateChatCompletion(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    {
-      model: 'gpt-4o-mini',
-      temperature: 0.3,
-      maxTokens: 900,
+  let content: string | null = null
+  let lastError: unknown = null
+
+  for (
+    let attempt = 1;
+    attempt <= GPT_RETRY_COUNT;
+    attempt += 1
+  ) {
+    try {
+      content = await generateChatCompletion(
+        [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+        {
+          model: 'gpt-4o-mini',
+          temperature: 0.3,
+          maxTokens: 900,
+        }
+      )
+
+      break
+    } catch (error) {
+      lastError = error
+
+      console.warn('[MARKET_CONTEXT_GPT_RETRY]', {
+        ts: Date.now(),
+        attempt,
+        maxAttempts: GPT_RETRY_COUNT,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      })
+
+      if (attempt < GPT_RETRY_COUNT) {
+        await sleep(
+          GPT_RETRY_BACKOFF_MS * attempt
+        )
+      }
     }
-  )
+  }
+
+  if (!content) {
+    console.error('[MARKET_CONTEXT_GPT_FAILED_USING_FALLBACK]', {
+      ts: Date.now(),
+      reason: 'GPT_CALL_FAILED',
+      error:
+        lastError instanceof Error
+          ? lastError.message
+          : String(lastError),
+      headlineCount: headlines.length,
+    })
+
+    return buildFallbackContext(headlines)
+  }
 
   /* 6️⃣ JSON 안정 파싱 */
   try {
@@ -114,25 +216,33 @@ ${formattedHeadlines}
     const parsed = JSON.parse(jsonText)
 
     const result: MarketContextResult = {
-      translatedHeadlines: parsed.translatedHeadlines ?? [],
+      translatedHeadlines:
+        parsed.translatedHeadlines ?? [],
       summary: parsed.summary ?? '',
-      midLongTerm: parsed.midLongTerm ?? '',
+      midLongTerm:
+        parsed.midLongTerm ?? '',
+      fallbackUsed: false,
     }
 
     /* 🔥 7️⃣ Redis 저장 (24시간) */
-    await redis.set(cacheKey, JSON.stringify(result), 'EX', 60 * 60 * 24)
+    await redis.set(
+      cacheKey,
+      JSON.stringify(result),
+      'EX',
+      60 * 60 * 24
+    )
 
     return result
 
   } catch (err) {
     console.error('[MarketContext] JSON parse failed:', err)
 
-    return {
-      translatedHeadlines: headlines.map(h => h.title),
-      summary:
-        '현재 글로벌 뉴스 흐름은 단기 변동성 확대 가능성을 시사하며, 구조적 추세 전환 신호는 제한적입니다.',
-      midLongTerm:
-        '중장기적으로는 거시 환경과 유동성 조건이 방향성을 결정할 핵심 변수로 작용할 전망입니다.',
-    }
+    console.error('[MARKET_CONTEXT_GPT_FAILED_USING_FALLBACK]', {
+      ts: Date.now(),
+      reason: 'GPT_JSON_PARSE_FAILED',
+      headlineCount: headlines.length,
+    })
+
+    return buildFallbackContext(headlines)
   }
 }

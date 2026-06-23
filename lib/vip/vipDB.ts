@@ -1,3 +1,5 @@
+//lib/vip/vipDB.ts  
+
 import type { VIPLevel, VIPAddon } from './vipTypes'
 import { recordVIPChange } from './vipAuditLog'
 import { pool } from '@/lib/db'

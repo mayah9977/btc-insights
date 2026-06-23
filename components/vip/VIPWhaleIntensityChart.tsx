@@ -1,4 +1,4 @@
-//components/vip/VIPWhaleIntensityChart.tsx 
+// components/vip/VIPWhaleIntensityChart.tsx
 
 'use client'
 
@@ -20,22 +20,16 @@ import {
   Line,
   ReferenceLine,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
   Scatter,
 } from 'recharts'
 
 import { useRealtimeOI } from '@/lib/realtime/useRealtimeOI'
-
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
-
 import { calculateInstitutionalProbability } from '@/lib/market/institutionalProbability'
-
 import VIPInstitutionalGuideCard from '@/components/vip/VIPInstitutionalGuideCard'
-
 import { useConfirmedInstitutionalSignal } from '@/lib/engine/useConfirmedInstitutionalSignal'
-
 import { chartController } from '@/lib/chart/chartController'
 
 type Props = {
@@ -57,7 +51,6 @@ function VIPWhaleIntensityChart({
   symbol = 'BTCUSDT',
   showTimeAxis = false,
 }: Props) {
-
   const { delta: oiDelta } =
     useRealtimeOI(symbol)
 
@@ -94,7 +87,6 @@ function VIPWhaleIntensityChart({
   }, [whaleIntensity])
 
   useEffect(() => {
-
     chartController.registerChart<HistoryPoint>(
       chartId,
       BUFFER_SIZE,
@@ -108,15 +100,12 @@ function VIPWhaleIntensityChart({
         chartId,
       )
     }
-
   }, [])
 
   useEffect(() => {
-
     let raf: number
 
     function loop() {
-
       const current =
         visualValueRef.current
 
@@ -154,7 +143,6 @@ function VIPWhaleIntensityChart({
 
     return () =>
       cancelAnimationFrame(raf)
-
   }, [fmai, whaleNet])
 
   const latest =
@@ -173,9 +161,7 @@ function VIPWhaleIntensityChart({
     useState(false)
 
   useEffect(() => {
-
     if (intensityValue > 80) {
-
       setShockwave(true)
 
       const t =
@@ -186,11 +172,9 @@ function VIPWhaleIntensityChart({
 
       return () => clearTimeout(t)
     }
-
   }, [intensityValue])
 
   const yDomain = useMemo(() => {
-
     if (!history.length)
       return [0, 100]
 
@@ -212,7 +196,6 @@ function VIPWhaleIntensityChart({
       Math.max(0, min - padding),
       Math.min(100, max + padding),
     ]
-
   }, [history])
 
   /* =====================================================
@@ -270,7 +253,6 @@ function VIPWhaleIntensityChart({
     displayConfidence >= 45
 
   const flags = useMemo(() => {
-
     return history
       .filter(p => p?.isSpike)
       .slice(-5)
@@ -278,7 +260,6 @@ function VIPWhaleIntensityChart({
         ts: p.ts,
         value: p.value,
       }))
-
   }, [history])
 
   return (
@@ -298,7 +279,6 @@ function VIPWhaleIntensityChart({
             `0 0 40px ${confidenceColor}55`,
         }}
       >
-
         <AnimatePresence>
           {shockwave && (
             <motion.div
@@ -339,7 +319,6 @@ function VIPWhaleIntensityChart({
             height="100%"
           >
             <AreaChart data={history}>
-
               <XAxis
                 dataKey="ts"
                 hide={!showTimeAxis}
@@ -348,10 +327,6 @@ function VIPWhaleIntensityChart({
               <YAxis
                 domain={yDomain}
                 hide
-              />
-
-              <Tooltip
-                isAnimationActive={false}
               />
 
               <Line
@@ -382,7 +357,6 @@ function VIPWhaleIntensityChart({
                 stroke="rgba(250,204,21,0.8)"
                 strokeDasharray="4 4"
               />
-
             </AreaChart>
           </ResponsiveContainer>
         </div>

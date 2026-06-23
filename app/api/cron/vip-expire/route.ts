@@ -1,3 +1,5 @@
+//app/api/cron/vip-expire/route.ts  
+
 import { NextRequest, NextResponse } from 'next/server'
 import { expireOverdueVIPs } from '@/lib/vip/vipDB'
 import { logger } from '@/lib/logger'

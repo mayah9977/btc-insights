@@ -1,3 +1,5 @@
+// app/api/cron/generate-context/route.ts
+
 /* =========================================================
    Cron: Generate Market Context
    - Fetch RSS headlines
@@ -13,12 +15,23 @@ export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    console.log('[Cron] generate-context started')
+    console.log('[MARKET_CONTEXT_CRON_START]', {
+      ts: Date.now(),
+    })
 
     /* ===============================
        1️⃣ RSS Fetch
     =============================== */
     const headlines = await fetchRssNews()
+
+    console.log('[MARKET_CONTEXT_CRON_RSS_RESULT]', {
+      ts: Date.now(),
+      count: headlines?.length ?? 0,
+      firstTitle:
+        headlines?.[0]?.title ?? null,
+      firstPubDate:
+        headlines?.[0]?.pubDate ?? null,
+    })
 
     if (!headlines || headlines.length === 0) {
       console.warn('[Cron] No headlines fetched')
@@ -39,7 +52,20 @@ export async function GET() {
       translatedHeadlines,
       summary,
       midLongTerm,
+      fallbackUsed,
     } = await generateKoreanContext(headlines)
+
+    console.log('[MARKET_CONTEXT_CRON_GPT_RESULT]', {
+      ts: Date.now(),
+      translatedHeadlineCount:
+        translatedHeadlines?.length ?? 0,
+      summaryLength:
+        summary?.length ?? 0,
+      midLongTermLength:
+        midLongTerm?.length ?? 0,
+      fallbackUsed:
+        fallbackUsed === true,
+    })
 
     /* ===============================
        3️⃣ Redis 저장 (SSOT)
@@ -51,13 +77,23 @@ export async function GET() {
       midLongTerm,
     })
 
-    console.log('[Cron] Market context updated')
+    console.log('[MARKET_CONTEXT_CRON_SAVED]', {
+      ts: Date.now(),
+      updatedAt: saved.updatedAt,
+      headlineCount: headlines.length,
+      translatedHeadlineCount:
+        saved.translatedHeadlines?.length ?? 0,
+      fallbackUsed:
+        fallbackUsed === true,
+    })
 
     return new Response(
       JSON.stringify({
         ok: true,
         updatedAt: saved.updatedAt,
         headlineCount: headlines.length,
+        fallbackUsed:
+          fallbackUsed === true,
       }),
       {
         status: 200,
