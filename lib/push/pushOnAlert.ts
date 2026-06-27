@@ -2,7 +2,10 @@
 
 import { sendPushToUser } from './push'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
-import { getUserVIPLevel } from '@/lib/vip/vipServer' // ✅ 수정 (userId 기반 VIP 조회)
+import {
+  getUserVIPLevel,
+  getUserVIPLevelByUserIdOnly,
+} from '@/lib/vip/vipServer'
 
 export type PushAlertPayload = {
   userId: string
@@ -27,6 +30,7 @@ export type PushIndicatorPayload = {
   timeframe?: PushIndicatorTimeframe
   eventCandleTs?: number
   level?: 'NORMAL' | 'CRITICAL'
+  runtime?: 'request' | 'worker'
 }
 
 /**
@@ -214,6 +218,7 @@ export async function pushIndicatorTriggered(
     timeframe,
     eventCandleTs,
     level,
+    runtime,
   } = payload
 
   const settings =
@@ -238,7 +243,9 @@ export async function pushIndicatorTriggered(
 
   // ✅ VIP 체크 (userId 기반)
   const vipLevel =
-    await getUserVIPLevel(userId)
+    runtime === 'worker'
+      ? await getUserVIPLevelByUserIdOnly(userId)
+      : await getUserVIPLevel(userId)
 
   const isVIP =
     vipLevel === 'VIP'

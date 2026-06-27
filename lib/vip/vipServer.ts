@@ -99,6 +99,24 @@ export async function getUserVIPLevel(
 }
 
 /**
+ * Worker / PM2 / background-safe VIP lookup.
+ *
+ * 주의:
+ * - getCurrentUser() 호출 금지
+ * - cookies() 호출 금지
+ * - request scope 없는 환경에서만 사용
+ */
+export async function getUserVIPLevelByUserIdOnly(
+  userId: string,
+): Promise<VIPLevel> {
+  if (isAdminUserId(userId)) {
+    return 'VIP'
+  }
+
+  return getRealVIPLevel(userId)
+}
+
+/**
  * 🔥 기존 구조 유지
  */
 export async function isVIP(

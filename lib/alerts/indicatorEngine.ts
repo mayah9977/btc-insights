@@ -1271,6 +1271,7 @@ export async function handleIndicatorTick(
             timeframe: payload.timeframe,
             eventCandleTs:
               payload.eventCandleTs,
+            runtime: 'worker',
           }),
         ),
       )
