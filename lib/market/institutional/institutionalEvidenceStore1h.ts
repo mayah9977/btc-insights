@@ -1,6 +1,7 @@
 // lib/market/institutional/institutionalEvidenceStore1h.ts
 
 import { create } from 'zustand'
+
 import {
   createJSONStorage,
   persist,
@@ -283,6 +284,35 @@ export const useInstitutionalEvidenceStore1h =
                 snapshot.fmaiDirectionalPressure,
             },
           )
+
+          if (
+            existingSnapshot &&
+            existingSnapshot.confirmedCandleTs ===
+              snapshot.confirmedCandleTs &&
+            (snapshot.sampleCount ?? 0) <
+              (existingSnapshot.sampleCount ?? 0)
+          ) {
+            console.log(
+              '[SET_FINALIZED_SNAPSHOT_1H_SKIPPED_LOWER_SAMPLE_COUNT]',
+              {
+                ts: Date.now(),
+                confirmedCandleTs:
+                  snapshot.confirmedCandleTs,
+                existingSampleCount:
+                  existingSnapshot.sampleCount,
+                newSampleCount:
+                  snapshot.sampleCount,
+                existingEndTs:
+                  existingSnapshot.endTs,
+                newEndTs:
+                  snapshot.endTs,
+                reason:
+                  'LOWER_SAMPLE_COUNT_SAME_CONFIRMED_CANDLE',
+              },
+            )
+
+            return
+          }
 
           set({
             snapshot,

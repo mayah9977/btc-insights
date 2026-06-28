@@ -1,4 +1,4 @@
-//lib/market/institutional/useFinalizedSnapshotBootstrap.ts
+// lib/market/institutional/useFinalizedSnapshotBootstrap.ts
 
 'use client'
 
@@ -115,6 +115,15 @@ function shouldApplySnapshot(
 
   if (!current) {
     return true
+  }
+
+  if (
+    current.confirmedCandleTs ===
+      next.confirmedCandleTs &&
+    (next.sampleCount ?? 0) <
+      (current.sampleCount ?? 0)
+  ) {
+    return false
   }
 
   return (
@@ -261,7 +270,7 @@ export function useFinalizedSnapshotBootstrap() {
                 reason:
                   snapshot30m === null
                     ? 'NO_SERVER_SNAPSHOT'
-                    : 'FINGERPRINT_EQUAL',
+                    : 'FINGERPRINT_EQUAL_OR_LOWER_SAMPLE_COUNT',
               },
             )
           }
@@ -329,7 +338,7 @@ export function useFinalizedSnapshotBootstrap() {
               reason:
                 snapshot1h === null
                   ? 'NO_SERVER_SNAPSHOT'
-                  : 'FINGERPRINT_EQUAL',
+                  : 'FINGERPRINT_EQUAL_OR_LOWER_SAMPLE_COUNT',
             },
           )
         }

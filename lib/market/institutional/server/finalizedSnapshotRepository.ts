@@ -16,18 +16,107 @@ const FINALIZED_SNAPSHOT_30M_KEY =
 const FINALIZED_SNAPSHOT_1H_KEY =
   'institutional:finalized:1h:BTCUSDT'
 
+type FinalizedSnapshot =
+  | InstitutionalEvidenceSnapshot
+  | InstitutionalEvidenceSnapshot1h
+
+function isZeroLikeFinalizedSnapshot(
+  snapshot: FinalizedSnapshot,
+): boolean {
+  return (
+    (snapshot.sampleCount ?? 0) <= 1 &&
+    Number(snapshot.oiDeltaAccum ?? 0) === 0 &&
+    Number(snapshot.fundingAccum ?? 0) === 0 &&
+    Number(snapshot.volumeRatioAccum ?? 0) === 0 &&
+    Number(snapshot.whaleIntensityAccum ?? 0) === 0
+  )
+}
+
 async function saveFinalizedSnapshot(
   key: string,
-  snapshot:
-    | InstitutionalEvidenceSnapshot
-    | InstitutionalEvidenceSnapshot1h,
+  snapshot: FinalizedSnapshot,
   logLabel:
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_1H]',
 ) {
-  void logLabel
-
   try {
+    const existingSnapshot =
+      await loadFinalizedSnapshot<FinalizedSnapshot>(
+        key,
+        logLabel ===
+          '[FINALIZED_SNAPSHOT_REDIS_SAVE_30M]'
+          ? '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]'
+          : '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
+      )
+
+    if (
+      existingSnapshot &&
+      existingSnapshot.confirmedCandleTs ===
+        snapshot.confirmedCandleTs &&
+      (snapshot.sampleCount ?? 0) <
+        (existingSnapshot.sampleCount ?? 0)
+    ) {
+      console.log(
+        '[FINALIZED_SNAPSHOT_REDIS_SAVE_SKIPPED_LOWER_SAMPLE_COUNT]',
+        {
+          key,
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+          existingSampleCount:
+            existingSnapshot.sampleCount,
+          newSampleCount:
+            snapshot.sampleCount,
+          reason:
+            'LOWER_SAMPLE_COUNT_SAME_CONFIRMED_CANDLE',
+        },
+      )
+
+      return
+    }
+
+    if (
+      existingSnapshot &&
+      isZeroLikeFinalizedSnapshot(snapshot)
+    ) {
+      console.log(
+        '[FINALIZED_SNAPSHOT_REDIS_SAVE_SKIPPED_ZERO_LIKE_SNAPSHOT]',
+        {
+          key,
+          confirmedCandleTs:
+            snapshot.confirmedCandleTs,
+          existingConfirmedCandleTs:
+            existingSnapshot.confirmedCandleTs,
+          existingSampleCount:
+            existingSnapshot.sampleCount,
+          newSampleCount:
+            snapshot.sampleCount,
+          reason:
+            'ZERO_LIKE_SNAPSHOT_WHILE_EXISTING_FINALIZED_PRESENT',
+        },
+      )
+
+      return
+    }
+
+    console.log(
+      logLabel,
+      {
+        key,
+        confirmedCandleTs:
+          snapshot.confirmedCandleTs,
+        sampleCount:
+          snapshot.sampleCount,
+        oiDeltaAccum:
+          snapshot.oiDeltaAccum,
+        fundingAccum:
+          snapshot.fundingAccum,
+        volumeRatioAccum:
+          snapshot.volumeRatioAccum,
+        whaleIntensityAccum:
+          snapshot.whaleIntensityAccum,
+      },
+    )
+
     await redis.set(
       key,
       JSON.stringify(snapshot),
@@ -39,6 +128,8 @@ async function saveFinalizedSnapshot(
         key,
         confirmedCandleTs:
           snapshot.confirmedCandleTs,
+        sampleCount:
+          snapshot.sampleCount,
         error,
       },
     )
@@ -53,8 +144,6 @@ async function loadFinalizedSnapshot<
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
 ): Promise<TSnapshot | null> {
-  void logLabel
-
   try {
     const raw = await redis.get(key)
 
@@ -63,6 +152,17 @@ async function loadFinalizedSnapshot<
     }
 
     if (typeof raw === 'object') {
+      console.log(
+        logLabel,
+        {
+          key,
+          confirmedCandleTs:
+            (raw as any)?.confirmedCandleTs,
+          sampleCount:
+            (raw as any)?.sampleCount,
+        },
+      )
+
       return raw as TSnapshot
     }
 
@@ -70,6 +170,17 @@ async function loadFinalizedSnapshot<
       const parsed = JSON.parse(
         String(raw),
       ) as TSnapshot
+
+      console.log(
+        logLabel,
+        {
+          key,
+          confirmedCandleTs:
+            (parsed as any)?.confirmedCandleTs,
+          sampleCount:
+            (parsed as any)?.sampleCount,
+        },
+      )
 
       return parsed
     } catch (error) {
