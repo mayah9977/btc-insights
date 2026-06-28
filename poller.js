@@ -1,5 +1,5 @@
 // poller.js
-const TARGET = 'https://btc-insights.vercel.app/api/cron/price-poll'
+const TARGET = 'https://www.thewhalesbtc.com/api/cron/price-poll'
 const INTERVAL = 5000 // 5초
 
 if (!process.env.CRON_SECRET) {
