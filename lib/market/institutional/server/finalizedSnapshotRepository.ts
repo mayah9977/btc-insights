@@ -144,6 +144,8 @@ async function loadFinalizedSnapshot<
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
 ): Promise<TSnapshot | null> {
+  void logLabel
+
   try {
     const raw = await redis.get(key)
 
@@ -152,17 +154,6 @@ async function loadFinalizedSnapshot<
     }
 
     if (typeof raw === 'object') {
-      console.log(
-        logLabel,
-        {
-          key,
-          confirmedCandleTs:
-            (raw as any)?.confirmedCandleTs,
-          sampleCount:
-            (raw as any)?.sampleCount,
-        },
-      )
-
       return raw as TSnapshot
     }
 
@@ -170,17 +161,6 @@ async function loadFinalizedSnapshot<
       const parsed = JSON.parse(
         String(raw),
       ) as TSnapshot
-
-      console.log(
-        logLabel,
-        {
-          key,
-          confirmedCandleTs:
-            (parsed as any)?.confirmedCandleTs,
-          sampleCount:
-            (parsed as any)?.sampleCount,
-        },
-      )
 
       return parsed
     } catch (error) {
