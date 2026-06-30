@@ -3,11 +3,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { logger } from '@/lib/logger'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-11-17.clover',
-})
-
 type VipPlan = 'monthly' | '6month' | '12month'
+
+function getStripeClient(): Stripe | null {
+  const secretKey = process.env.STRIPE_SECRET_KEY
+
+  if (!secretKey) {
+    return null
+  }
+
+  return new Stripe(secretKey, {
+    apiVersion: '2025-11-17.clover',
+  })
+}
 
 function resolvePriceId(plan: VipPlan): string | undefined {
   if (plan === 'monthly') return process.env.STRIPE_PRICE_VIP_MONTHLY
@@ -18,6 +26,18 @@ function resolvePriceId(plan: VipPlan): string | undefined {
 
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripeClient()
+
+    if (!stripe) {
+      return NextResponse.json(
+        {
+          error: 'Stripe is disabled',
+          message: 'STRIPE_SECRET_KEY is not configured',
+        },
+        { status: 503 },
+      )
+    }
+
     const body = await req.json()
 
     const userId = typeof body.userId === 'string' ? body.userId : null

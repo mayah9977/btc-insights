@@ -3,9 +3,17 @@ import Stripe from 'stripe'
 import { applyVIPPaymentSuccess } from './vipDB'
 import { logger } from '@/lib/logger'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-11-17.clover',
-})
+function getStripeClient(): Stripe | null {
+  const secretKey = process.env.STRIPE_SECRET_KEY
+
+  if (!secretKey) {
+    return null
+  }
+
+  return new Stripe(secretKey, {
+    apiVersion: '2025-11-17.clover',
+  })
+}
 
 function getSubscriptionId(
   subscription: string | Stripe.Subscription | null,
@@ -36,6 +44,16 @@ export async function handleVIPPaymentSuccess(
   subscriptionRef: string | Stripe.Subscription | null,
 ) {
   try {
+    const stripe = getStripeClient()
+
+    if (!stripe) {
+      logger.error('[VIP Payment] Stripe is disabled', {
+        userId,
+        reason: 'STRIPE_SECRET_KEY is not configured',
+      })
+      return
+    }
+
     const subscriptionId = getSubscriptionId(subscriptionRef)
     if (!subscriptionId) {
       logger.error('[VIP Payment] Missing subscriptionId', { userId })
