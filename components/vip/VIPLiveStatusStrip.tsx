@@ -16,6 +16,7 @@ import { chartRealtimeBridge } from '@/lib/chart/chartRealtimeBridge'
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 const FLASH_DURATION = 200
+const REALTIME_DELAY_WARNING_DELAY_MS = 15000
 
 type MarketState = {
   oi: number | null
@@ -30,6 +31,26 @@ function VIPLiveStatusStripComponent() {
     useVIPMarketStore(
       (state) => state.realtimeDelayed,
     )
+
+  const [
+    showRealtimeDelayWarning,
+    setShowRealtimeDelayWarning,
+  ] = useState(false)
+
+  useEffect(() => {
+    if (!realtimeDelayed) {
+      setShowRealtimeDelayWarning(false)
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowRealtimeDelayWarning(true)
+    }, REALTIME_DELAY_WARNING_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [realtimeDelayed])
 
   const marketRef = useRef<MarketState>({
     oi: null,
@@ -318,7 +339,7 @@ function VIPLiveStatusStripComponent() {
       />
 
       <AnimatePresence>
-        {realtimeDelayed && (
+        {showRealtimeDelayWarning && (
           <motion.div
             initial={{
               opacity: 0,
@@ -387,7 +408,7 @@ function VIPLiveStatusStripComponent() {
           {whaleIntensity?.toFixed(2) ?? '--'}
         </div>
 
-        {realtimeDelayed && (
+        {showRealtimeDelayWarning && (
           <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
             Reconnecting realtime stream
           </div>

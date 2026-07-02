@@ -2,7 +2,11 @@
 
 'use client'
 
-import React, { useRef } from 'react'
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   motion,
@@ -15,6 +19,8 @@ import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 interface Props {
   symbol: string
 }
+
+const REALTIME_DELAY_WARNING_DELAY_MS = 15000
 
 export default function VIPLiveStatusStripMobile({
   symbol,
@@ -30,6 +36,26 @@ export default function VIPLiveStatusStripMobile({
       (state) => state.realtimeDelayed,
     )
 
+  const [
+    showRealtimeDelayWarning,
+    setShowRealtimeDelayWarning,
+  ] = useState(false)
+
+  useEffect(() => {
+    if (!realtimeDelayed) {
+      setShowRealtimeDelayWarning(false)
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowRealtimeDelayWarning(true)
+    }, REALTIME_DELAY_WARNING_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [realtimeDelayed])
+
   const prevVolumeRef = useRef<number | null>(null)
 
   if (volume && volume !== 0) {
@@ -44,7 +70,7 @@ export default function VIPLiveStatusStripMobile({
   return (
     <div className="bg-zinc-900 border-b border-zinc-800">
       <AnimatePresence>
-        {realtimeDelayed && (
+        {showRealtimeDelayWarning && (
           <motion.div
             initial={{
               opacity: 0,
@@ -120,7 +146,7 @@ export default function VIPLiveStatusStripMobile({
           </span>
         </div>
 
-        {realtimeDelayed && (
+        {showRealtimeDelayWarning && (
           <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-300">
             지연 중
           </div>
