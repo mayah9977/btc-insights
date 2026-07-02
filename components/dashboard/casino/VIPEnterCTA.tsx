@@ -1,8 +1,10 @@
+//components/dashboard/casino/VIPEnterCTA.tsx  
+
 'use client'
 
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, usePathname } from 'next/navigation'
 import { useVipOverviewStore } from '@/lib/vip/overviewStore'
 
 type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
@@ -26,8 +28,16 @@ function borderByDwell(sec: number) {
 export default function VIPEnterCTA() {
   const router = useRouter()
   const params = useParams<{ locale?: string }>()
+  const pathname = usePathname()
   const locale = params?.locale ?? 'ko'
   const { riskLevel } = useVipOverviewStore()
+
+  const marketBase = `/${locale}/market`
+  const casinoBase = `/${locale}/casino`
+  const basePath =
+    pathname === casinoBase || pathname.startsWith(`${casinoBase}/`)
+      ? casinoBase
+      : marketBase
 
   const [dwell, setDwell] = useState(0)
   const [stage, setStage] = useState<'idle' | 'auth' | 'scan' | 'granted'>('idle')
@@ -58,7 +68,7 @@ export default function VIPEnterCTA() {
       setFlash(true)
       setTimeout(() => setFlash(false), 150)
     }, 1300)
-    setTimeout(() => router.push(`/${locale}/casino/vip`), 1900)
+    setTimeout(() => router.push(`${basePath}/vip`), 1900)
   }
 
   /* 🔢 랜덤 숫자 스트림 */

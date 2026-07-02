@@ -21,7 +21,6 @@ import { getLastSentiment } from '@/lib/sentiment/sentimentLastStateStore'
 /* =========================
  * 🔥 Server Boot (Singleton)
  * ========================= */
-
 const g = globalThis as typeof globalThis & {
   __MARKET_BOOTSTRAPPED__?: boolean
 }
@@ -37,6 +36,7 @@ if (!g.__MARKET_BOOTSTRAPPED__) {
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 600
 
 export async function GET(req: NextRequest) {
   const scopeParam = req.nextUrl.searchParams.get('scope')
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
         )
       }
 
-      safeEnqueue(`: connected\n\n`)
+      safeEnqueue(`retry: 1000\n: connected\n\n`)
 
       const cleanup = addSSEClient(controller, {
         scope,
@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
         }
 
         safeEnqueue(
-          `event: ping\ndata: {}\n\n`,
+          `event: ping\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`,
         )
       }, 15000)
 

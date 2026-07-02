@@ -9,6 +9,7 @@ import { redis } from '@/lib/redis'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 600
 
 export async function GET(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
 
       // ✅ SSE keep-alive / initial frame
       controller.enqueue(
-        encoder.encode(`: connected\n\n`),
+        encoder.encode(`retry: 1000\n: connected\n\n`),
       )
 
       /**
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
         try {
           controller.enqueue(
             encoder.encode(
-              `event: ping\ndata: {}\n\n`,
+              `event: ping\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`,
             ),
           )
         } catch {}
