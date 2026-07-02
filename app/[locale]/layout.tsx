@@ -27,17 +27,42 @@ function getLocaleFromPathname(pathname: string) {
   return segments[0] ?? 'ko'
 }
 
+function getMarketBasePath(pathname: string, locale: string) {
+  const marketBase = `/${locale}/market`
+  const casinoBase = `/${locale}/casino`
+
+  if (
+    pathname === marketBase ||
+    pathname.startsWith(`${marketBase}/`)
+  ) {
+    return marketBase
+  }
+
+  if (
+    pathname === casinoBase ||
+    pathname.startsWith(`${casinoBase}/`)
+  ) {
+    return casinoBase
+  }
+
+  return casinoBase
+}
+
 /* ========================= Header ========================= */
 function AppHeader() {
   const router = useRouter()
   const pathname = usePathname()
 
   const locale = useMemo(() => getLocaleFromPathname(pathname), [pathname])
+  const basePath = useMemo(
+    () => getMarketBasePath(pathname, locale),
+    [pathname, locale],
+  )
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between border-b border-white/10 bg-black/80 px-4 backdrop-blur">
       <motion.button
-        onClick={() => router.push(`/${locale}/casino`)}
+        onClick={() => router.push(basePath)}
         initial={{ opacity: 0, y: -8, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={HEADER_TRANSITION}
@@ -128,6 +153,10 @@ function BottomTab() {
   const pathname = usePathname()
 
   const locale = useMemo(() => getLocaleFromPathname(pathname), [pathname])
+  const basePath = useMemo(
+    () => getMarketBasePath(pathname, locale),
+    [pathname, locale],
+  )
 
   const cleanPath =
     pathname !== '/' && pathname.endsWith('/')
@@ -135,8 +164,8 @@ function BottomTab() {
       : pathname
 
   const tabs = [
-    { label: 'Home', path: `/${locale}/casino` },
-    { label: 'VIP', path: `/${locale}/casino/vip` },
+    { label: 'Home', path: basePath },
+    { label: 'VIP', path: `${basePath}/vip` },
     { label: 'VIP Login', path: `/${locale}/vip-login` },
     { label: 'Alerts', path: `/${locale}/alerts` },
     { label: 'Ref', path: `/${locale}/referrals` },
@@ -145,13 +174,13 @@ function BottomTab() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 grid h-14 grid-cols-5 border-t border-white/10 bg-black/90 backdrop-blur">
       {tabs.map(tab => {
-        const isHome = tab.path === `/${locale}/casino`
-        const isVIP = tab.path === `/${locale}/casino/vip`
+        const isHome = tab.path === basePath
+        const isVIP = tab.path === `${basePath}/vip`
         const isVIPLogin = tab.path === `/${locale}/vip-login`
 
         const active =
-          (isHome && cleanPath === `/${locale}/casino`) ||
-          (isVIP && cleanPath.startsWith(`/${locale}/casino/vip`)) ||
+          (isHome && cleanPath === basePath) ||
+          (isVIP && cleanPath.startsWith(`${basePath}/vip`)) ||
           (isVIPLogin && cleanPath === `/${locale}/vip-login`) ||
           (!isHome && !isVIP && !isVIPLogin && cleanPath.startsWith(tab.path))
 
