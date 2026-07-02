@@ -45,7 +45,7 @@ function getMarketBasePath(pathname: string, locale: string) {
     return casinoBase
   }
 
-  return casinoBase
+  return marketBase
 }
 
 /* ========================= Header ========================= */

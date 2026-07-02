@@ -2,7 +2,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, usePathname } from 'next/navigation'
 
 export default function HeroCTAMobile({
   isLoggedIn,
@@ -13,9 +13,17 @@ export default function HeroCTAMobile({
 }) {
   const router = useRouter()
   const params = useParams()
+  const pathname = usePathname()
 
   const locale =
     typeof params?.locale === 'string' ? params.locale : 'ko'
+
+  const marketBase = `/${locale}/market`
+  const casinoBase = `/${locale}/casino`
+  const basePath =
+    pathname === casinoBase || pathname.startsWith(`${casinoBase}/`)
+      ? casinoBase
+      : marketBase
 
   if (isVIP) {
     return null
@@ -32,7 +40,7 @@ export default function HeroCTAMobile({
     }
 
     if (isLoggedIn && !isVIP) {
-      router.push(`/${locale}/casino/vip`)
+      router.push(`${basePath}/vip`)
       return
     }
   }

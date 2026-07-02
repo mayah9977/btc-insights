@@ -1,3 +1,5 @@
+//components/casino/hero/HeroDesktop.tsx  
+
 'use client'
 
 import { motion } from 'framer-motion'

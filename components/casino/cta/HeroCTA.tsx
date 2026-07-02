@@ -3,7 +3,7 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 
 export default function HeroCTA({
   isLoggedIn,
@@ -15,8 +15,17 @@ export default function HeroCTA({
   autoScale?: boolean
 }) {
   const params = useParams()
+  const pathname = usePathname()
+
   const locale =
     typeof params?.locale === 'string' ? params.locale : 'ko'
+
+  const marketBase = `/${locale}/market`
+  const casinoBase = `/${locale}/casino`
+  const basePath =
+    pathname === casinoBase || pathname.startsWith(`${casinoBase}/`)
+      ? casinoBase
+      : marketBase
 
   const scaleAnim = autoScale ? { scale: [1, 1.04, 1] } : {}
 
@@ -45,7 +54,7 @@ export default function HeroCTA({
           </Link>
 
           <Link
-            href={`/${locale}/casino/vip`}
+            href={`${basePath}/vip`}
             className="w-full rounded-2xl border border-vipBorder bg-black/40 p-6 transition hover:border-yellow-400"
           >
             <div className="text-xs uppercase tracking-widest text-zinc-500">
@@ -60,7 +69,7 @@ export default function HeroCTA({
 
       {isLoggedIn && !isVIP && (
         <Link
-          href={`/${locale}/casino/vip`}
+          href={`${basePath}/vip`}
           className="block w-full rounded-2xl border border-yellow-500/40
           bg-gradient-to-br from-yellow-500/10 to-red-500/10
           p-6 transition hover:scale-[1.02]"
@@ -76,7 +85,7 @@ export default function HeroCTA({
 
       {isVIP && (
         <Link
-          href={`/${locale}/casino/vip`}
+          href={`${basePath}/vip`}
           className="block w-full rounded-2xl border border-yellow-500/40
           bg-gradient-to-br from-yellow-500/10 to-red-500/10
           p-6 transition hover:scale-[1.02]"
