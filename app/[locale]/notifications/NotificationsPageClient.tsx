@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode, MouseEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   AnimatePresence,
   motion,
@@ -361,6 +361,7 @@ function NotificationCard({
   onDelete: (id: string) => void
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const meta = getNotificationMeta(item)
 
   const handleConfirm = (
@@ -382,7 +383,17 @@ function NotificationCard({
     }
 
     if (item.type === 'INSTITUTIONAL_PATTERN') {
-      router.push('/ko/casino/vip')
+      const segments = pathname.split('/').filter(Boolean)
+      const locale = segments[0] ?? 'ko'
+      const marketBase = `/${locale}/market`
+      const casinoBase = `/${locale}/casino`
+      const basePath =
+        pathname === casinoBase ||
+        pathname.startsWith(`${casinoBase}/`)
+          ? casinoBase
+          : marketBase
+
+      router.push(`${basePath}/vip`)
       return
     }
 

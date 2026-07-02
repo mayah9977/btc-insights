@@ -1,3 +1,5 @@
+//public/firebase-messaging-sw.js 
+
 /* =========================================================
    Firebase / Web Push Service Worker
    - notification + data payload 완전 지원

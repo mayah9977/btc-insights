@@ -1,3 +1,5 @@
+//public/sw.js  
+
 /* =========================================================
  * Service Worker (FINAL)
  * - Push Notification 표시

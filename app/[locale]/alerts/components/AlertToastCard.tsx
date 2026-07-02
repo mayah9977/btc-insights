@@ -12,7 +12,7 @@ import {
 
 import { useEffect } from 'react'
 
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 import { toast } from 'react-hot-toast'
 
@@ -159,6 +159,7 @@ export default function AlertToastCard({
   timeframe,
 }: Props) {
   const router = useRouter()
+  const pathname = usePathname()
 
   const isUp =
     signal
@@ -307,7 +308,17 @@ export default function AlertToastCard({
     if (
       type === 'INSTITUTIONAL'
     ) {
-      router.push('/ko/casino/vip')
+      const segments = pathname.split('/').filter(Boolean)
+      const locale = segments[0] ?? 'ko'
+      const marketBase = `/${locale}/market`
+      const casinoBase = `/${locale}/casino`
+      const basePath =
+        pathname === casinoBase ||
+        pathname.startsWith(`${casinoBase}/`)
+          ? casinoBase
+          : marketBase
+
+      router.push(`${basePath}/vip`)
       return
     }
 
