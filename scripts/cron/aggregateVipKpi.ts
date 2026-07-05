@@ -1,3 +1,5 @@
+//scripts/cron/aggregateVipKpi.ts  
+
 import 'dotenv/config'   // 🔥 이 줄 추가 (최상단)
 
 import { aggregateDailyVipKpi } from '../../lib/vip/redis/aggregateVipKpi.ts'

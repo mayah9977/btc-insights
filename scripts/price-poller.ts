@@ -1,3 +1,5 @@
+//scripts/price-poller.ts  
+
 import { handlePriceTick } from '../lib/poller/alertEngine.poller.js'
 import { redis } from '../lib/redis/index.js'
 

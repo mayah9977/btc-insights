@@ -1,3 +1,5 @@
+//scripts/oi-poller.ts  
+
 import { redis } from '../lib/redis/index'
 
 const SYMBOL = 'BTCUSDT'

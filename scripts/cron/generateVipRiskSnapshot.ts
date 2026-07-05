@@ -1,3 +1,5 @@
+//scripts/cron/generateVipRiskSnapshot.ts  
+
 'use client'
 
 import 'dotenv/config'

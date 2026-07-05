@@ -379,16 +379,16 @@ export default function ActionGateRendererMobile({
 
                 <div className="space-y-3 pt-1">
                   <MobileInstitutionalPatternAlertCard />
-
-                  {finalized.snapshotReady ? (
-                    <MobileFinalizedInstitutionalNumbers />
-                  ) : null}
                 </div>
               </>
             )}
           </div>
         </div>
       )}
+
+      {finalized.snapshotReady ? (
+        <MobileFinalizedInstitutionalNumbers />
+      ) : null}
     </div>
   )
 }

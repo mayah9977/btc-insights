@@ -1,3 +1,5 @@
+//scripts/debug/reserVipRedis.ts  
+
 import { redis } from '../../lib/redis/index.js'
 
 async function run() {

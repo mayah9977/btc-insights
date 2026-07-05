@@ -1,3 +1,5 @@
+//lib/vip/redis/getLatesRiskEvent.ts  
+
 import 'server-only' // ✅ Client import 즉시 차단
 import { redis } from '@/lib/redis/index'
 

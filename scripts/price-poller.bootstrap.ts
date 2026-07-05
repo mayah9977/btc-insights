@@ -1,3 +1,5 @@
+//scripts/price-poller.bootstrap.ts  
+
 import path from 'path'
 import dotenv from 'dotenv'
 

@@ -333,16 +333,16 @@ export const ActionGateRenderer: React.FC<
                     "
                   >
                     <InstitutionalPatternAlertCard />
-
-                    {finalized.snapshotReady ? (
-                      <FinalizedInstitutionalNumbers />
-                    ) : null}
                   </motion.section>
                 </>
               )}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {finalized.snapshotReady ? (
+          <FinalizedInstitutionalNumbers />
+        ) : null}
 
         <LiveBollingerCommentaryBanner />
       </div>
