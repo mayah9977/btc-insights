@@ -97,28 +97,54 @@ export default function ActionGateRendererMobile({
     signalType,
   )
 
+  const shouldShowFinalizedAnalysisSection =
+    Boolean(sentence) ||
+    finalized.snapshotReady
+
+  const displaySentence = useMemo(() => {
+    if (sentence) {
+      return sentence
+    }
+
+    if (!finalized.snapshotReady) {
+      return null
+    }
+
+    return {
+      summary: 'Finalized Data Analysis',
+      description: [
+        'Analyze institutional flows, whale intervention intensity, volume pressure, and funding status based on confirmed 30-minute/1-hour market data.',
+      ],
+      tendency:
+        'Market pressure analysis based on definitive data',
+    }
+  }, [
+    sentence,
+    finalized.snapshotReady,
+  ])
+
   const typedSummary = useTypewriter(
-    sentence?.summary ?? '',
+    displaySentence?.summary ?? '',
     10,
   )
 
   const descriptionText = useMemo(() => {
-    if (!sentence?.description) {
+    if (!displaySentence?.description) {
       return ''
     }
 
     return Array.isArray(
-      sentence.description,
+      displaySentence.description,
     )
-      ? sentence.description.join('\n')
-      : sentence.description
-  }, [sentence?.description])
+      ? displaySentence.description.join('\n')
+      : displaySentence.description
+  }, [displaySentence?.description])
 
   const typedDescription =
     useTypewriter(descriptionText, 8)
 
   const typedTendency = useTypewriter(
-    sentence?.tendency ?? '',
+    displaySentence?.tendency ?? '',
     12,
   )
 
@@ -321,7 +347,7 @@ export default function ActionGateRendererMobile({
         </div>
       </motion.div>
 
-      {sentence && (
+      {shouldShowFinalizedAnalysisSection && displaySentence && (
         <div className="relative">
           {flash && (
             <div

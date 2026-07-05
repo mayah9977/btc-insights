@@ -1,3 +1,5 @@
+//lib/market/narrative/narrativeComposer.ts  
+
 /* =========================================================
 Narrative Composer
 Signal → Final Narrative Sentence

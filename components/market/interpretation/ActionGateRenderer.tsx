@@ -75,11 +75,19 @@ export const ActionGateRenderer: React.FC<
   useEffect(() => {
     if (!signalType) return
 
-    if (!institutionalSnapshot) return
+    const narrativeSnapshot =
+      institutionalSnapshot ??
+      (
+        finalized.snapshotReady
+          ? finalized
+          : null
+      )
+
+    if (!narrativeSnapshot) return
 
     try {
       const snapshot =
-        institutionalSnapshot
+        narrativeSnapshot
 
       if (
         !snapshot ||
@@ -121,6 +129,10 @@ export const ActionGateRenderer: React.FC<
     }
   }, [
     institutionalSnapshot,
+    finalized,
+    finalized.snapshotReady,
+    finalized.confirmedCandleTs,
+    finalized.sampleCount,
     signalType,
     setNarrative,
   ])
@@ -164,6 +176,37 @@ export const ActionGateRenderer: React.FC<
   const shouldShowPatternSection =
     finalized.snapshotReady ||
     shouldShowRealtimePatternBeforeFinalized
+
+  const shouldShowFinalizedAnalysisSection =
+    Boolean(sentence) ||
+    finalized.snapshotReady
+
+  const displaySentence =
+    sentence ??
+    (
+      finalized.snapshotReady
+        ? {
+            summary:
+              'Finalized Data Analysis',
+            description: [
+              '확정된 30분/1시간 시장 데이터를 기준으로 기관 흐름, 고래 개입 강도, 거래량 압력, 펀딩 상태를 분석합니다.',
+            ],
+            tendency:
+              '확정 데이터 기반 시장 압력 분석',
+          }
+        : null
+    )
+
+  const descriptionText =
+    displaySentence
+      ? Array.isArray(
+          displaySentence.description,
+        )
+        ? displaySentence.description.join(
+            '\n',
+          )
+        : displaySentence.description
+      : ''
 
   return (
     <div
@@ -223,7 +266,7 @@ export const ActionGateRenderer: React.FC<
         <ActionGateCopy gate={gate} />
 
         <AnimatePresence mode="wait">
-          {sentence && (
+          {shouldShowFinalizedAnalysisSection && displaySentence && (
             <motion.div
               key={signalType}
               initial={{
@@ -276,13 +319,13 @@ export const ActionGateRenderer: React.FC<
                       md:text-xl
                     "
                   >
-                    {sentence.summary}
+                    {displaySentence.summary}
                   </motion.div>
 
                   <div className="mt-6">
                     <ActionGateDescriptionHero
                       description={
-                        sentence.description
+                        descriptionText
                       }
                       signalType={
                         signalType
@@ -318,7 +361,7 @@ export const ActionGateRenderer: React.FC<
                       text-emerald-300
                     "
                   >
-                    {sentence.tendency}
+                    {displaySentence.tendency}
                   </motion.div>
 
                   <motion.section
