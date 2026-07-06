@@ -73,7 +73,9 @@ export const ActionGateRenderer: React.FC<
     useRef<string>('')
 
   useEffect(() => {
-    if (!signalType) return
+    if (!signalType) {
+      return
+    }
 
     const narrativeSnapshot =
       institutionalSnapshot ??
@@ -83,7 +85,9 @@ export const ActionGateRenderer: React.FC<
           : null
       )
 
-    if (!narrativeSnapshot) return
+    if (!narrativeSnapshot) {
+      return
+    }
 
     try {
       const snapshot =
@@ -135,6 +139,7 @@ export const ActionGateRenderer: React.FC<
     finalized.sampleCount,
     signalType,
     setNarrative,
+    sentence,
   ])
 
   const containerClass =

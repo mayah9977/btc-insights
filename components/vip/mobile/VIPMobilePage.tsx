@@ -16,6 +16,7 @@ import VIPInstitutionalGuideCardMobile from './VIPInstitutionalGuideCardMobile'
 
 import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 import { useFinalizedSnapshotBootstrap } from '@/lib/market/institutional/useFinalizedSnapshotBootstrap'
+import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
 
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
@@ -52,6 +53,15 @@ const VIPOverviewDashboardMobileInner = dynamic(
 const VIPOverviewDashboardMobileMemo = memo(
   VIPOverviewDashboardMobileInner,
 )
+
+function isBollingerSignalType(
+  value: unknown,
+): value is BollingerSignalType {
+  return (
+    typeof value === 'string' &&
+    value in BOLLINGER_SENTENCE_MAP
+  )
+}
 
 function VIPWhaleSection() {
   const marketTick = useVIPMarketStore((s) => s.ts)
@@ -120,6 +130,9 @@ export default function VIPMobilePage(props: Props) {
 
   useFinalizedSnapshotBootstrap()
 
+  const finalized =
+    useFinalizedInstitutionalSnapshot()
+
   /*
    * SSE는 app/[locale]/casino/vip/vipClientPage.tsx에서만 실행합니다.
    * VIPMobilePage는 VIP market store를 read-only로 사용합니다.
@@ -138,7 +151,7 @@ export default function VIPMobilePage(props: Props) {
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
-  const signalType = useMemo(() => {
+  const signalType = useMemo<BollingerSignalType>(() => {
     if (
       confirmed?.signalType ===
       BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
@@ -146,17 +159,40 @@ export default function VIPMobilePage(props: Props) {
       return confirmed.signalType
     }
 
-    return confirmed?.signalType ?? live?.signalType
-  }, [confirmed?.signalType, live?.signalType])
+    if (confirmed?.signalType) {
+      return confirmed.signalType
+    }
+
+    if (live?.signalType) {
+      return live.signalType
+    }
+
+    if (
+      isBollingerSignalType(
+        finalized.confirmedSignalType,
+      )
+    ) {
+      return finalized.confirmedSignalType
+    }
+
+    return BollingerSignalType.INSIDE_CENTER
+  }, [
+    confirmed?.signalType,
+    live?.signalType,
+    finalized.confirmedSignalType,
+  ])
+
+  const isNarrativeReady =
+    isReady || finalized.snapshotReady
 
   const sentence = useMemo<FinalNarrativeReport | null>(() => {
-    if (!signalType || !isReady) return null
+    if (!signalType || !isNarrativeReady) return null
 
     return generateNarrative(
       BOLLINGER_SENTENCE_MAP[signalType],
       signalType,
     )
-  }, [signalType, isReady])
+  }, [signalType, isNarrativeReady])
 
   return (
     <main className="space-y-6 pb-20">
