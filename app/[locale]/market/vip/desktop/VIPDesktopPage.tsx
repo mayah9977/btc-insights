@@ -1,4 +1,4 @@
-//app/[locale]/casino/vip/desktop/VIPDesktopPage.tsx
+// app/[locale]/market/vip/desktop/VIPDesktopPage.tsx
 
 'use client'
 
@@ -15,6 +15,7 @@ import { RawObservationBar } from '@/components/market/observation/RawObservatio
 import { useRealtimeBollingerSignal } from '@/lib/realtime/useRealtimeBollingerSignal'
 import { useLiveBollingerCommentary } from '@/lib/realtime/useLiveBollingerCommentary'
 import { useFinalizedSnapshotBootstrap } from '@/lib/market/institutional/useFinalizedSnapshotBootstrap'
+import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
 import { BollingerSignalType } from '@/lib/market/actionGate/signalType'
 import { BOLLINGER_SENTENCE_MAP } from '@/lib/market/actionGate/bollingerSentenceMap'
 import { generateNarrative } from '@/lib/market/narrative/generateNarrative'
@@ -51,6 +52,15 @@ const VIPOverviewDashboard = dynamic(
   }
 )
 
+function isBollingerSignalType(
+  value: unknown,
+): value is BollingerSignalType {
+  return (
+    typeof value === 'string' &&
+    value in BOLLINGER_SENTENCE_MAP
+  )
+}
+
 type Props = {
   userId: string
   weeklySummary: any
@@ -66,26 +76,54 @@ export default function VIPDesktopPage({
 }: Props) {
   useFinalizedSnapshotBootstrap()
 
+  const finalized =
+    useFinalizedInstitutionalSnapshot()
+
   const confirmed = useRealtimeBollingerSignal()
   const live = useLiveBollingerCommentary()
 
-  const signalType = useMemo(() => {
+  const signalType = useMemo<BollingerSignalType>(() => {
     if (
       confirmed?.signalType ===
       BollingerSignalType.INSIDE_LOWER_TOUCH_OR_BREAK
     ) {
-      return confirmed?.signalType
+      return confirmed.signalType
     }
-    return confirmed?.signalType ?? live?.signalType
-  }, [confirmed?.signalType, live?.signalType])
+
+    if (confirmed?.signalType) {
+      return confirmed.signalType
+    }
+
+    if (live?.signalType) {
+      return live.signalType
+    }
+
+    if (
+      isBollingerSignalType(
+        finalized.confirmedSignalType,
+      )
+    ) {
+      return finalized.confirmedSignalType
+    }
+
+    return BollingerSignalType.INSIDE_CENTER
+  }, [
+    confirmed?.signalType,
+    live?.signalType,
+    finalized.confirmedSignalType,
+  ])
+
+  const isNarrativeReady =
+    finalized.snapshotReady || Boolean(signalType)
 
   const sentence = useMemo(() => {
-    if (!signalType) return null
+    if (!signalType || !isNarrativeReady) return null
+
     return generateNarrative(
       BOLLINGER_SENTENCE_MAP[signalType],
       signalType
     )
-  }, [signalType])
+  }, [signalType, isNarrativeReady])
 
   return (
     <>
