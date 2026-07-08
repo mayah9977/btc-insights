@@ -18,22 +18,6 @@ import {
 // 🔥 Sentiment SSOT
 import { getLastSentiment } from '@/lib/sentiment/sentimentLastStateStore'
 
-/* =========================
- * 🔥 Server Boot (Singleton)
- * ========================= */
-const g = globalThis as typeof globalThis & {
-  __MARKET_BOOTSTRAPPED__?: boolean
-}
-
-if (!g.__MARKET_BOOTSTRAPPED__) {
-  g.__MARKET_BOOTSTRAPPED__ = true
-
-  import('@/lib/market/marketRealtimeConsumer')
-  import('@/lib/market/binanceStream')
-
-  console.log('[SERVER] market streams bootstrapped')
-}
-
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 600
