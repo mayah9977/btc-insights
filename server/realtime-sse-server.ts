@@ -472,6 +472,7 @@ async function startRedisSubscriber() {
     if (channel === PUBLIC_CHANNEL) {
       lastPublicMessageAt = lastRedisMessageAt
       fanout('public', message)
+      fanout('vip', message)
       return
     }
 
