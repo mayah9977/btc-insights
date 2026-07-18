@@ -1,3 +1,5 @@
+//lib/pwa/registerServiceWorker.ts
+
 export function registerServiceWorker() {
   if (
     typeof window === 'undefined' ||

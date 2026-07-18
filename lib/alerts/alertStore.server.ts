@@ -1,3 +1,5 @@
+//lib/alerts/alertStore.server.ts
+
 import { redis } from '../redis'
 import type {
   AlertCondition,
@@ -128,11 +130,60 @@ export async function updateAlert(
   return next
 }
 
+export async function updateAlertForUser(
+  userId: string,
+  id: string,
+  patch: Partial<PriceAlert>,
+): Promise<PriceAlert | null> {
+  const raw = await redis.hget(ALERT_KEY, id)
+
+  if (!raw) {
+    return null
+  }
+
+  const alert = JSON.parse(raw) as PriceAlert
+
+  if (alert.userId !== userId) {
+    return null
+  }
+
+  const safePatch = {
+    ...patch,
+  }
+
+  delete safePatch.id
+  delete safePatch.userId
+  delete safePatch.createdAt
+
+  return updateAlert(id, safePatch)
+}
+
 /* =========================
  * 삭제
  * ========================= */
 export async function deleteAlert(id: string) {
   await redis.hdel(ALERT_KEY, id)
+}
+
+export async function deleteAlertForUser(
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  const raw = await redis.hget(ALERT_KEY, id)
+
+  if (!raw) {
+    return false
+  }
+
+  const alert = JSON.parse(raw) as PriceAlert
+
+  if (alert.userId !== userId) {
+    return false
+  }
+
+  await redis.hdel(ALERT_KEY, id)
+
+  return true
 }
 
 /* =========================

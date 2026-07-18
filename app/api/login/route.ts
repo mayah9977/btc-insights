@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { redis } from '@/lib/redis/index'
+import { adminAuth } from '@/lib/firebase/admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,7 @@ type DeviceType = 'desktop' | 'mobile'
 
 const SESSION_COOKIE_NAME = 'session'
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
+const SESSION_AUTH_VERSION = 2
 
 const ADMIN_EMAILS = Array.from(
   new Set(
@@ -75,86 +77,104 @@ function getUserDeviceSessionKey(
 }
 
 export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null)
+
+  const idToken =
+    typeof body?.idToken === 'string'
+      ? body.idToken.trim()
+      : ''
+
+  if (!idToken) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'ID_TOKEN_REQUIRED',
+      },
+      {
+        status: 400,
+      },
+    )
+  }
+
+  let decodedToken
+
   try {
-    console.log('[API_LOGIN] request start')
+    decodedToken =
+      await adminAuth.verifyIdToken(
+        idToken,
+        true,
+      )
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'INVALID_ID_TOKEN',
+      },
+      {
+        status: 401,
+      },
+    )
+  }
 
-    const body = await req.json()
+  const userId = decodedToken.uid.trim()
+  const email =
+    typeof decodedToken.email === 'string'
+      ? decodedToken.email
+          .trim()
+          .toLowerCase()
+      : undefined
 
-    console.log('[API_LOGIN] request body', {
-      userId: body?.userId,
-      email: body?.email,
-      deviceType: body?.deviceType,
-    })
+  const emailVerified =
+    decodedToken.email_verified === true
 
-    const userId =
-      typeof body.userId === 'string'
-        ? body.userId.trim()
-        : typeof body.id === 'string'
-          ? body.id.trim()
-          : ''
+  if (!userId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'INVALID_IDENTITY',
+      },
+      {
+        status: 401,
+      },
+    )
+  }
 
-    const email =
-      typeof body.email === 'string'
-        ? body.email.trim().toLowerCase()
-        : undefined
+  const deviceType = getDeviceType(
+    req,
+    body?.deviceType,
+  )
 
-    const deviceType = getDeviceType(
-      req,
-      body.deviceType,
+  const isAdmin =
+    emailVerified &&
+    isAdminEmail(email)
+
+  const sessionId = randomUUID()
+  const sessionKey =
+    getSessionKey(sessionId)
+
+  const userDeviceSessionKey =
+    getUserDeviceSessionKey(
+      userId,
+      deviceType,
     )
 
-    if (!userId) {
-      console.error('[API_LOGIN] missing userId')
-
-      return NextResponse.json(
-        {
-          ok: false,
-          message: 'userId가 필요합니다.',
-        },
-        {
-          status: 400,
-        },
-      )
-    }
-
-    const isAdmin = isAdminEmail(email)
-
-    const sessionId = randomUUID()
-
-    console.log('[API_LOGIN] creating session', {
-      sessionId,
-      userId,
-      email,
-      deviceType,
-      isAdmin,
-    })
-
-    const sessionKey =
-      getSessionKey(sessionId)
-
-    const userDeviceSessionKey =
-      getUserDeviceSessionKey(
-        userId,
-        deviceType,
-      )
-
+  try {
     const previousSessionId =
-      await redis.get(userDeviceSessionKey)
+      await redis.get(
+        userDeviceSessionKey,
+      )
 
     if (previousSessionId) {
       const prevId =
-        typeof previousSessionId === 'string'
+        typeof previousSessionId ===
+        'string'
           ? previousSessionId
           : String(previousSessionId)
 
-      if (prevId && prevId !== sessionId) {
-        console.log(
-          '[API_LOGIN] deleting previous session',
-          {
-            prevId,
-          },
-        )
-
+      if (
+        prevId &&
+        prevId !== sessionId
+      ) {
         await redis.del(
           getSessionKey(prevId),
         )
@@ -169,10 +189,16 @@ export async function POST(req: NextRequest) {
         id: sessionId,
         userId,
         email,
+        emailVerified,
         isAdmin,
         isVIP: isAdmin,
-        role: isAdmin ? 'ADMIN' : 'USER',
+        role: isAdmin
+          ? 'ADMIN'
+          : 'USER',
         deviceType,
+        authVersion:
+          SESSION_AUTH_VERSION,
+        authProvider: 'firebase',
         createdAt: now,
         updatedAt: now,
       }),
@@ -187,82 +213,60 @@ export async function POST(req: NextRequest) {
       SESSION_TTL_SECONDS,
     )
 
-    const redisVerify = await redis.get(
-      sessionKey,
-    )
-
-    console.log('[API_LOGIN] redis verify', {
-      exists: !!redisVerify,
-    })
-
     const res = NextResponse.json({
       ok: true,
       user: {
         id: userId,
         email,
+        emailVerified,
         isAdmin,
         isVIP: isAdmin,
-        role: isAdmin ? 'ADMIN' : 'USER',
+        role: isAdmin
+          ? 'ADMIN'
+          : 'USER',
         deviceType,
       },
     })
 
-    console.log(
-      '[API_LOGIN] setting session cookie',
-      {
-        cookieName: SESSION_COOKIE_NAME,
-        sessionId,
-      },
-    )
-
-    /**
-     * 🔥 localhost 대응
-     */
     res.cookies.set(
       SESSION_COOKIE_NAME,
       sessionId,
       {
         httpOnly: true,
-
         secure:
-          process.env.NODE_ENV === 'production',
-
+          process.env.NODE_ENV ===
+          'production',
         sameSite: 'lax',
-
         path: '/',
-
-        maxAge: SESSION_TTL_SECONDS,
+        maxAge:
+          SESSION_TTL_SECONDS,
       },
     )
 
     res.cookies.set('userId', '', {
       httpOnly: true,
-
       secure:
-        process.env.NODE_ENV === 'production',
-
+        process.env.NODE_ENV ===
+        'production',
       sameSite: 'lax',
-
       path: '/',
-
       maxAge: 0,
     })
 
-    console.log(
-      '[API_LOGIN] response cookies',
-      res.cookies.getAll(),
-    )
-
-    console.log('[API_LOGIN] success')
-
     return res
   } catch (error) {
-    console.error('[API_LOGIN]', error)
+    console.error(
+      '[API_LOGIN][SESSION_CREATE_FAILED]',
+      error instanceof Error
+        ? error.message
+        : 'Unknown error',
+    )
 
     return NextResponse.json(
       {
         ok: false,
-        message: '로그인 실패',
+        error:
+          'SESSION_CREATE_FAILED',
       },
       {
         status: 500,

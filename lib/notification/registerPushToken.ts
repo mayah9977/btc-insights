@@ -66,16 +66,24 @@ export async function registerPushToken(): Promise<string | null> {
       return null
     }
 
-    console.log('[FCM TOKEN SUCCESS]', token)
+    const response = await fetch(
+      '/api/notification/register-push-token',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token,
+        }),
+      },
+    )
 
-    await fetch('/api/notification/register-push-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: 'dev-user',
-        token,
-      }),
-    })
+    if (!response.ok) {
+      throw new Error(
+        'PUSH_TOKEN_REGISTER_FAILED',
+      )
+    }
 
     return token
   } catch (err) {

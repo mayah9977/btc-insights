@@ -1,3 +1,5 @@
+//lib/ai/aiUserRanking.ts
+
 import { listPaperPositions } from '@/lib/paper/paperTradeStore'
 
 export async function rankUsersByAI(users: string[]) {

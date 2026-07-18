@@ -7,6 +7,12 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse(null, {
+      status: 404,
+    })
+  }
+
   try {
     const sessionId = randomUUID()
 
@@ -36,7 +42,7 @@ export async function POST() {
 
     res.cookies.set('session', sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,

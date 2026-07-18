@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/CreateAlertModal.tsx
+
 'use client'
 
 import { useState } from 'react'

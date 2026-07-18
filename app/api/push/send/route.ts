@@ -1,3 +1,5 @@
+//app/api/push/send/route.ts
+
 import { NextResponse } from 'next/server'
 import { adminMessaging } from '@/lib/firebase-admin'
 
@@ -12,6 +14,12 @@ import { adminMessaging } from '@/lib/firebase-admin'
  * }
  */
 export async function POST(req: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse(null, {
+      status: 404,
+    })
+  }
+
   try {
     const { token, title, body, clickUrl } = await req.json()
 

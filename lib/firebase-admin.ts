@@ -1,3 +1,5 @@
+//lib/firebase-admin.ts
+
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'

@@ -1,11 +1,17 @@
+// app/api/alerts/ai/strategy/route.ts
+
 import { NextResponse } from 'next/server'
 import { rankAlerts } from '@/lib/alerts/alertRanking'
 import { recommendPositionStrategy } from '@/lib/ai/positionStrategy'
-
-const DEV_USER_ID = 'dev-user'
+import { resolveNotificationPrincipal } from '@/lib/auth/notificationPrincipal'
 
 export async function GET() {
-  const ranked = await rankAlerts(DEV_USER_ID)
+  const principal =
+    await resolveNotificationPrincipal()
+
+  const ranked = await rankAlerts(
+    principal.userId,
+  )
 
   const strategies = ranked.map(r => ({
     alertId: r.alertId,

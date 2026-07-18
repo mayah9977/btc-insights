@@ -1,7 +1,8 @@
-//app/api/push/register/route.ts     
+//app/api/push/register/route.ts
 
 import { NextResponse } from 'next/server'
-import { saveUserPushToken } from '@/lib/push/pushStore'
+import { claimUserPushToken } from '@/lib/push/pushStore'
+import { resolveNotificationPrincipal } from '@/lib/auth/notificationPrincipal'
 
 export async function POST(req: Request) {
   try {
@@ -15,15 +16,13 @@ export async function POST(req: Request) {
       )
     }
 
-    // 🔥 현재는 고정 (추후 auth 연동 시 교체)
-    const userId = 'dev-user'
+    const principal =
+      await resolveNotificationPrincipal()
 
-    await saveUserPushToken(userId, token)
-
-    console.log('[API] push token registered', {
-      userId,
-      tokenPreview: token.slice(0, 12),
-    })
+    await claimUserPushToken(
+      principal.userId,
+      token.trim(),
+    )
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {

@@ -225,6 +225,12 @@ export async function GET() {
 export async function POST(
   req: NextRequest,
 ) {
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse(null, {
+      status: 404,
+    })
+  }
+
   try {
     const body = await req.json()
 

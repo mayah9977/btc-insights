@@ -1,3 +1,5 @@
+//app/api/admin/vip/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import { recoverVIP, downgradeUserVIP } from '@/lib/vip/vipDB'
 import { requireAdminUser } from '@/lib/auth/adminAccess'

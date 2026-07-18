@@ -1,5 +1,4 @@
 // app/[locale]/vip-login/page.tsx
-// Source: :contentReference[oaicite:0]{index=0}
 
 'use client'
 
@@ -17,6 +16,11 @@ import '@/lib/firebase/client'
 
 type FirebaseLoginError = {
   code?: string
+}
+
+type SessionSyncState = {
+  uid: string
+  promise: Promise<boolean>
 }
 
 /**
@@ -86,7 +90,8 @@ export default function VIPLoginPage() {
   const [err, setErr] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const sessionSyncRef = useRef(false)
+  const sessionSyncRef =
+    useRef<SessionSyncState | null>(null)
 
   const router = useRouter()
   const params = useParams()
@@ -97,48 +102,65 @@ export default function VIPLoginPage() {
       : 'ko'
 
   async function syncRedisSession(user: User) {
-    try {
-      console.log('[VIP_LOGIN] syncRedisSession start')
+    const existing = sessionSyncRef.current
 
-      const normalizedEmail =
-        user.email?.trim().toLowerCase() || ''
-
-      console.log('[VIP_LOGIN] calling /api/login')
-
-      const loginRes = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId: user.uid,
-          email: normalizedEmail,
-        }),
-      })
-
-      console.log('[VIP_LOGIN] /api/login response', {
-        ok: loginRes.ok,
-        status: loginRes.status,
-      })
-
-      const loginData = await loginRes.json()
-
-      console.log('[VIP_LOGIN] /api/login data', loginData)
-
-      console.log('[VIP_LOGIN] browser cookies', {
-        cookie: document.cookie,
-      })
-
-      return loginRes.ok
-    } catch (error) {
-      console.error(
-        '[VIP_LOGIN] syncRedisSession failed',
-        error,
-      )
-
-      return false
+    if (
+      existing &&
+      existing.uid === user.uid
+    ) {
+      return existing.promise
     }
+
+    const promise = (async (): Promise<boolean> => {
+      try {
+        const idToken =
+          await user.getIdToken(true)
+
+        if (!idToken) {
+          return false
+        }
+
+        const loginRes = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            idToken,
+          }),
+        })
+
+        if (!loginRes.ok) {
+          return false
+        }
+
+        return true
+      } catch (error) {
+        console.error(
+          '[VIP_LOGIN] syncRedisSession failed',
+          error,
+        )
+
+        return false
+      }
+    })()
+
+    sessionSyncRef.current = {
+      uid: user.uid,
+      promise,
+    }
+
+    const ok = await promise
+
+    if (
+      !ok &&
+      sessionSyncRef.current?.promise === promise
+    ) {
+      sessionSyncRef.current = null
+    }
+
+    return ok
   }
 
   useEffect(() => {
@@ -147,36 +169,25 @@ export default function VIPLoginPage() {
     const unsubscribe = onAuthStateChanged(
       auth,
       async (user) => {
-        console.log('[VIP_LOGIN] onAuthStateChanged', {
-          uid: user?.uid,
-          email: user?.email,
-        })
-
         setCurrentUser(user)
         setAuthLoading(false)
 
-        if (user?.email) {
+        if (!user) {
+          sessionSyncRef.current = null
+          return
+        }
+
+        if (user.email) {
           setEmail(user.email)
         }
 
-        if (user && !sessionSyncRef.current) {
-          sessionSyncRef.current = true
+        const ok = await syncRedisSession(user)
 
-          console.log(
-            '[VIP_LOGIN] restoring Redis session',
-          )
-
-          const ok = await syncRedisSession(user)
-
-          console.log(
-            '[VIP_LOGIN] restore session result',
-            {
-              ok,
-            },
-          )
-
-          router.refresh()
+        if (!ok) {
+          setErr('세션 생성 실패')
         }
+
+        router.refresh()
       },
     )
 
@@ -193,10 +204,6 @@ export default function VIPLoginPage() {
     try {
       const auth = getAuth()
 
-      console.log('[VIP_LOGIN] Firebase login start', {
-        email: email.trim().toLowerCase(),
-      })
-
       const userCredential =
         await signInWithEmailAndPassword(
           auth,
@@ -205,11 +212,6 @@ export default function VIPLoginPage() {
         )
 
       const firebaseUser = userCredential.user
-
-      console.log('[VIP_LOGIN] Firebase login success', {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-      })
 
       const ok = await syncRedisSession(firebaseUser)
 
@@ -228,10 +230,6 @@ export default function VIPLoginPage() {
       setMessage('VIP 로그인 성공! 이동 중입니다.')
 
       setTimeout(() => {
-        console.log(
-          '[VIP_LOGIN] redirect after session ready',
-        )
-
         router.replace(`/${locale}/vip/upgrade`)
         router.refresh()
       }, 300)
@@ -270,17 +268,12 @@ export default function VIPLoginPage() {
         credentials: 'include',
       })
 
-      console.log('[VIP_LOGIN] logout response', {
-        ok: logoutRes.ok,
-        status: logoutRes.status,
-      })
-
       if (!logoutRes.ok) {
         setErr('로그아웃 실패')
         return
       }
 
-      sessionSyncRef.current = false
+      sessionSyncRef.current = null
 
       setCurrentUser(null)
       setEmail('')
@@ -436,10 +429,6 @@ export default function VIPLoginPage() {
               }}
               type="button"
               onClick={() => {
-                console.log(
-                  '[VIP_LOGIN] move vip page',
-                )
-
                 router.replace(`/${locale}/vip/upgrade`)
                 router.refresh()
               }}

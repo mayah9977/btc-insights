@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/AlertEditModal.tsx
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'

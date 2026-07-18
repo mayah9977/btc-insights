@@ -1,3 +1,5 @@
+//app/api/admin/vip/grant/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getVIPPlan, isVIPPlan } from '@/lib/payments/vipPlans'

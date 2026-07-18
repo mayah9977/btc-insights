@@ -1,4 +1,4 @@
-//lib/alerts/alertEngine.ts  
+//lib/alerts/alertEngine.ts
 
 import {
   getActiveAlerts,
@@ -6,7 +6,6 @@ import {
   updateAlert,
 } from './alertStore.server'
 import type { PriceAlert } from './alertTypes'
-import { sendAlertNotification } from './alertNotifier'
 import { addAlertHistory } from './alertHistoryStore'
 import { redis } from '../redis'
 import { pushAlertTriggered } from '@/lib/push/pushOnAlert'
@@ -116,11 +115,6 @@ export async function handlePriceTick(tick: PriceTick) {
 
       const ts = Date.now()
       console.log('[ENGINE][HIT]', alert.id, symbol, price, mode)
-
-      /* =========================
-       * 🔔 External Notification
-       * ========================= */
-      await sendAlertNotification(alert, price)
 
       /* =========================
        * 📜 History

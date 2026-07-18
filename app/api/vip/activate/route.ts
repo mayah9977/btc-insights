@@ -1,3 +1,5 @@
+//app/api/vip/activate/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, createDecipheriv } from 'crypto'
 import { redis } from '@/lib/redis/index'

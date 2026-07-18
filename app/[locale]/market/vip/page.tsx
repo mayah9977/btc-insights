@@ -1,4 +1,4 @@
-// app/[locale]/casino/vip/page.tsx
+// app/[locale]/market/vip/page.tsx
 
 import { redirect } from 'next/navigation'
 

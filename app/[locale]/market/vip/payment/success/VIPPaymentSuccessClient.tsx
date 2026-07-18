@@ -1,4 +1,4 @@
-// app/[locale]/casino/vip/payment/success/VIPPaymentSuccessClient.tsx
+// app/[locale]/market/vip/payment/success/VIPPaymentSuccessClient.tsx
 
 'use client'
 

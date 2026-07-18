@@ -76,3 +76,5 @@ next-env.d.ts
 # =========================
 result.pdf
 test.pdf
+.vercel
+.env*.local

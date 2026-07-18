@@ -1,10 +1,16 @@
+//app/api/alerts/performance/route.ts
+
 import { NextResponse } from 'next/server'
 import { listPerformances } from '@/lib/alerts/alertPerformanceStore'
-
-const DEV_USER_ID = 'dev-user'
+import { resolveNotificationPrincipal } from '@/lib/auth/notificationPrincipal'
 
 export async function GET() {
+  const principal =
+    await resolveNotificationPrincipal()
+
   return NextResponse.json(
-    await listPerformances(DEV_USER_ID)
+    await listPerformances(
+      principal.userId,
+    ),
   )
 }

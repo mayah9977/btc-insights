@@ -1,3 +1,5 @@
+//app/[locale]/LocaleClientBootstrap.tsx
+
 'use client'
 
 import { useEffect } from 'react'

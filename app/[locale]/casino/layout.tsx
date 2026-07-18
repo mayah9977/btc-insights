@@ -1,10 +1,13 @@
+//app/[locale]/casino/layout.tsx
+
 import type { ReactNode } from 'react'
 
 /* 🔐 VIP (Server) */
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { getUserVIPLevel } from '@/lib/vip/vipServer'
 import type { VIPLevel } from '@/lib/vip/vipTypes'
 
-/* 🧩 Client Wrapper */
+/* 🎨 Client Wrapper */
 import CasinoClientRoot from './CasinoClientRoot'
 
 export default async function CasinoLayout({
@@ -12,8 +15,11 @@ export default async function CasinoLayout({
 }: {
   children: ReactNode
 }) {
-  const userId = 'dev-user'
-  const vipLevel: VIPLevel = await getUserVIPLevel(userId)
+  const user = await getCurrentUser()
+
+  const vipLevel: VIPLevel = user
+    ? await getUserVIPLevel(user.id)
+    : 'FREE'
 
   return (
     <CasinoClientRoot initialLevel={vipLevel}>

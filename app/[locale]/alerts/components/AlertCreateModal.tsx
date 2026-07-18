@@ -1,4 +1,4 @@
-//app/[locale]/components/AlertCreatModal.tsx
+//app/[locale]/alerts/components/AlertCreatModal.tsx
 
 'use client'
 

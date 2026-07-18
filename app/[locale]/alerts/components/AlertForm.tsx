@@ -1,3 +1,5 @@
+//app/[locale]/alerts/components/AlertForm.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'

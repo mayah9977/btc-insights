@@ -11,6 +11,8 @@ export type CurrentUser = {
 }
 
 const SESSION_COOKIE_NAME = 'session'
+const SESSION_AUTH_VERSION = 2
+const SESSION_AUTH_PROVIDER = 'firebase'
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
@@ -39,6 +41,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
         : raw
 
     if (!session?.userId) {
+      return null
+    }
+
+    if (
+      session.authVersion !==
+        SESSION_AUTH_VERSION ||
+      session.authProvider !==
+        SESSION_AUTH_PROVIDER
+    ) {
       return null
     }
 

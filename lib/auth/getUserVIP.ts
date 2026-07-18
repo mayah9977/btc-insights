@@ -1,3 +1,5 @@
+//lib/auth/getUserVIP.ts
+
 export async function getUserVIP(): Promise<boolean> {
   try {
     const res = await fetch('/api/vip/status', {

@@ -1,3 +1,5 @@
+//lib/alerts/types.ts
+
 export type AlertCondition =
   | 'ABOVE'
   | 'BELOW'

@@ -1,6 +1,8 @@
 // lib/vip/vipServer.ts
 
-import { getUserVIPState } from './vipDB'
+import {
+  isVIP as isUserVIPActive,
+} from './vipDB'
 import type { VIPLevel } from './vipTypes'
 
 import { adminDB } from '@/lib/firebase-admin'
@@ -61,9 +63,10 @@ async function isAdminEmail(): Promise<boolean> {
 async function getRealVIPLevel(
   userId: string,
 ): Promise<VIPLevel> {
-  const state = await getUserVIPState(userId)
+  const active =
+    await isUserVIPActive(userId)
 
-  return state?.level ?? 'FREE'
+  return active ? 'VIP' : 'FREE'
 }
 
 /**
@@ -128,7 +131,7 @@ export async function isVIP(
 }
 
 /* =========================================================
-   🔥 기존 VIP 활성화 구조 유지
+   🔥기존 VIP 활성화 구조 유지
 ========================================================= */
 
 export async function setUserVIPLevel(
