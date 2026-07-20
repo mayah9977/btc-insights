@@ -155,9 +155,6 @@ export const useVIPMarketStore =
               (k === 'oiDelta' &&
                 value === 0 &&
                 state.oiDelta !== 0) ||
-              (k === 'whaleNetRatio' &&
-                value === 0 &&
-                state.whaleNetRatio !== 0) ||
               (k === 'volumeRatio' &&
                 value === 1 &&
                 state.volumeRatio !== 1)

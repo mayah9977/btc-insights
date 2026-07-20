@@ -16,6 +16,10 @@ import {
   setLastFinalDecision,
   getRecentPrices,
   setLastMACD,
+  setLastTradeUSD,
+  setLastWhaleTradeUSD,
+  setLastWhaleBuyUSD,
+  setLastWhaleSellUSD,
 } from '@/lib/market/marketLastStateStore'
 
 import { calculateMACD } from '@/lib/market/macd'
@@ -497,6 +501,16 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           'WHALE_TRADE_FLOW'
         ) {
 
+          setLastTradeUSD(
+            symbol,
+            event.totalVolume,
+          )
+
+          setLastWhaleTradeUSD(
+            symbol,
+            event.whaleVolume,
+          )
+
           redis.publish(
             DERIVED_PUBLIC,
             JSON.stringify(event),
@@ -507,6 +521,21 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           event.type ===
           'WHALE_NET_PRESSURE'
         ) {
+
+          setLastTradeUSD(
+            symbol,
+            event.totalVolume,
+          )
+
+          setLastWhaleBuyUSD(
+            symbol,
+            event.whaleBuyVolume,
+          )
+
+          setLastWhaleSellUSD(
+            symbol,
+            event.whaleSellVolume,
+          )
 
           redis.publish(
             DERIVED_PUBLIC,
@@ -681,25 +710,30 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               1,
           })
 
-        if (absorption.detected) {
-
-          publishTasks.push(
-            redis.publish(
-              DERIVED_VIP,
-              JSON.stringify({
-                type: 'WHALE_ABSORPTION',
-                symbol,
-                direction:
-                  absorption.direction,
-                strength:
-                  absorption.strength,
-                confidence:
-                  absorption.confidence,
-                ts: snapshot.ts,
-              }),
-            ),
-          )
-        }
+        publishTasks.push(
+          redis.publish(
+            DERIVED_VIP,
+            JSON.stringify({
+              type: 'WHALE_ABSORPTION',
+              symbol,
+              detected:
+                absorption.detected,
+              direction:
+                absorption.detected
+                  ? absorption.direction
+                  : 'NONE',
+              strength:
+                absorption.detected
+                  ? absorption.strength
+                  : 0,
+              confidence:
+                absorption.detected
+                  ? absorption.confidence
+                  : 0,
+              ts: snapshot.ts,
+            }),
+          ),
+        )
 
         /* =====================================================
            Regime

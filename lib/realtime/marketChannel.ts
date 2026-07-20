@@ -281,10 +281,11 @@ export function subscribeWhaleNetPressure(
 export function subscribeWhaleAbsorption(
   symbol: string,
   cb: (
-    direction: 'LONG' | 'SHORT',
+    direction: 'LONG' | 'SHORT' | 'NONE',
     strength: number,
     confidence: number,
-    ts?: number,
+    ts: number | undefined,
+    detected: boolean,
   ) => void,
 ) {
   const safeSymbol = symbol?.toUpperCase()
@@ -293,17 +294,24 @@ export function subscribeWhaleAbsorption(
     SSE_EVENT.WHALE_ABSORPTION,
     (data: {
       symbol: string
-      direction: 'LONG' | 'SHORT'
+      direction: 'LONG' | 'SHORT' | 'NONE'
       strength: number
       confidence: number
       ts?: number
+      detected?: boolean
     }) => {
       if (isSameSymbol(data.symbol, safeSymbol)) {
+        const detected =
+          typeof data.detected === 'boolean'
+            ? data.detected
+            : data.direction !== 'NONE'
+
         cb(
           data.direction,
           data.strength,
           data.confidence,
           data.ts,
+          detected,
         )
       }
     },

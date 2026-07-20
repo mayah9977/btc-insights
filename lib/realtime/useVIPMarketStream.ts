@@ -417,13 +417,36 @@ export function useVIPMarketStream(
 
     const unsubAbsorption = subscribeWhaleAbsorption(
       safeSymbol,
-      (_, strength) => {
+      (direction, strength, _confidence, _ts, detected) => {
         if (!shouldUpdate('absorption')) return
 
+        const runtimeDirection = String(direction)
+
+        if (!detected || runtimeDirection === 'NONE') {
+          scheduleVIPMarketUpdate({
+            absorption: 0,
+          })
+          return
+        }
+
+        if (
+          runtimeDirection !== 'LONG' &&
+          runtimeDirection !== 'SHORT'
+        ) {
+          return
+        }
+
+        if (!Number.isFinite(strength)) {
+          return
+        }
+
+        const absorption =
+          runtimeDirection === 'LONG'
+            ? Math.abs(strength)
+            : -Math.abs(strength)
+
         scheduleVIPMarketUpdate({
-          ...(strength !== undefined && {
-            absorption: strength,
-          }),
+          absorption,
         })
       },
     )
