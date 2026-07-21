@@ -930,9 +930,7 @@ export function detectSignals(args: {
 
     if (
       prevState.rsiZone !== nextZone &&
-      nextZone === 'OVERBOUGHT' &&
-      lastSignals[stateKey].RSI !==
-        'RSI_OVERBOUGHT'
+      nextZone === 'OVERBOUGHT'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
@@ -944,16 +942,11 @@ export function detectSignals(args: {
         ts,
         eventCandleTs,
       })
-
-      lastSignals[stateKey].RSI =
-        'RSI_OVERBOUGHT'
     }
 
     if (
       prevState.rsiZone !== nextZone &&
-      nextZone === 'OVERSOLD' &&
-      lastSignals[stateKey].RSI !==
-        'RSI_OVERSOLD'
+      nextZone === 'OVERSOLD'
     ) {
       events.push({
         type: 'INDICATOR_SIGNAL',
@@ -965,9 +958,6 @@ export function detectSignals(args: {
         ts,
         eventCandleTs,
       })
-
-      lastSignals[stateKey].RSI =
-        'RSI_OVERSOLD'
     }
 
     prevState.rsiZone = nextZone
