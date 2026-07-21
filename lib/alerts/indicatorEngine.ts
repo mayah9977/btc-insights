@@ -126,6 +126,14 @@ let indicatorEnabled: IndicatorEnabled =
  * ========================= */
 const REDIS_KEY = 'alerts:indicator:enabled'
 
+const INDICATOR_SETTINGS_TTL_MS = 30_000
+
+let indicatorSettingsLastLoadedAt = 0
+
+let indicatorSettingsLastAttemptAt = 0
+
+let indicatorSettingsLoadPromise: Promise<void> | null = null
+
 /* =========================
  * 🔥 Binance Futures
  * ========================= */
@@ -245,7 +253,9 @@ export function setIndicatorEnabled(v: unknown) {
   indicatorEnabled = normalizeIndicatorEnabled(v)
 }
 
-async function initIndicatorSettings() {
+async function loadIndicatorSettings(
+  isInitialLoad: boolean,
+) {
   try {
     const raw = await redis.get(REDIS_KEY)
 
@@ -273,6 +283,8 @@ async function initIndicatorSettings() {
         )
       }
 
+      indicatorSettingsLastLoadedAt = Date.now()
+
       return
     }
 
@@ -294,17 +306,70 @@ async function initIndicatorSettings() {
         err,
       )
     }
+
+    indicatorSettingsLastLoadedAt = Date.now()
   } catch (e) {
     console.error('[indicatorEngine init error]', e)
 
-    indicatorEnabled =
-      normalizeIndicatorEnabled(
-        DEFAULT_INDICATOR_ENABLED,
-      )
+    if (isInitialLoad) {
+      indicatorEnabled =
+        normalizeIndicatorEnabled(
+          DEFAULT_INDICATOR_ENABLED,
+        )
+    }
   }
 }
 
-void initIndicatorSettings()
+function startIndicatorSettingsLoad(
+  isInitialLoad: boolean,
+) {
+  if (indicatorSettingsLoadPromise) {
+    return indicatorSettingsLoadPromise
+  }
+
+  indicatorSettingsLastAttemptAt = Date.now()
+
+  const loadPromise =
+    loadIndicatorSettings(isInitialLoad)
+
+  indicatorSettingsLoadPromise = loadPromise
+
+  void loadPromise.finally(() => {
+    if (indicatorSettingsLoadPromise === loadPromise) {
+      indicatorSettingsLoadPromise = null
+    }
+  })
+
+  return loadPromise
+}
+
+const initialIndicatorSettingsLoadPromise =
+  startIndicatorSettingsLoad(true)
+
+async function ensureIndicatorSettingsLoaded() {
+  await initialIndicatorSettingsLoadPromise
+
+  if (indicatorSettingsLoadPromise) {
+    await indicatorSettingsLoadPromise
+    return
+  }
+
+  const now = Date.now()
+
+  const settingsReferenceAt = Math.max(
+    indicatorSettingsLastLoadedAt,
+    indicatorSettingsLastAttemptAt,
+  )
+
+  if (
+    now - settingsReferenceAt <
+    INDICATOR_SETTINGS_TTL_MS
+  ) {
+    return
+  }
+
+  await startIndicatorSettingsLoad(false)
+}
 
 function buildTimeframeKey(
   symbol: string,
@@ -1163,6 +1228,8 @@ export async function handleIndicatorTick(
   price: number,
 ) {
   try {
+    await ensureIndicatorSettingsLoaded()
+
     void price
 
     const normalizedSymbol = String(
