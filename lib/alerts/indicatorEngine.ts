@@ -3,6 +3,12 @@
 import { redis } from '../redis'
 import { pushIndicatorTriggered } from '@/lib/push/pushOnAlert'
 import { getAllUserIds } from '@/lib/push/getAllUserIds'
+import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
+import {
+  getUserNotificationSettings,
+} from '@/lib/notification/settingsStore'
+import { saveNotification } from '@/lib/notification/repository'
+import type { NotificationSettings } from '@/lib/notification/notificationSettings'
 
 type Timeframe = '15m' | '1h'
 
@@ -28,6 +34,11 @@ type IndicatorEvent = {
   value: number
   ts: number
   eventCandleTs: number
+}
+
+type IndicatorHistoryRecipient = {
+  userId: string
+  settings: NotificationSettings
 }
 
 type SignalState = {
@@ -247,6 +258,166 @@ function isIndicatorEnabled(
     indicatorEnabled[indicator]?.[timeframe] !==
     false
   )
+}
+
+function buildIndicatorHistoryLabel(
+  payload: IndicatorEvent,
+): string {
+  const SIGNAL_MAP: Record<
+    IndicatorType,
+    Record<string, string>
+  > = {
+    RSI: {
+      RSI_OVERBOUGHT:
+        payload.timeframe === '1h'
+          ? 'RSI 과매수 진입'
+          : 'RSI 과매수 진입',
+
+      RSI_OVERSOLD:
+        payload.timeframe === '1h'
+          ? 'RSI 과매도 진입'
+          : 'RSI 과매도 진입',
+    },
+
+    MACD: {
+      GOLDEN_CROSS:
+        payload.timeframe === '1h'
+          ? 'MACD 골든크로스'
+          : 'MACD 골든크로스',
+
+      DEAD_CROSS:
+        payload.timeframe === '1h'
+          ? 'MACD 데드크로스'
+          : 'MACD 데드크로스',
+    },
+
+    EMA: {
+      BULLISH_TREND:
+        payload.timeframe === '1h'
+          ? 'EMA 상방 추세 전환'
+          : 'EMA 상방 추세 전환',
+
+      BEARISH_TREND:
+        payload.timeframe === '1h'
+          ? 'EMA 하방 추세 전환'
+          : 'EMA 하방 추세 전환',
+    },
+  }
+
+  return (
+    SIGNAL_MAP[payload.indicator]?.[
+      payload.signal
+    ] ??
+    `${payload.indicator} ${payload.signal}`
+  )
+}
+
+async function getIndicatorHistoryRecipients(): Promise<
+  IndicatorHistoryRecipient[]
+> {
+  let validVipUserIds: string[]
+
+  try {
+    validVipUserIds =
+      await getAllValidVIPUserIds()
+  } catch (error) {
+    console.error(
+      '[indicatorEngine][History VIP List Error]',
+      error,
+    )
+
+    return []
+  }
+
+  const uniqueUserIds = Array.from(
+    new Set(
+      validVipUserIds.filter(
+        userId =>
+          typeof userId === 'string' &&
+          userId.length > 0,
+      ),
+    ),
+  )
+
+  const recipients = await Promise.all(
+    uniqueUserIds.map(
+      async (
+        userId,
+      ): Promise<
+        IndicatorHistoryRecipient | null
+      > => {
+        try {
+          const settings =
+            await getUserNotificationSettings(
+              userId,
+            )
+
+          return {
+            userId,
+            settings,
+          }
+        } catch (error) {
+          console.error(
+            '[indicatorEngine][History Settings Error]',
+            {
+              userId,
+              error,
+            },
+          )
+
+          return null
+        }
+      },
+    ),
+  )
+
+  return recipients.filter(
+    (
+      recipient,
+    ): recipient is IndicatorHistoryRecipient =>
+      recipient !== null,
+  )
+}
+
+async function saveIndicatorHistoryForUser(
+  recipient: IndicatorHistoryRecipient,
+  payload: IndicatorEvent,
+): Promise<void> {
+  if (
+    recipient.settings.indicatorEnabled?.[
+      payload.indicator
+    ]?.[payload.timeframe] === false
+  ) {
+    return
+  }
+
+  const id =
+    `indicator:${payload.symbol}:${payload.timeframe}:${payload.indicator}:${payload.signal}:${payload.eventCandleTs}`
+
+  const label =
+    buildIndicatorHistoryLabel(payload)
+
+  try {
+    await saveNotification(
+      recipient.userId,
+      {
+        id,
+        type: 'INDICATOR',
+        title: `${payload.timeframe.toUpperCase()} ${payload.indicator} signal`,
+        body: label,
+        createdAt: payload.ts,
+      },
+    )
+  } catch (error) {
+    console.error(
+      '[indicatorEngine][History Save Error]',
+      {
+        userId: recipient.userId,
+        notificationId: id,
+        error,
+      },
+    )
+  }
 }
 
 export function setIndicatorEnabled(v: unknown) {
@@ -1305,33 +1476,79 @@ export async function handleIndicatorTick(
 
     if (!signals.length) return
 
-    const userIds = await getAllUserIds()
-    if (!userIds.length) return
+    const historyRecipientsPromise =
+      getIndicatorHistoryRecipients()
+
+    let userIds: string[] = []
+
+    try {
+      userIds = await getAllUserIds()
+    } catch (error) {
+      console.error(
+        '[indicatorEngine][Push User List Error]',
+        error,
+      )
+    }
 
     for (const payload of signals) {
       console.log('[INDICATOR_SIGNAL]', payload)
 
-      await redis.publish(
-        'realtime:alerts',
-        JSON.stringify(payload),
+      try {
+        await redis.publish(
+          'realtime:alerts',
+          JSON.stringify(payload),
+        )
+      } catch (error) {
+        console.error(
+          '[indicatorEngine][Publish Error]',
+          error,
+        )
+      }
+
+      const pushFanoutPromise = Promise.all(
+        userIds.map(async userId => {
+          try {
+            await pushIndicatorTriggered({
+              userId,
+              indicator: payload.indicator,
+              signal: payload.signal,
+              symbol: payload.symbol,
+              value: payload.value,
+              ts: payload.ts,
+              timeframe: payload.timeframe,
+              eventCandleTs:
+                payload.eventCandleTs,
+              runtime: 'worker',
+            })
+          } catch (error) {
+            console.error(
+              '[indicatorEngine][Push Fanout Error]',
+              {
+                userId,
+                error,
+              },
+            )
+          }
+        }),
       )
 
-      await Promise.all(
-        userIds.map(userId =>
-          pushIndicatorTriggered({
-            userId,
-            indicator: payload.indicator,
-            signal: payload.signal,
-            symbol: payload.symbol,
-            value: payload.value,
-            ts: payload.ts,
-            timeframe: payload.timeframe,
-            eventCandleTs:
-              payload.eventCandleTs,
-            runtime: 'worker',
-          }),
-        ),
-      )
+      const historyFanoutPromise =
+        historyRecipientsPromise.then(
+          recipients =>
+            Promise.all(
+              recipients.map(recipient =>
+                saveIndicatorHistoryForUser(
+                  recipient,
+                  payload,
+                ),
+              ),
+            ),
+        )
+
+      await Promise.all([
+        pushFanoutPromise,
+        historyFanoutPromise,
+      ])
     }
   } catch (e) {
     console.error('[indicatorEngine]', e)

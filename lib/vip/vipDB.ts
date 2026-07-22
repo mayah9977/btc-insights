@@ -1,4 +1,4 @@
-//lib/vip/vipDB.ts  
+// lib/vip/vipDB.ts
 
 import type { VIPLevel, VIPAddon } from './vipTypes'
 import { recordVIPChange } from './vipAuditLog'
@@ -100,6 +100,33 @@ export async function getUserVIPState(
 
   const row = result.rows[0]
   return row ? mapRow(row) : null
+}
+
+export async function getAllValidVIPUserIds(): Promise<string[]> {
+  const now = Date.now()
+
+  const result = await pool.query<{
+    user_id: string
+  }>(
+    `
+    SELECT DISTINCT
+      user_id
+    FROM vip_users
+    WHERE
+      (
+        level = 'VIP'
+        AND expired_at > $1
+      )
+      OR
+      (
+        grace_until IS NOT NULL
+        AND grace_until > $1
+      )
+    `,
+    [now],
+  )
+
+  return result.rows.map(row => row.user_id)
 }
 
 export async function isVIP(userId: string): Promise<boolean> {
@@ -302,7 +329,6 @@ export async function extendVIP(
   if (!prev) return
 
   const now = Date.now()
-
   const base = Math.max(prev.expiredAt, now)
 
   await upsertVIP(userId, {
