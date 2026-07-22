@@ -79,11 +79,27 @@ export async function GET(req: NextRequest) {
 
           if (
             parsed?.type ===
-              'INDICATOR_SIGNAL' ||
-            parsed?.type ===
-              'INSTITUTIONAL_PATTERN_SIGNAL'
+            'INDICATOR_SIGNAL'
           ) {
             if (!vipActive) {
+              return
+            }
+
+            send(parsed)
+          }
+
+          if (
+            parsed?.type ===
+            'INSTITUTIONAL_PATTERN_SIGNAL'
+          ) {
+            if (!vipActive) {
+              return
+            }
+
+            if (
+              parsed?.userId !==
+              principal.userId
+            ) {
               return
             }
 

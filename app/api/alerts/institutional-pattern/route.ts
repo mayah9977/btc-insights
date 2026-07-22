@@ -3,7 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { redis } from '@/lib/redis'
-import { saveNotification } from '@/lib/notification/repository'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { isVIP } from '@/lib/vip/vipServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -148,64 +149,52 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const payload: InstitutionalPatternSignalPayload =
-      {
-        type:
-          'INSTITUTIONAL_PATTERN_SIGNAL',
+    const currentUser =
+      await getCurrentUser()
 
-        pattern: body.pattern.trim(),
-
-        intensity: body.intensity,
-
-        risk: body.risk,
-
-        summary: body.summary.trim(),
-
-        confirmedCandleTs:
-          body.confirmedCandleTs,
-
-        ts: body.ts,
-      }
-
-    const notificationId =
-      `institutional:${payload.pattern}:${payload.confirmedCandleTs}`
-
-    try {
-      console.log(
-        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_ATTEMPT]',
+    if (!currentUser) {
+      return NextResponse.json(
         {
-          id: notificationId,
-          pattern: payload.pattern,
-          intensity: payload.intensity,
-          confirmedCandleTs:
-            payload.confirmedCandleTs,
-          createdAt: payload.ts,
+          ok: false,
+          error: 'UNAUTHORIZED',
         },
+        { status: 401 },
       )
+    }
 
-      await saveNotification({
-        id: notificationId,
-        type: 'INSTITUTIONAL_PATTERN',
-        title: 'Institutional Flow Signal',
-        body: `${payload.pattern} · ${payload.intensity}`,
-        createdAt: payload.ts,
-      })
+    const vipActive =
+      await isVIP(currentUser.id)
 
-      console.log(
-        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_RESULT]',
+    if (!vipActive) {
+      return NextResponse.json(
         {
-          ok: true,
-          id: notificationId,
+          ok: false,
+          error: 'VIP_REQUIRED',
         },
+        { status: 403 },
       )
-    } catch (error) {
-      console.error(
-        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_ERROR]',
-        {
-          id: notificationId,
-          error,
-        },
-      )
+    }
+
+    const payload: InstitutionalPatternSignalPayload & {
+      userId: string
+    } = {
+      type:
+        'INSTITUTIONAL_PATTERN_SIGNAL',
+
+      pattern: body.pattern.trim(),
+
+      intensity: body.intensity,
+
+      risk: body.risk,
+
+      summary: body.summary.trim(),
+
+      confirmedCandleTs:
+        body.confirmedCandleTs,
+
+      ts: body.ts,
+
+      userId: currentUser.id,
     }
 
     await redis.publish(
