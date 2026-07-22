@@ -15,18 +15,28 @@ export async function GET(req: NextRequest) {
     const user = await getCurrentUser()
 
     if (!user) {
-      return NextResponse.json({
-        ok: false,
-        notifications: [],
-        unreadCount: 0,
-        isVIP: false,
-        authenticated: false,
-      })
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'UNAUTHORIZED',
+        },
+        { status: 401 },
+      )
     }
 
     const viewerId = user.id
     const vipLevel = await getUserVIPLevel(viewerId)
     const isVIP = vipLevel === 'VIP'
+
+    if (!isVIP) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'VIP_REQUIRED',
+        },
+        { status: 403 },
+      )
+    }
 
     const mode = req.nextUrl.searchParams.get('mode')
 

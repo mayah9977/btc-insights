@@ -1,3 +1,5 @@
+//app/api/notification/read/route.ts
+
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { getUserVIPLevel } from '@/lib/vip/vipServer'
@@ -9,23 +11,82 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { ok: false, error: 'Unauthorized' },
+        { ok: false, error: 'UNAUTHORIZED' },
         { status: 401 },
       )
     }
 
     const viewerId = user.id
 
-    const body = await req.json().catch(() => ({}))
+    let body: unknown = null
+
+    try {
+      body = await req.json()
+    } catch (error) {
+      console.error(
+        '[READ_NOTIFICATION] invalid json body:',
+        error,
+      )
+
+      return NextResponse.json(
+        {
+          ok: false,
+          reason: 'invalid-json-body',
+        },
+        { status: 400 },
+      )
+    }
+
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body)
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          reason: 'invalid-payload',
+        },
+        { status: 400 },
+      )
+    }
+
+    const payload =
+      body as Record<string, unknown>
+
+    let ids: string[] | undefined
+
+    if ('ids' in payload) {
+      const candidateIds = payload.ids
+
+      if (
+        !Array.isArray(candidateIds) ||
+        candidateIds.some(
+          (id: unknown) =>
+            typeof id !== 'string',
+        )
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            reason: 'invalid-payload',
+          },
+          { status: 400 },
+        )
+      }
+
+      ids = candidateIds as string[]
+    }
 
     const vipLevel = await getUserVIPLevel(viewerId)
     const isVIP = vipLevel === 'VIP'
 
-    const ids = Array.isArray(body?.ids)
-      ? body.ids.filter(
-          (id: unknown): id is string => typeof id === 'string',
-        )
-      : undefined
+    if (!isVIP) {
+      return NextResponse.json(
+        { ok: false, error: 'VIP_REQUIRED' },
+        { status: 403 },
+      )
+    }
 
     const unreadCount = await markNotificationsRead({
       viewerId,

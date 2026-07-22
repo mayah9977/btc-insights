@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { redis } from '@/lib/redis'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { isVIP } from '@/lib/vip/vipServer'
+import { saveNotification } from '@/lib/notification/repository'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -195,6 +196,50 @@ export async function POST(req: NextRequest) {
       ts: body.ts,
 
       userId: currentUser.id,
+    }
+
+    const notificationId =
+      `institutional:${payload.pattern}:${payload.confirmedCandleTs}`
+
+    try {
+      console.log(
+        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_ATTEMPT]',
+        {
+          id: notificationId,
+          pattern: payload.pattern,
+          intensity: payload.intensity,
+          confirmedCandleTs:
+            payload.confirmedCandleTs,
+          createdAt: payload.ts,
+        },
+      )
+
+      await saveNotification(
+        currentUser.id,
+        {
+          id: notificationId,
+          type: 'INSTITUTIONAL_PATTERN',
+          title: 'Institutional Flow Signal',
+          body: `${payload.pattern} · ${payload.intensity}`,
+          createdAt: payload.ts,
+        },
+      )
+
+      console.log(
+        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_RESULT]',
+        {
+          ok: true,
+          id: notificationId,
+        },
+      )
+    } catch (error) {
+      console.error(
+        '[INSTITUTIONAL_PATTERN_ROUTE][SAVE_ERROR]',
+        {
+          id: notificationId,
+          error,
+        },
+      )
     }
 
     await redis.publish(

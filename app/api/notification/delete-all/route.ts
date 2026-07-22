@@ -1,3 +1,5 @@
+//app/api/notification/delete-all/route.ts
+
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
 import { getUserVIPLevel } from '@/lib/vip/vipServer'
@@ -11,7 +13,7 @@ export async function POST() {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Unauthorized',
+          error: 'UNAUTHORIZED',
         },
         { status: 401 },
       )
@@ -21,6 +23,16 @@ export async function POST() {
 
     const vipLevel = await getUserVIPLevel(viewerId)
     const isVIP = vipLevel === 'VIP'
+
+    if (!isVIP) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'VIP_REQUIRED',
+        },
+        { status: 403 },
+      )
+    }
 
     const result = await deleteAllNotifications({
       viewerId,
