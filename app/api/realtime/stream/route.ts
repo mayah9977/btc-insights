@@ -1,7 +1,12 @@
 // app/api/realtime/stream/route.ts
 
-import { NextRequest } from 'next/server'
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server'
 import { addSSEClient, SSEScope } from '@/lib/realtime/sseHub'
+import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { getUserVIPLevel } from '@/lib/vip/vipServer'
 
 // 🔥 VIP Risk SSOT
 import { getLastVipRisk } from '@/lib/vip/vipLastRiskStore'
@@ -27,6 +32,33 @@ export async function GET(req: NextRequest) {
 
   const scope: SSEScope =
     scopeParam === 'vip' ? 'VIP' : 'REALTIME'
+
+  if (scope === 'VIP') {
+    const currentUser = await getCurrentUser()
+
+    if (!currentUser) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'UNAUTHORIZED',
+        },
+        { status: 401 },
+      )
+    }
+
+    const vipLevel =
+      await getUserVIPLevel(currentUser.id)
+
+    if (vipLevel !== 'VIP') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'VIP_REQUIRED',
+        },
+        { status: 403 },
+      )
+    }
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
