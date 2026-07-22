@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { sseManager } from '@/lib/realtime/sseConnectionManager'
 import { SSE_EVENT } from '@/lib/realtime/types'
-import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
+import { getNotificationSettings } from '@/lib/notification/settingsClient'
 import type {
   IndicatorTimeframe,
   IndicatorType,
@@ -340,9 +340,7 @@ async function startNotificationLoop(
     stopNotificationLoop()
 
     const settings =
-      await getUserNotificationSettings(
-        'local',
-      )
+      await getNotificationSettings()
 
     if (
       currentToken !==
@@ -688,9 +686,7 @@ export const useAlertsSSEStore =
               }
 
               const settings =
-                await getUserNotificationSettings(
-                  'local',
-                )
+                await getNotificationSettings()
 
               const indicator =
                 normalizeIndicatorType(
@@ -963,9 +959,7 @@ export const useAlertsSSEStore =
               }
 
               const settings =
-                await getUserNotificationSettings(
-                  'local',
-                )
+                await getNotificationSettings()
 
               console.log(
                 '[INSTITUTIONAL_PATTERN_REALTIME_SETTING_CHECK]',

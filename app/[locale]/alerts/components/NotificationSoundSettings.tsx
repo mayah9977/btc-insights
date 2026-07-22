@@ -14,9 +14,9 @@ import {
 } from '@/lib/notification/notificationSettings'
 
 import {
-  getUserNotificationSettings,
-  saveUserNotificationSettings,
-} from '@/lib/notification/settingsStore'
+  getNotificationSettings,
+  saveNotificationSettings,
+} from '@/lib/notification/settingsClient'
 
 import { getUserVIP } from '@/lib/auth/getUserVIP'
 
@@ -89,7 +89,7 @@ const INDICATOR_ALERT_OPTIONS: Array<{
       {
         timeframe: '1h',
         badge: '1H',
-        layer: '골든크스 / 데드크로스',
+        layer: '골든크로스 / 데드크로스',
         title:
           'Structure Alignment Shift',
         description:
@@ -200,9 +200,7 @@ export default function NotificationSoundSettings({
   useEffect(() => {
     ;(async () => {
       const current =
-        await getUserNotificationSettings(
-          'local',
-        )
+        await getNotificationSettings()
 
       setSettings(current)
     })()
@@ -218,8 +216,7 @@ export default function NotificationSoundSettings({
 
     setSettings(next)
 
-    await saveUserNotificationSettings(
-      'local',
+    await saveNotificationSettings(
       next,
     )
   }

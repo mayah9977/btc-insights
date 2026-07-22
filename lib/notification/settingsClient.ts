@@ -1,12 +1,28 @@
 // lib/notification/settingsClient.ts
 
-export type NotificationSettings = {
-  pushEnabled: boolean
-  importance: 'ALL' | 'CRITICAL_ONLY'
-  quietHours?: {
-    from: number
-    to: number
-  }
+'use client'
+
+import type {
+  NotificationSettings,
+  QuietHours,
+} from './notificationSettings'
+
+export type { NotificationSettings } from './notificationSettings'
+
+type IndicatorEnabledPatch = Partial<{
+  [Indicator in keyof NotificationSettings['indicatorEnabled']]:
+    | boolean
+    | Partial<
+        NotificationSettings['indicatorEnabled'][Indicator]
+      >
+}>
+
+export type NotificationSettingsPatch = Omit<
+  Partial<NotificationSettings>,
+  'indicatorEnabled' | 'quietHours'
+> & {
+  quietHours?: QuietHours | null
+  indicatorEnabled?: IndicatorEnabledPatch
 }
 
 export async function getNotificationSettings(): Promise<NotificationSettings> {
@@ -26,15 +42,31 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
 }
 
 export async function saveNotificationSettings(
-  settings: NotificationSettings,
+  settings: NotificationSettingsPatch,
 ) {
+  const hasQuietHours =
+    Object.prototype.hasOwnProperty.call(
+      settings,
+      'quietHours',
+    )
+
+  const payload = {
+    ...settings,
+    ...(hasQuietHours
+      ? {
+          quietHours:
+            settings.quietHours ?? null,
+        }
+      : {}),
+  }
+
   const res = await fetch('/api/settings/notifications', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
     },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(payload),
   })
 
   if (!res.ok) {

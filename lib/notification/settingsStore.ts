@@ -1,56 +1,231 @@
 // lib/notification/settingsStore.ts
 
+import 'server-only'
+
+import { redis } from '@/lib/redis'
+
 import {
   defaultNotificationSettings,
   normalizeNotificationSettings,
   type NotificationSettings,
 } from './notificationSettings'
 
-const store = new Map<
-  string,
-  NotificationSettings
->()
+type IndicatorEnabledPatch = Partial<{
+  [Indicator in keyof NotificationSettings['indicatorEnabled']]:
+    | boolean
+    | Partial<
+        NotificationSettings['indicatorEnabled'][Indicator]
+      >
+}>
 
-function withDefaults(
-  settings?: Partial<NotificationSettings>,
-): NotificationSettings {
+export type NotificationSettingsPatch = Omit<
+  Partial<NotificationSettings>,
+  'indicatorEnabled' | 'quietHours'
+> & {
+  quietHours?:
+    | NotificationSettings['quietHours']
+    | null
+  indicatorEnabled?: IndicatorEnabledPatch
+}
+
+const NOTIFICATION_SETTINGS_PREFIX =
+  'notification:settings'
+
+function getNotificationSettingsKey(
+  userId: string,
+): string {
+  if (
+    typeof userId !== 'string' ||
+    userId.trim().length === 0
+  ) {
+    throw new Error(
+      'Notification settings userId is required',
+    )
+  }
+
+  const normalizedUserId = userId.trim()
+
+  return `${NOTIFICATION_SETTINGS_PREFIX}:${normalizedUserId}`
+}
+
+function getDefaultSettings(): NotificationSettings {
   return normalizeNotificationSettings(
-    settings ?? defaultNotificationSettings,
+    defaultNotificationSettings,
+  )
+}
+
+function parseStoredSettings(
+  raw: string,
+): NotificationSettings {
+  const parsed = JSON.parse(raw)
+
+  return normalizeNotificationSettings(
+    parsed,
+  )
+}
+
+function mergeIndicatorTimeframeSettings(
+  existing: NotificationSettings['indicatorEnabled'][keyof NotificationSettings['indicatorEnabled']],
+  patch: unknown,
+): unknown {
+  if (patch === undefined) {
+    return {
+      ...existing,
+    }
+  }
+
+  if (typeof patch === 'boolean') {
+    return patch
+  }
+
+  if (
+    patch &&
+    typeof patch === 'object'
+  ) {
+    return {
+      ...existing,
+      ...patch,
+    }
+  }
+
+  return patch
+}
+
+function mergeIndicatorSettings(
+  existing: NotificationSettings['indicatorEnabled'],
+  patch: IndicatorEnabledPatch | undefined,
+): unknown {
+  if (patch === undefined) {
+    return {
+      RSI: {
+        ...existing.RSI,
+      },
+      MACD: {
+        ...existing.MACD,
+      },
+      EMA: {
+        ...existing.EMA,
+      },
+    }
+  }
+
+  return {
+    RSI: mergeIndicatorTimeframeSettings(
+      existing.RSI,
+      patch.RSI,
+    ),
+    MACD: mergeIndicatorTimeframeSettings(
+      existing.MACD,
+      patch.MACD,
+    ),
+    EMA: mergeIndicatorTimeframeSettings(
+      existing.EMA,
+      patch.EMA,
+    ),
+  }
+}
+
+function mergeSettings(
+  existing: NotificationSettings,
+  patch: NotificationSettingsPatch,
+): NotificationSettings {
+  const {
+    quietHours: existingQuietHours,
+    ...existingWithoutQuietHours
+  } = existing
+
+  const {
+    indicatorEnabled: indicatorEnabledPatch,
+    quietHours: quietHoursPatch,
+    ...topLevelPatch
+  } = patch
+
+  const merged = {
+    ...existingWithoutQuietHours,
+    ...topLevelPatch,
+
+    ...(quietHoursPatch === undefined
+      ? existingQuietHours
+        ? {
+            quietHours: {
+              ...existingQuietHours,
+            },
+          }
+        : {}
+      : quietHoursPatch === null
+        ? {}
+        : {
+            quietHours: {
+              ...quietHoursPatch,
+            },
+          }),
+
+    indicatorEnabled:
+      mergeIndicatorSettings(
+        existing.indicatorEnabled,
+        indicatorEnabledPatch,
+      ),
+  }
+
+  return normalizeNotificationSettings(
+    merged,
   )
 }
 
 export async function getUserNotificationSettings(
   userId: string,
 ): Promise<NotificationSettings> {
-  const existing = store.get(userId)
+  const key =
+    getNotificationSettingsKey(userId)
 
-  if (!existing) {
-    const fallback = withDefaults()
+  const raw = await redis.get(key)
 
-    store.set(userId, fallback)
-
-    return fallback
+  if (raw === null) {
+    return getDefaultSettings()
   }
 
-  const normalized = withDefaults(existing)
-
-  /**
-   * Migration-safe writeback.
-   *
-   * 기존 runtime store 에 legacy boolean indicatorEnabled 가 남아있어도
-   * 다음 접근부터 timeframe-aware schema 로 고정합니다.
-   */
-  store.set(userId, normalized)
-
-  return normalized
+  return parseStoredSettings(raw)
 }
 
 export async function saveUserNotificationSettings(
   userId: string,
   settings: NotificationSettings,
-) {
-  store.set(
-    userId,
-    withDefaults(settings),
+): Promise<NotificationSettings> {
+  const key =
+    getNotificationSettingsKey(userId)
+
+  const savedSettings =
+    normalizeNotificationSettings(
+      settings,
+    )
+
+  await redis.set(
+    key,
+    JSON.stringify(savedSettings),
   )
+
+  return savedSettings
+}
+
+export async function setUserNotificationSettings(
+  userId: string,
+  patch: NotificationSettingsPatch,
+): Promise<NotificationSettings> {
+  const key =
+    getNotificationSettingsKey(userId)
+
+  const existing =
+    await getUserNotificationSettings(userId)
+
+  const savedSettings = mergeSettings(
+    existing,
+    patch,
+  )
+
+  await redis.set(
+    key,
+    JSON.stringify(savedSettings),
+  )
+
+  return savedSettings
 }
