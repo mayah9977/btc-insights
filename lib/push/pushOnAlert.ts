@@ -1,7 +1,7 @@
 // lib/push/pushOnAlert.ts
 
 import { sendPushToUser } from './push'
-import { getUserNotificationSettings } from '@/lib/notification/settingsStore'
+import { getUserNotificationSettings } from '@/lib/notification/settingsStore.server'
 import {
   getUserVIPLevel,
   getUserVIPLevelByUserIdOnly,

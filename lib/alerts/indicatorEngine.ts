@@ -6,7 +6,7 @@ import { getAllUserIds } from '@/lib/push/getAllUserIds'
 import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
 import {
   getUserNotificationSettings,
-} from '@/lib/notification/settingsStore'
+} from '@/lib/notification/settingsStore.server'
 import { saveNotification } from '@/lib/notification/repository'
 import type { NotificationSettings } from '@/lib/notification/notificationSettings'
 
