@@ -15,6 +15,7 @@ import {
 
 import {
   getNotificationSettings,
+  NotificationSettingsRequestError,
   saveNotificationSettings,
 } from '@/lib/notification/settingsClient'
 
@@ -126,6 +127,24 @@ const INDICATOR_ALERT_OPTIONS: Array<{
   },
 ]
 
+type SettingsLoadState =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'locked'
+  | 'unavailable'
+
+function isAuthorizationError(
+  error: unknown,
+): error is NotificationSettingsRequestError {
+  return (
+    error instanceof
+      NotificationSettingsRequestError &&
+    (error.status === 401 ||
+      error.status === 403)
+  )
+}
+
 function getSoundFilePath(
   type: NotificationSound,
 ) {
@@ -151,6 +170,11 @@ export default function NotificationSoundSettings({
     useState<NotificationSettings>(
       defaultNotificationSettings,
     )
+
+  const [
+    settingsLoadState,
+    setSettingsLoadState,
+  ] = useState<SettingsLoadState>('idle')
 
   const [isOpen, setIsOpen] =
     useState(false)
@@ -185,6 +209,20 @@ export default function NotificationSoundSettings({
   const vipFeatureLocked =
     vipResolved && !isVIP
 
+  const settingsReady =
+    settingsLoadState === 'ready'
+
+  const settingsLocked =
+    vipFeatureLocked ||
+    settingsLoadState === 'locked'
+
+  const settingsUnavailable =
+    settingsLoadState === 'unavailable'
+
+  const settingsLoading =
+    settingsLoadState === 'idle' ||
+    settingsLoadState === 'loading'
+
   useEffect(() => {
     if (typeof isVIPProp === 'boolean') {
       setResolvedIsVIP(isVIPProp)
@@ -198,35 +236,103 @@ export default function NotificationSoundSettings({
   }, [isVIPProp])
 
   useEffect(() => {
-    ;(async () => {
-      const current =
-        await getNotificationSettings()
+    if (!vipResolved) {
+      return
+    }
 
-      setSettings(current)
+    if (!isVIP) {
+      setSettingsLoadState('locked')
+      return
+    }
+
+    let active = true
+
+    setSettingsLoadState('loading')
+
+    ;(async () => {
+      try {
+        const current =
+          await getNotificationSettings()
+
+        if (!active) {
+          return
+        }
+
+        setSettings(current)
+        setSettingsLoadState('ready')
+      } catch (error) {
+        if (!active) {
+          return
+        }
+
+        if (
+          isAuthorizationError(error)
+        ) {
+          setSettingsLoadState('locked')
+          return
+        }
+
+        setSettingsLoadState(
+          'unavailable',
+        )
+      }
     })()
-  }, [])
+
+    return () => {
+      active = false
+    }
+  }, [isVIP, vipResolved])
+
+  const handleSettingsRequestError = (
+    error: unknown,
+  ) => {
+    if (isAuthorizationError(error)) {
+      setSettingsLoadState('locked')
+      return
+    }
+
+    setSettingsLoadState('unavailable')
+  }
 
   const updateSettings = async (
     patch: Partial<NotificationSettings>,
   ) => {
+    if (!settingsReady) {
+      if (settingsLocked) {
+        setShowUpgradeModal(true)
+      }
+
+      return
+    }
+
     const next = {
       ...settings,
       ...patch,
     }
 
-    setSettings(next)
+    try {
+      await saveNotificationSettings(
+        next,
+      )
 
-    await saveNotificationSettings(
-      next,
-    )
+      setSettings(next)
+    } catch (error) {
+      handleSettingsRequestError(error)
+    }
   }
 
   const updateVIPOnlySettings =
     async (
       patch: Partial<NotificationSettings>,
     ) => {
-      if (!isVIP) {
-        if (vipResolved) {
+      if (
+        !isVIP ||
+        !settingsReady
+      ) {
+        if (
+          vipResolved &&
+          settingsLocked
+        ) {
           setShowUpgradeModal(true)
         }
 
@@ -242,8 +348,14 @@ export default function NotificationSoundSettings({
       timeframe: IndicatorTimeframe,
       enabled: boolean,
     ) => {
-      if (!isVIP) {
-        if (vipResolved) {
+      if (
+        !isVIP ||
+        !settingsReady
+      ) {
+        if (
+          vipResolved &&
+          settingsLocked
+        ) {
           setShowUpgradeModal(true)
         }
 
@@ -329,6 +441,19 @@ export default function NotificationSoundSettings({
 
       {isOpen && (
         <div className="mt-4 space-y-4">
+          {settingsLoading && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-center text-xs text-white/55">
+              알림 설정을 확인하고 있습니다.
+            </div>
+          )}
+
+          {settingsUnavailable && (
+            <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-3 text-center text-xs text-red-200">
+              설정을 불러올 수 없습니다.
+              잠시 후 다시 시도해주세요.
+            </div>
+          )}
+
           <label
             className="
               flex
@@ -379,12 +504,14 @@ export default function NotificationSoundSettings({
               <div
                 className={clsx(
                   'mt-3 inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em]',
-                  settings.institutionalPatternEnabled
+                  settingsReady &&
+                    settings.institutionalPatternEnabled
                     ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
                     : 'border-white/10 bg-white/[0.04] text-white/45',
                 )}
               >
-                {settings.institutionalPatternEnabled
+                {settingsReady &&
+                settings.institutionalPatternEnabled
                   ? '🟢 실시간 알림 카드 수신중'
                   : '⚪ 알림 카드 비활성화됨'}
               </div>
@@ -393,6 +520,7 @@ export default function NotificationSoundSettings({
             <input
               type="checkbox"
               checked={
+                settingsReady &&
                 settings.institutionalPatternEnabled
               }
               onChange={e =>
@@ -401,7 +529,7 @@ export default function NotificationSoundSettings({
                     e.target.checked,
                 })
               }
-              disabled={vipFeatureLocked}
+              disabled={!settingsReady}
               className="mt-1 shrink-0"
             />
           </label>
@@ -456,6 +584,7 @@ export default function NotificationSoundSettings({
                       {group.rows.map(
                         row => {
                           const checked =
+                            settingsReady &&
                             settings
                               .indicatorEnabled[
                               group.indicator
@@ -554,7 +683,7 @@ export default function NotificationSoundSettings({
                                   )
                                 }
                                 disabled={
-                                  vipFeatureLocked
+                                  !settingsReady
                                 }
                                 className="mt-1 shrink-0"
                               />
@@ -577,6 +706,7 @@ export default function NotificationSoundSettings({
             <input
               type="checkbox"
               checked={
+                settingsReady &&
                 settings.soundEnabled
               }
               onChange={e =>
@@ -585,6 +715,7 @@ export default function NotificationSoundSettings({
                     e.target.checked,
                 })
               }
+              disabled={!settingsReady}
             />
           </label>
 
@@ -596,6 +727,7 @@ export default function NotificationSoundSettings({
             <input
               type="checkbox"
               checked={
+                settingsReady &&
                 settings.vibrationEnabled
               }
               onChange={e =>
@@ -604,6 +736,7 @@ export default function NotificationSoundSettings({
                     e.target.checked,
                 })
               }
+              disabled={!settingsReady}
             />
           </label>
 
@@ -621,6 +754,7 @@ export default function NotificationSoundSettings({
                       .value as NotificationSound,
                 })
               }
+              disabled={!settingsReady}
               className="rounded-lg border border-white/10 bg-[#0c1224] px-3 py-2 text-white"
             >
               {SOUND_OPTIONS.map(
@@ -640,7 +774,7 @@ export default function NotificationSoundSettings({
             </select>
           </label>
 
-          {vipFeatureLocked && (
+          {settingsLocked && (
             <div className="text-center text-xs text-white/50 mt-2">
               Institutional Flow /
               Indicator Alert 기능은

@@ -25,6 +25,90 @@ export type NotificationSettingsPatch = Omit<
   indicatorEnabled?: IndicatorEnabledPatch
 }
 
+type NotificationSettingsErrorBody = {
+  error?: string
+  reason?: string
+}
+
+export class NotificationSettingsRequestError extends Error {
+  readonly status: number
+  readonly error?: string
+  readonly reason?: string
+
+  constructor({
+    status,
+    error,
+    reason,
+    fallbackMessage,
+  }: {
+    status: number
+    error?: string
+    reason?: string
+    fallbackMessage: string
+  }) {
+    super(error ?? reason ?? fallbackMessage)
+
+    this.name =
+      'NotificationSettingsRequestError'
+
+    this.status = status
+    this.error = error
+    this.reason = reason
+  }
+}
+
+async function parseNotificationSettingsErrorBody(
+  response: Response,
+): Promise<NotificationSettingsErrorBody> {
+  try {
+    const body = await response.json()
+
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body)
+    ) {
+      return {}
+    }
+
+    const candidate =
+      body as Record<string, unknown>
+
+    return {
+      ...(typeof candidate.error === 'string'
+        ? {
+            error: candidate.error,
+          }
+        : {}),
+
+      ...(typeof candidate.reason === 'string'
+        ? {
+            reason: candidate.reason,
+          }
+        : {}),
+    }
+  } catch {
+    return {}
+  }
+}
+
+async function throwNotificationSettingsRequestError(
+  response: Response,
+  fallbackMessage: string,
+): Promise<never> {
+  const body =
+    await parseNotificationSettingsErrorBody(
+      response,
+    )
+
+  throw new NotificationSettingsRequestError({
+    status: response.status,
+    error: body.error,
+    reason: body.reason,
+    fallbackMessage,
+  })
+}
+
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   const res = await fetch('/api/settings/notifications', {
     method: 'GET',
@@ -35,7 +119,10 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
   })
 
   if (!res.ok) {
-    throw new Error('Failed to fetch notification settings')
+    return throwNotificationSettingsRequestError(
+      res,
+      'Failed to fetch notification settings',
+    )
   }
 
   return res.json()
@@ -70,7 +157,10 @@ export async function saveNotificationSettings(
   })
 
   if (!res.ok) {
-    throw new Error('Failed to save notification settings')
+    return throwNotificationSettingsRequestError(
+      res,
+      'Failed to save notification settings',
+    )
   }
 
   return res.json()
