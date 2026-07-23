@@ -15,6 +15,8 @@ type Handler = (data: any) => void
 
 type RealtimeTransport = 'vps' | 'vercel'
 
+type RealtimeVercelScope = 'vip' | 'realtime'
+
 type RealtimeTokenResponse = {
   ok?: boolean
   url?: unknown
@@ -90,6 +92,7 @@ class SSEConnectionManager {
   private transport: RealtimeTransport | null = null
   private connectionCycle = 0
   private vpsFallbackActivated = false
+  private vercelScope: RealtimeVercelScope = 'vip'
 
   private tokenAbortController: AbortController | null =
     null
@@ -681,9 +684,12 @@ class SSEConnectionManager {
     this.clearVpsHandshakeTimer()
 
     try {
-      const es = new EventSource(
-        '/api/realtime/stream?scope=vip',
-      )
+      const streamUrl =
+        this.vercelScope === 'vip'
+          ? '/api/realtime/stream?scope=vip'
+          : '/api/realtime/stream'
+
+      const es = new EventSource(streamUrl)
 
       if (!this.isCurrentCycle(cycle)) {
         try {
@@ -754,6 +760,25 @@ class SSEConnectionManager {
       }
 
       if (!response.ok) {
+        let tokenError: unknown
+
+        try {
+          const errorResponse =
+            (await response.json()) as RealtimeTokenResponse
+
+          tokenError = errorResponse.error
+        } catch {}
+
+        if (
+          (response.status === 401 &&
+            (tokenError === 'UNAUTHENTICATED' ||
+              tokenError === 'USER_ID_NOT_FOUND')) ||
+          (response.status === 403 &&
+            tokenError === 'VIP_REQUIRED')
+        ) {
+          this.vercelScope = 'realtime'
+        }
+
         this.fallbackToVercel(
           cycle,
           `TOKEN_HTTP_${response.status}`,
@@ -788,6 +813,15 @@ class SSEConnectionManager {
         this.fallbackToVercel(
           cycle,
           'TOKEN_URL_MISSING',
+        )
+
+        return
+      }
+
+      if (!REALTIME_VPS_ENABLED) {
+        this.fallbackToVercel(
+          cycle,
+          'VPS_DISABLED',
         )
 
         return
@@ -887,15 +921,61 @@ class SSEConnectionManager {
 
     const cycle = ++this.connectionCycle
 
-    if (
-      REALTIME_VPS_ENABLED &&
-      !this.vpsFallbackActivated
-    ) {
+    if (this.vercelScope === 'realtime') {
+      this.connectVercel(cycle)
+      return
+    }
+
+    if (!this.vpsFallbackActivated) {
       void this.connectVpsFirst(cycle)
       return
     }
 
     this.connectVercel(cycle)
+  }
+
+  refreshAuthorization() {
+    this.connectionCycle += 1
+
+    this.abortTokenRequest()
+    this.clearVpsHandshakeTimer()
+    this.clearReconnectTimer()
+    this.clearWatchdog()
+
+    this.closeCurrentEventSource()
+
+    this.connecting = false
+    this.vpsFallbackActivated = false
+    this.vercelScope = 'vip'
+    this.reconnectAttempts = 0
+
+    if (this.refCount <= 0) {
+      return
+    }
+
+    this.connect()
+  }
+
+  usePublicRealtime() {
+    this.connectionCycle += 1
+
+    this.abortTokenRequest()
+    this.clearVpsHandshakeTimer()
+    this.clearReconnectTimer()
+    this.clearWatchdog()
+
+    this.closeCurrentEventSource()
+
+    this.connecting = false
+    this.vpsFallbackActivated = true
+    this.vercelScope = 'realtime'
+    this.reconnectAttempts = 0
+
+    if (this.refCount <= 0) {
+      return
+    }
+
+    this.connect()
   }
 
   subscribe(type: string, handler: Handler) {
@@ -930,6 +1010,7 @@ class SSEConnectionManager {
         this.connecting = false
         this.transport = null
         this.vpsFallbackActivated = false
+        this.vercelScope = 'vip'
 
         this.reconnectAttempts = 0
 

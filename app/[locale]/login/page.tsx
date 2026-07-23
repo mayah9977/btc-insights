@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 /** 🔥 수정 이유:
  * Firebase 에러를 사용자 메시지로 안전하게 변환
@@ -111,6 +112,8 @@ export default function LoginPage() {
         return
       }
 
+      sseManager.refreshAuthorization()
+
       router.push('/ko/casino')
     } catch (error) {
       /** 🔥 수정 이유:
@@ -134,7 +137,7 @@ export default function LoginPage() {
 
       await signOut(auth)
 
-      await fetch('/api/logout', {
+      const logoutRes = await fetch('/api/logout', {
         method: 'POST',
 
         /** 🔥 수정 이유:
@@ -142,6 +145,13 @@ export default function LoginPage() {
          */
         credentials: 'include',
       })
+
+      if (!logoutRes.ok) {
+        alert('로그아웃 실패')
+        return
+      }
+
+      sseManager.usePublicRealtime()
 
       router.refresh()
 

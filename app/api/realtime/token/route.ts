@@ -1,4 +1,4 @@
-//app/api/realtime/token/route.ts  
+//app/api/realtime/token/route.ts
 
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
@@ -207,8 +207,6 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const secret = getRequiredEnv('REALTIME_TOKEN_SECRET')
-
     const currentUser =
       (await getCurrentUser()) as CurrentUserLike | null
 
@@ -235,6 +233,18 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    const vipLevel = await getUserVIPLevel(userId)
+
+    if (vipLevel !== 'VIP') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'VIP_REQUIRED',
+        },
+        { status: 403 },
+      )
+    }
+
     const isAllowedTestUser = isAdminOrTestUser({
       userId,
       email,
@@ -250,17 +260,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const vipLevel = await getUserVIPLevel(userId)
-
-    if (vipLevel !== 'VIP') {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'VIP_REQUIRED',
-        },
-        { status: 403 },
-      )
-    }
+    const secret = getRequiredEnv('REALTIME_TOKEN_SECRET')
 
     const now = Math.floor(Date.now() / 1000)
 

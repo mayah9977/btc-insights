@@ -7,6 +7,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { getAuth, signInWithCustomToken } from 'firebase/auth'
 import { motion } from 'framer-motion'
 import '@/lib/firebase/client'
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 export default function VIPPaymentSuccessPage() {
   const router = useRouter()
@@ -143,12 +144,14 @@ export default function VIPPaymentSuccessPage() {
           )
         }
 
+        sseManager.refreshAuthorization()
+
         sessionStorage.removeItem('vip_selected_plan')
         sessionStorage.removeItem('vip_pending_signup')
 
         setStatus('VIP 활성화가 완료되었습니다.')
 
-        router.replace(`/${locale}/casino/vip`)
+        router.replace(`/${locale}/market/vip`)
         router.refresh()
       } catch (e: unknown) {
         console.error('[VIP_SUCCESS] failed', e)

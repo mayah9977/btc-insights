@@ -13,6 +13,7 @@ import type { User } from 'firebase/auth'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import '@/lib/firebase/client'
+import { sseManager } from '@/lib/realtime/sseConnectionManager'
 
 type FirebaseLoginError = {
   code?: string
@@ -134,6 +135,8 @@ export default function VIPLoginPage() {
         if (!loginRes.ok) {
           return false
         }
+
+        sseManager.refreshAuthorization()
 
         return true
       } catch (error) {
@@ -272,6 +275,8 @@ export default function VIPLoginPage() {
         setErr('로그아웃 실패')
         return
       }
+
+      sseManager.usePublicRealtime()
 
       sessionSyncRef.current = null
 

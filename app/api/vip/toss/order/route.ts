@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
       plan,
       amount,
       orderName,
-      successUrl: `${appUrl}/${locale}/casino/vip/payment/success`,
+      successUrl: `${appUrl}/${locale}/market/vip/payment/success`,
       failUrl: `${appUrl}/${locale}/casino/vip/payment/fail`,
     })
   } catch (e: any) {
