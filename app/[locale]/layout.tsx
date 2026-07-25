@@ -9,6 +9,7 @@ import { motion, type Transition } from 'framer-motion'
 
 import LocaleClientBootstrap from './LocaleClientBootstrap'
 import HeaderNotificationBell from './components/HeaderNotificationBell'
+import { SSEProvider } from './providers/SSEProvider'
 
 const EASE = [0.22, 1, 0.36, 1] as const
 
@@ -227,16 +228,18 @@ export default function LocaleLayout({
   children: ReactNode
 }) {
   return (
-    <>
-      <LocaleClientBootstrap />
+    <SSEProvider>
+      <>
+        <LocaleClientBootstrap />
 
-      <AppHeader />
+        <AppHeader />
 
-      <main className="pt-0 pb-20 md:pt-[53px]">
-        {children}
-      </main>
+        <main className="pt-0 pb-20 md:pt-[53px]">
+          {children}
+        </main>
 
-      <BottomTab />
-    </>
+        <BottomTab />
+      </>
+    </SSEProvider>
   )
 }
