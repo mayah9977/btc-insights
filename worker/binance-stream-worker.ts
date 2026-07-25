@@ -1,7 +1,8 @@
-//worker/binance-stream-worker.ts  
+// worker/binance-stream-worker.ts
 
 import 'dotenv/config'
-import { bootstrapBinanceMarketStreamOnce } from '@/lib/exchange/binanceWS'
+
+process.env.DB_RUNTIME = 'worker'
 
 const mode =
   process.env.BINANCE_WS_MODE === 'combined'
@@ -17,11 +18,7 @@ console.log('[BINANCE_WORKER_BOOT]', {
   at: new Date().toISOString(),
 })
 
-const stop = bootstrapBinanceMarketStreamOnce({
-  symbol,
-  mode,
-  debug: process.env.BINANCE_WS_DEBUG !== 'false',
-})
+let stop: (() => void) | null = null
 
 function shutdown(signal: string) {
   console.log('[BINANCE_WORKER_SHUTDOWN]', {
@@ -30,7 +27,7 @@ function shutdown(signal: string) {
   })
 
   try {
-    stop()
+    stop?.()
   } catch (error) {
     console.error('[BINANCE_WORKER_SHUTDOWN_ERROR]', error)
   }
@@ -48,4 +45,20 @@ process.on('uncaughtException', error => {
 
 process.on('unhandledRejection', reason => {
   console.error('[BINANCE_WORKER_UNHANDLED_REJECTION]', reason)
+})
+
+async function start() {
+  const { bootstrapBinanceMarketStreamOnce } =
+    await import('@/lib/exchange/binanceWS')
+
+  stop = bootstrapBinanceMarketStreamOnce({
+    symbol,
+    mode,
+    debug: process.env.BINANCE_WS_DEBUG !== 'false',
+  })
+}
+
+void start().catch(error => {
+  console.error('[BINANCE_WORKER_UNCAUGHT_EXCEPTION]', error)
+  process.exit(1)
 })

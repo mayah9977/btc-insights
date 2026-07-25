@@ -1,10 +1,19 @@
 // lib/db.ts
+
 import { Pool } from 'pg'
 
-const connectionString = process.env.POSTGRES_URL
+const isWorker = process.env.DB_RUNTIME === 'worker'
+
+const connectionString = isWorker
+  ? process.env.WORKER_POSTGRES_URL
+  : process.env.POSTGRES_URL
 
 if (!connectionString) {
-  throw new Error('POSTGRES_URL is not defined')
+  throw new Error(
+    isWorker
+      ? 'WORKER_POSTGRES_URL is not defined'
+      : 'POSTGRES_URL is not defined',
+  )
 }
 
 const globalForPg = globalThis as unknown as {
