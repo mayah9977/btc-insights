@@ -20,6 +20,14 @@ export type NotificationViewItem = NotificationItem & {
   read: boolean
 }
 
+export type SaveNotificationDetailedResult =
+  | {
+      status: 'SAVED'
+    }
+  | {
+      status: 'DUPLICATE'
+    }
+
 const NOTIFICATION_ZSET_KEY_PREFIX = 'notification:list'
 const NOTIFICATION_DEDUPE_KEY_PREFIX = 'notification:dedupe'
 const NOTIFICATION_SHORT_DEDUPE_PREFIX = 'notification:dedupe:short'
@@ -38,6 +46,48 @@ function getNotificationShortDedupeKey(
 ) {
   return `${NOTIFICATION_SHORT_DEDUPE_PREFIX}:${userId}:${notificationId}`
 }
+
+const SAVE_NOTIFICATION_DETAILED_SCRIPT = `
+if redis.call(
+  'SISMEMBER',
+  KEYS[2],
+  ARGV[1]
+) == 1 then
+  return 0
+end
+
+local shortLock = redis.call(
+  'SET',
+  KEYS[3],
+  '1',
+  'EX',
+  30,
+  'NX'
+)
+
+if not shortLock then
+  return 2
+end
+
+redis.call(
+  'ZADD',
+  KEYS[1],
+  ARGV[2],
+  ARGV[3]
+)
+
+redis.call(
+  'ZREMRANGEBYSCORE',
+  KEYS[1],
+  '-inf',
+  ARGV[4]
+)
+
+redis.call('SADD', KEYS[2], ARGV[1])
+redis.call('EXPIRE', KEYS[2], ARGV[5])
+
+return 1
+`
 
 function getReadSetKey(viewerId: string) {
   return `notification:read:${viewerId}`
@@ -201,6 +251,63 @@ export async function saveNotification(
     getNotificationZSetKey(userId),
     '-inf',
     olderThan,
+  )
+}
+
+export async function saveNotificationDetailed(
+  userId: string,
+  notification: NotificationItem,
+): Promise<SaveNotificationDetailedResult> {
+  if (!userId) {
+    throw new Error('Invalid notification owner')
+  }
+
+  if (!isNotificationItem(notification)) {
+    throw new Error('Invalid notification payload')
+  }
+
+  const serializedNotification =
+    JSON.stringify(notification)
+
+  const olderThan =
+    Date.now() - 24 * 60 * 60 * 1000
+
+  const result = await redis.eval(
+    SAVE_NOTIFICATION_DETAILED_SCRIPT,
+    3,
+    getNotificationZSetKey(userId),
+    getNotificationDedupeKey(userId),
+    getNotificationShortDedupeKey(
+      userId,
+      notification.id,
+    ),
+    notification.id,
+    notification.createdAt,
+    serializedNotification,
+    olderThan,
+    12 * 60 * 60,
+  )
+
+  if (result === 1 || result === '1') {
+    return {
+      status: 'SAVED',
+    }
+  }
+
+  if (result === 0 || result === '0') {
+    return {
+      status: 'DUPLICATE',
+    }
+  }
+
+  if (result === 2 || result === '2') {
+    throw new Error(
+      'Notification save in progress',
+    )
+  }
+
+  throw new Error(
+    'Unexpected notification save result',
   )
 }
 

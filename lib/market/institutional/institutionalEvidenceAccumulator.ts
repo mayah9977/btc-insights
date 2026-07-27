@@ -108,6 +108,9 @@ let lastFrozenCandleTs: number | null = null
 const emittedInstitutionalPatternKeys =
   new Set<string>()
 
+const ENABLE_LEGACY_INSTITUTIONAL_PATTERN_POST =
+  false
+
 function createEmptyAccumulator(): InternalAccumulator {
   return {
     startTs: Date.now(),
@@ -481,9 +484,13 @@ function emitInstitutionalPatternSignal(
       },
     )
 
-    void publishInstitutionalPatternSignal(
-      payload,
-    )
+    if (
+      ENABLE_LEGACY_INSTITUTIONAL_PATTERN_POST
+    ) {
+      void publishInstitutionalPatternSignal(
+        payload,
+      )
+    }
   } catch (error) {
     console.error(
       '[INSTITUTIONAL_PATTERN_EMIT_ERROR]',

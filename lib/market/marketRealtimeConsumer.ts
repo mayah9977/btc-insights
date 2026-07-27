@@ -56,6 +56,20 @@ import { detectMarketRegime } from '@/lib/market/regime/marketRegimeDetector'
 
 import { detectLiquiditySweep } from '@/lib/market/liquidity/liquiditySweepDetector'
 
+import {
+  updateInstitutionalPatternLatestState,
+  sampleInstitutionalEvidenceIfDue,
+  evaluateInstitutionalPatternAtClose,
+} from '@/lib/market/institutional/server/institutionalPatternRuntime'
+
+import {
+  fanoutInstitutionalPatternReady,
+} from '@/lib/market/institutional/server/institutionalPatternFanout'
+
+import {
+  processInstitutionalPatternRetryBatch,
+} from '@/lib/market/institutional/server/institutionalPatternRetryConsumer'
+
 const RAW_CHANNEL =
   'realtime:raw'
 
@@ -90,12 +104,42 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
 
   sub.subscribe(RAW_CHANNEL)
 
+  let institutionalPatternRetryRunning =
+    false
+
+  const institutionalPatternRetryTimer =
+    setInterval(async () => {
+      if (
+        institutionalPatternRetryRunning
+      ) {
+        return
+      }
+
+      institutionalPatternRetryRunning =
+        true
+
+      try {
+        await processInstitutionalPatternRetryBatch({
+          limit: 20,
+        })
+      } catch {
+      } finally {
+        institutionalPatternRetryRunning =
+          false
+      }
+    }, 30_000)
+
+  institutionalPatternRetryTimer.unref()
+
   const activeSymbols =
     new Set<string>(
       DEFAULT_SYMBOLS,
     )
 
   const lastPriceMap =
+    new Map<string, number>()
+
+  const lastInstitutionalSweepMap =
     new Map<string, number>()
 
   type StableActionGateState =
@@ -410,6 +454,27 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
             )
           }
 
+          if (result.finished) {
+            try {
+              const evaluation =
+                evaluateInstitutionalPatternAtClose(
+                  symbol,
+                  result.finished.closeTime,
+                )
+
+              if (
+                evaluation.status ===
+                'READY'
+              ) {
+                await fanoutInstitutionalPatternReady({
+                  symbol,
+                  evaluation,
+                })
+              }
+            } catch {
+            }
+          }
+
           if (
             result.confirmedSignal
           ) {
@@ -710,6 +775,27 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               1,
           })
 
+        const absorptionValue:
+          number | null =
+          !absorption.detected ||
+          absorption.direction === 'NONE'
+            ? 0
+            : (
+                absorption.direction === 'LONG' ||
+                absorption.direction === 'SHORT'
+              ) &&
+              Number.isFinite(
+                absorption.strength,
+              )
+              ? absorption.direction === 'LONG'
+                ? Math.abs(
+                    absorption.strength,
+                  )
+                : -Math.abs(
+                    absorption.strength,
+                  )
+              : null
+
         publishTasks.push(
           redis.publish(
             DERIVED_VIP,
@@ -808,6 +894,57 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               }),
             ),
           )
+        }
+
+        const sweepValue =
+          sweep.detected
+            ? sweep.strength
+            : (
+                lastInstitutionalSweepMap.get(
+                  symbol,
+                ) ?? 0
+              )
+
+        if (sweep.detected) {
+          lastInstitutionalSweepMap.set(
+            symbol,
+            sweep.strength,
+          )
+        }
+
+        if (
+          absorptionValue !== null
+        ) {
+          try {
+            updateInstitutionalPatternLatestState(
+              symbol,
+              {
+                oiDelta:
+                  snapshot.oiDelta,
+                volumeRatio:
+                  snapshot.volumeRatio,
+                fundingRate:
+                  snapshot.fundingRate,
+                whaleIntensity:
+                  snapshot.whaleIntensity,
+                whaleNetRatio:
+                  snapshot.whaleNetRatio,
+                whaleRatio:
+                  snapshot.whaleRatio,
+                fmai:
+                  fmai.score,
+                absorption:
+                  absorptionValue,
+                sweep:
+                  sweepValue,
+              },
+            )
+
+            sampleInstitutionalEvidenceIfDue(
+              symbol,
+            )
+          } catch {
+          }
         }
 
         /* =====================================================
