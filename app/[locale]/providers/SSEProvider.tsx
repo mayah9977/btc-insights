@@ -1,3 +1,5 @@
+//app/[locale]/providers/SSEProvider.tsx  
+
 'use client'
 
 import {

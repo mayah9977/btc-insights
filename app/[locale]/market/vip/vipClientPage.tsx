@@ -1,4 +1,4 @@
-//app/[locale]/casino/vip/vipClientPage.tsx
+//app/[locale]/market/vip/vipClientPage.tsx
 
 'use client'
 

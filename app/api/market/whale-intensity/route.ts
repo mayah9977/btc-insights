@@ -1,3 +1,5 @@
+//app/api/market/whale-intensity/route.ts  
+
 import { NextRequest } from 'next/server'
 
 // ✅ SSOT: whale 히스토리는 Redis Store
