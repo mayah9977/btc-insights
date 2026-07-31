@@ -27,6 +27,10 @@ const REALTIME_SSE_STALE_MS = 55_000
 const REALTIME_MARKET_DATA_STALE_MS = 90_000
 const REALTIME_SSE_WATCHDOG_INTERVAL_MS = 15_000
 const REALTIME_VPS_HANDSHAKE_TIMEOUT_MS = 5_000
+const REALTIME_VPS_RECOVERY_INTERVAL_MS =
+  5 * 60_000
+const REALTIME_VPS_RECOVERY_JITTER_MS =
+  30_000
 
 const REALTIME_VPS_ENABLED =
   process.env.NEXT_PUBLIC_REALTIME_VPS_ENABLED === 'true'
@@ -106,6 +110,21 @@ class SSEConnectionManager {
     | ReturnType<typeof setTimeout>
     | null = null
 
+  private vpsRecoveryTimer:
+    | ReturnType<typeof setTimeout>
+    | null = null
+
+  private vpsRecoveryAbortController:
+    | AbortController
+    | null = null
+
+  private vpsRecoveryProbeCleanup:
+    | ((closeEventSource?: boolean) => void)
+    | null = null
+
+  private vpsRecoveryGeneration = 0
+  private vpsRecoveryInFlight = false
+
   private watchdogTimer:
     | ReturnType<typeof setInterval>
     | null = null
@@ -149,6 +168,422 @@ class SSEConnectionManager {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
+    }
+  }
+
+  private clearVpsRecoveryTimer() {
+    if (this.vpsRecoveryTimer) {
+      clearTimeout(this.vpsRecoveryTimer)
+      this.vpsRecoveryTimer = null
+    }
+  }
+
+  private clearVpsRecoveryProbe(
+    closeEventSource = true,
+  ) {
+    const controller =
+      this.vpsRecoveryAbortController
+
+    this.vpsRecoveryAbortController = null
+
+    if (controller) {
+      try {
+        controller.abort()
+      } catch {}
+    }
+
+    const cleanup =
+      this.vpsRecoveryProbeCleanup
+
+    this.vpsRecoveryProbeCleanup = null
+
+    if (cleanup) {
+      try {
+        cleanup(closeEventSource)
+      } catch {}
+    }
+
+    this.vpsRecoveryInFlight = false
+  }
+
+  private clearVpsRecoveryState() {
+    this.vpsRecoveryGeneration += 1
+
+    this.clearVpsRecoveryTimer()
+    this.clearVpsRecoveryProbe(true)
+  }
+
+  private canRecoverVps(
+    activeVercel?: EventSource,
+  ) {
+    return (
+      REALTIME_VPS_ENABLED &&
+      this.refCount > 0 &&
+      this.vpsFallbackActivated &&
+      this.vercelScope === 'vip' &&
+      this.transport === 'vercel' &&
+      this.es !== null &&
+      (
+        !activeVercel ||
+        this.es === activeVercel
+      )
+    )
+  }
+
+  private scheduleVpsRecovery() {
+    if (!this.canRecoverVps()) {
+      return
+    }
+
+    if (
+      this.vpsRecoveryTimer ||
+      this.vpsRecoveryInFlight
+    ) {
+      return
+    }
+
+    const delay =
+      REALTIME_VPS_RECOVERY_INTERVAL_MS +
+      Math.floor(
+        Math.random() *
+          (REALTIME_VPS_RECOVERY_JITTER_MS + 1),
+      )
+
+    this.vpsRecoveryTimer = setTimeout(() => {
+      this.vpsRecoveryTimer = null
+
+      if (!this.canRecoverVps()) {
+        return
+      }
+
+      void this.probeVpsRecovery()
+    }, delay)
+  }
+
+  private failVpsRecovery(
+    generation: number,
+    activeVercel: EventSource,
+  ) {
+    if (
+      generation !==
+        this.vpsRecoveryGeneration ||
+      !this.vpsRecoveryInFlight
+    ) {
+      return
+    }
+
+    this.vpsRecoveryGeneration += 1
+    this.clearVpsRecoveryProbe(true)
+
+    if (
+      this.canRecoverVps(activeVercel)
+    ) {
+      this.scheduleVpsRecovery()
+    }
+  }
+
+  private promoteVpsRecoveryConnection(
+    generation: number,
+    activeVercel: EventSource,
+    probeEs: EventSource,
+    probeCleanup: (
+      closeEventSource?: boolean,
+    ) => void,
+  ) {
+    if (
+      generation !==
+        this.vpsRecoveryGeneration ||
+      !this.vpsRecoveryInFlight ||
+      this.refCount <= 0 ||
+      !this.vpsFallbackActivated ||
+      this.vercelScope !== 'vip' ||
+      this.transport !== 'vercel' ||
+      this.es !== activeVercel ||
+      this.vpsRecoveryProbeCleanup !==
+        probeCleanup
+    ) {
+      this.failVpsRecovery(
+        generation,
+        activeVercel,
+      )
+
+      return
+    }
+
+    this.vpsRecoveryGeneration += 1
+    this.clearVpsRecoveryTimer()
+
+    this.vpsRecoveryProbeCleanup = null
+    this.vpsRecoveryAbortController = null
+    this.vpsRecoveryInFlight = false
+
+    /*
+     * Probe EventSource의 소유권을 활성 연결로
+     * 이전합니다. listener와 probe handshake
+     * timer만 제거하고 EventSource는 닫지 않습니다.
+     */
+    probeCleanup(false)
+
+    const nextCycle = ++this.connectionCycle
+
+    /*
+     * 기존 Vercel watchdog을 성공 시점에만
+     * 정리합니다. 이 시점 전까지 Vercel은 계속
+     * 정상 데이터를 전달합니다.
+     */
+    this.clearWatchdog()
+    this.clearVpsHandshakeTimer()
+
+    this.es = probeEs
+    this.transport = 'vps'
+    this.connecting = false
+    this.vpsFallbackActivated = false
+    this.reconnectAttempts = 0
+
+    /*
+     * Probe 단계에서는 정상 message handler를
+     * 연결하지 않았으므로 승격 후 정확히 한 번만
+     * 정상 VPS handler를 연결합니다.
+     */
+    this.bindEventSourceHandlers(
+      probeEs,
+      'vps',
+      nextCycle,
+    )
+
+    /*
+     * Probe의 open/connected 이벤트는 이미
+     * 발생했으므로 onopen을 기다리지 않고
+     * 활성 연결 시각과 watchdog을 시작합니다.
+     */
+    this.markConnectionAlive()
+    this.startWatchdog(
+      nextCycle,
+      probeEs,
+      'vps',
+    )
+
+    console.log('[realtime-sse] recovery-success', {
+      ts: this.lastEventAt,
+      from: 'vercel',
+      to: 'vps',
+    })
+
+    /*
+     * connectionCycle과 this.es 소유권을 먼저
+     * 이전했으므로, 이 close에서 발생하는 이전
+     * Vercel onerror는 현재 연결로 인정되지
+     * 않습니다.
+     */
+    try {
+      activeVercel.close()
+    } catch {}
+  }
+
+  private async probeVpsRecovery() {
+    if (
+      this.vpsRecoveryInFlight ||
+      !this.canRecoverVps()
+    ) {
+      return
+    }
+
+    const activeVercel = this.es
+
+    if (!activeVercel) {
+      return
+    }
+
+    const generation =
+      ++this.vpsRecoveryGeneration
+
+    const controller =
+      new AbortController()
+
+    this.vpsRecoveryInFlight = true
+    this.vpsRecoveryAbortController =
+      controller
+
+    const isCurrentProbe = () =>
+      generation ===
+        this.vpsRecoveryGeneration &&
+      this.vpsRecoveryInFlight &&
+      this.vpsRecoveryAbortController ===
+        controller &&
+      this.canRecoverVps(activeVercel)
+
+    try {
+      const response = await fetch(
+        '/api/realtime/token?scope=vip',
+        {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal,
+        },
+      )
+
+      if (!isCurrentProbe()) {
+        return
+      }
+
+      if (!response.ok) {
+        this.failVpsRecovery(
+          generation,
+          activeVercel,
+        )
+
+        return
+      }
+
+      let tokenResponse: RealtimeTokenResponse
+
+      try {
+        tokenResponse =
+          (await response.json()) as RealtimeTokenResponse
+      } catch {
+        this.failVpsRecovery(
+          generation,
+          activeVercel,
+        )
+
+        return
+      }
+
+      if (!isCurrentProbe()) {
+        return
+      }
+
+      if (
+        tokenResponse.ok !== true ||
+        typeof tokenResponse.url !== 'string' ||
+        !tokenResponse.url
+      ) {
+        this.failVpsRecovery(
+          generation,
+          activeVercel,
+        )
+
+        return
+      }
+
+      /*
+       * token fetch는 완료됐으므로 이후 cleanup이
+       * 정상 VPS-first token 요청에 영향을 주지
+       * 않도록 recovery controller 소유권만
+       * 해제합니다.
+       */
+      this.vpsRecoveryAbortController = null
+
+      const probeEs = new EventSource(
+        tokenResponse.url,
+      )
+
+      if (
+        generation !==
+          this.vpsRecoveryGeneration ||
+        !this.vpsRecoveryInFlight ||
+        !this.canRecoverVps(activeVercel)
+      ) {
+        try {
+          probeEs.close()
+        } catch {}
+
+        return
+      }
+
+      let probeDetached = false
+
+      let handshakeTimer:
+        | ReturnType<typeof setTimeout>
+        | null = null
+
+      const onConnected = () => {
+        if (
+          generation !==
+            this.vpsRecoveryGeneration ||
+          !this.vpsRecoveryInFlight ||
+          !this.canRecoverVps(activeVercel)
+        ) {
+          this.failVpsRecovery(
+            generation,
+            activeVercel,
+          )
+
+          return
+        }
+
+        this.promoteVpsRecoveryConnection(
+          generation,
+          activeVercel,
+          probeEs,
+          probeCleanup,
+        )
+      }
+
+      const onError = () => {
+        this.failVpsRecovery(
+          generation,
+          activeVercel,
+        )
+      }
+
+      const probeCleanup = (
+        closeEventSource = true,
+      ) => {
+        if (probeDetached) {
+          return
+        }
+
+        probeDetached = true
+
+        if (handshakeTimer) {
+          clearTimeout(handshakeTimer)
+          handshakeTimer = null
+        }
+
+        probeEs.removeEventListener(
+          'connected',
+          onConnected,
+        )
+
+        probeEs.onerror = null
+
+        if (closeEventSource) {
+          try {
+            probeEs.close()
+          } catch {}
+        }
+      }
+
+      this.vpsRecoveryProbeCleanup =
+        probeCleanup
+
+      probeEs.addEventListener(
+        'connected',
+        onConnected,
+      )
+
+      probeEs.onerror = onError
+
+      handshakeTimer = setTimeout(() => {
+        this.failVpsRecovery(
+          generation,
+          activeVercel,
+        )
+      }, REALTIME_VPS_HANDSHAKE_TIMEOUT_MS)
+    } catch {
+      if (
+        generation !==
+          this.vpsRecoveryGeneration
+      ) {
+        return
+      }
+
+      this.failVpsRecovery(
+        generation,
+        activeVercel,
+      )
     }
   }
 
@@ -293,6 +728,8 @@ class SSEConnectionManager {
       ts: Date.now(),
     })
 
+    this.clearVpsRecoveryState()
+
     this.vpsFallbackActivated = true
 
     this.clearVpsHandshakeTimer()
@@ -375,6 +812,8 @@ class SSEConnectionManager {
 
         return
       }
+
+      this.clearVpsRecoveryState()
 
       this.clearWatchdog()
       this.closeCurrentEventSource()
@@ -572,6 +1011,13 @@ class SSEConnectionManager {
 
       this.reconnectAttempts = 0
 
+      if (
+        transport === 'vercel' &&
+        this.canRecoverVps(es)
+      ) {
+        this.scheduleVpsRecovery()
+      }
+
       this.startWatchdog(
         cycle,
         es,
@@ -589,6 +1035,8 @@ class SSEConnectionManager {
         ) {
           return
         }
+
+        this.clearVpsRecoveryState()
 
         this.clearVpsHandshakeTimer()
         this.markConnectionAlive()
@@ -652,6 +1100,8 @@ class SSEConnectionManager {
 
         return
       }
+
+      this.clearVpsRecoveryState()
 
       this.clearWatchdog()
       this.clearVpsHandshakeTimer()
@@ -722,6 +1172,8 @@ class SSEConnectionManager {
         reason: 'EVENTSOURCE_CREATE_FAILED',
         error,
       })
+
+      this.clearVpsRecoveryState()
 
       this.es = null
       this.transport = null
@@ -941,6 +1393,7 @@ class SSEConnectionManager {
     this.clearVpsHandshakeTimer()
     this.clearReconnectTimer()
     this.clearWatchdog()
+    this.clearVpsRecoveryState()
 
     this.closeCurrentEventSource()
 
@@ -963,6 +1416,7 @@ class SSEConnectionManager {
     this.clearVpsHandshakeTimer()
     this.clearReconnectTimer()
     this.clearWatchdog()
+    this.clearVpsRecoveryState()
 
     this.closeCurrentEventSource()
 
@@ -1004,6 +1458,7 @@ class SSEConnectionManager {
         this.clearVpsHandshakeTimer()
         this.clearReconnectTimer()
         this.clearWatchdog()
+        this.clearVpsRecoveryState()
 
         this.closeCurrentEventSource()
 
