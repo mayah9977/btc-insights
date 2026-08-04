@@ -40,6 +40,7 @@ type VIPMarketState = {
   whaleRatio: number
   whaleNet: number
   whaleNetRatio: number
+  whaleSampleValid: boolean | null
 
   fmai: number
   absorption: number
@@ -105,6 +106,7 @@ export const useVIPMarketStore =
     whaleRatio: 0,
     whaleNet: 0,
     whaleNetRatio: 0,
+    whaleSampleValid: null,
 
     fmai: 0,
     absorption: 0,

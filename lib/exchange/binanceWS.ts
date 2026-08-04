@@ -767,6 +767,7 @@ export function startBinanceMarketStream(
           whaleNetPressure: rollingWhaleNetPressure,
           whaleNetRatio,
           totalVolume: rollingTotalVolume,
+          sampleValid: validWhaleBase,
           ts: now,
         }),
       )

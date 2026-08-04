@@ -1,3 +1,5 @@
+//lib/chart/chartController.ts
+
 /* =========================================================
    ChartController
    Event routing layer between realtime bridge and chart engine
@@ -115,4 +117,3 @@ class ChartController implements IChartController {
 ========================================================= */
 export const chartController: IChartController =
   ChartController.getInstance()
-  

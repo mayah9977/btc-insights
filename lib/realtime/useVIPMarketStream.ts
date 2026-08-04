@@ -355,11 +355,19 @@ export function useVIPMarketStream(
             ? msg.whaleNetRatio
             : undefined
 
+        const whaleSampleValid =
+          typeof msg.sampleValid === 'boolean'
+            ? msg.sampleValid
+            : undefined
+
         scheduleVIPMarketUpdate({
           ...realtimeAlivePatch(),
           ...(whaleNet !== undefined && { whaleNet }),
           ...(whaleNetRatio !== undefined && {
             whaleNetRatio,
+          }),
+          ...(whaleSampleValid !== undefined && {
+            whaleSampleValid,
           }),
         })
       },

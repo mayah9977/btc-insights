@@ -1,3 +1,5 @@
+//components/vip/mobile/VIPWhaleMiniCharts.tsx
+
 'use client'
 
 import React, {
@@ -6,6 +8,11 @@ import React, {
   useState,
   useMemo,
 } from 'react'
+
+import {
+  motion,
+  useReducedMotion,
+} from 'framer-motion'
 
 import {
   useVIPMarketStore,
@@ -28,6 +35,17 @@ export default function VIPWhaleMiniCharts() {
     useVIPMarketStore(
       (s) => s.ts,
     )
+
+  const whaleSampleValid =
+    useVIPMarketStore(
+      (s) => s.whaleSampleValid,
+    )
+
+  const isWhaleSampleInvalid =
+    whaleSampleValid === false
+
+  const shouldReduceMotion =
+    useReducedMotion()
 
   const snapshot =
     useMemo(() => {
@@ -206,32 +224,103 @@ export default function VIPWhaleMiniCharts() {
             "
           >
 
-            <span>
-              Directional Pressure(시장 방향 압력)
-              {' '}
-              ({directionLabel})
-            </span>
+            {isWhaleSampleInvalid ? (
+              <div className="min-w-0 pr-2">
+                <div>
+                  Directional Pressure(시장 방향 압력)
+                </div>
+
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-cyan-300">
+                  <motion.span
+                    className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-cyan-400"
+                    animate={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            opacity: [0.45, 1, 0.45],
+                          }
+                    }
+                    transition={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            duration: 1.8,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }
+                    }
+                  />
+                  <span>고래 체결 탐색 중</span>
+                  <span className="text-cyan-400/60">
+                    · 30초 롤링
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <span>
+                Directional Pressure(시장 방향 압력)
+                {' '}
+                ({directionLabel})
+              </span>
+            )}
 
             <span>
-              {flowPercent.toFixed(1)}%
+              {isWhaleSampleInvalid
+                ? '—'
+                : `${flowPercent.toFixed(1)}%`}
             </span>
 
           </div>
 
           <div className="h-2 bg-zinc-800 rounded overflow-hidden">
 
-            <div
-              className={`
-                h-full
-                ${flowColor}
-                transition-all
-                duration-300
-              `}
-              style={{
-                width:
-                  `${flowPercent}%`,
-              }}
-            />
+            {isWhaleSampleInvalid ? (
+              <div className="flex h-full items-center justify-center gap-1">
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                  <motion.span
+                    key={index}
+                    className="h-1 w-3 rounded-sm bg-cyan-400"
+                    style={{
+                      opacity: shouldReduceMotion
+                        ? index === 2
+                          ? 0.8
+                          : 0.2
+                        : 0.2,
+                    }}
+                    animate={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            opacity: [0.2, 0.85, 0.2],
+                          }
+                    }
+                    transition={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            duration: 1.6,
+                            repeat: Infinity,
+                            delay: index * 0.22,
+                            ease: 'easeInOut',
+                          }
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                className={`
+                  h-full
+                  ${flowColor}
+                  transition-all
+                  duration-300
+                `}
+                style={{
+                  width:
+                    `${flowPercent}%`,
+                }}
+              />
+            )}
 
           </div>
 

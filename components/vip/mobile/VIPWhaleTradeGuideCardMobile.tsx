@@ -1,3 +1,5 @@
+//components/vip/mobile/VIPWhaleTradeGuideCardMobile.tsx
+
 'use client'
 
 import {
@@ -5,6 +7,15 @@ import {
   useRef,
   useState,
 } from 'react'
+
+import {
+  motion,
+  useReducedMotion,
+} from 'framer-motion'
+
+import {
+  useVIPMarketStore,
+} from '@/lib/market/store/vipMarketStore'
 
 import { vipSound }
   from '@/lib/sound/vipSoundSystem'
@@ -21,6 +32,17 @@ export default function VIPWhaleTradeGuideCardMobile({
   ratio,
   net,
 }: Props) {
+
+  const whaleSampleValid =
+    useVIPMarketStore(
+      state => state.whaleSampleValid,
+    )
+
+  const isWhaleSampleInvalid =
+    whaleSampleValid === false
+
+  const shouldReduceMotion =
+    useReducedMotion()
 
   const prev =
     useRef<number>(0)
@@ -90,9 +112,74 @@ export default function VIPWhaleTradeGuideCardMobile({
           </div>
 
           <div
-            className={`font-semibold ${color}`}
+            className={
+              isWhaleSampleInvalid
+                ? 'ml-3 flex-shrink-0 text-right'
+                : `font-semibold ${color}`
+            }
           >
-            {direction}
+            {isWhaleSampleInvalid ? (
+              <>
+                <div className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap text-[11px] font-semibold text-cyan-300">
+                  <motion.span
+                    className="h-1.5 w-1.5 rounded-full bg-cyan-400"
+                    animate={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            opacity: [0.45, 1, 0.45],
+                          }
+                    }
+                    transition={
+                      shouldReduceMotion
+                        ? undefined
+                        : {
+                            duration: 1.8,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }
+                    }
+                  />
+                  <span>고래 체결 탐색 중</span>
+                </div>
+
+                <div className="mt-1 flex items-center justify-end gap-1.5 whitespace-nowrap text-[10px] font-medium text-cyan-400/60">
+                  <span className="inline-flex items-center gap-0.5">
+                    {[0, 1, 2, 3].map((index) => (
+                      <motion.span
+                        key={index}
+                        className="h-1 w-2 rounded-sm bg-cyan-400"
+                        style={{
+                          opacity: shouldReduceMotion
+                            ? index === 1
+                              ? 0.8
+                              : 0.2
+                            : 0.2,
+                        }}
+                        animate={
+                          shouldReduceMotion
+                            ? undefined
+                            : {
+                                opacity: [0.2, 0.85, 0.2],
+                              }
+                        }
+                        transition={
+                          shouldReduceMotion
+                            ? undefined
+                            : {
+                                duration: 1.6,
+                                repeat: Infinity,
+                                delay: index * 0.28,
+                                ease: 'easeInOut',
+                              }
+                        }
+                      />
+                    ))}
+                  </span>
+                  <span>30초 롤링</span>
+                </div>
+              </>
+            ) : direction}
           </div>
 
         </div>
@@ -100,13 +187,17 @@ export default function VIPWhaleTradeGuideCardMobile({
         <div className="text-xs text-gray-400">
           Large Trade Participation (고래 참여 비율)
           {' '}
-          {(ratio * 100).toFixed(1)}%
+          {isWhaleSampleInvalid
+            ? '—'
+            : `${(ratio * 100).toFixed(1)}%`}
         </div>
 
         <div className="text-xs text-gray-500">
           Directional Pressure (방향 압력)
           {' '}
-          {safeNet.toFixed(1)}%
+          {isWhaleSampleInvalid
+            ? '—'
+            : `${safeNet.toFixed(1)}%`}
         </div>
 
       </div>

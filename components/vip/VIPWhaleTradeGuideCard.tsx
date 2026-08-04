@@ -2,7 +2,11 @@
 
 'use client'
 
-import { motion } from 'framer-motion'
+import {
+  motion,
+  useReducedMotion,
+} from 'framer-motion'
+import { useVIPMarketStore } from '@/lib/market/store/vipMarketStore'
 
 type Props = {
   ratio: number
@@ -13,6 +17,17 @@ export default function VIPWhaleTradeGuideCard({
   ratio,
   net,
 }: Props) {
+
+  const whaleSampleValid =
+    useVIPMarketStore(
+      state => state.whaleSampleValid,
+    )
+
+  const isWhaleSampleInvalid =
+    whaleSampleValid === false
+
+  const shouldReduceMotion =
+    useReducedMotion()
 
   const ratioPercent = (ratio * 100).toFixed(0)
   const netPercent = (net * 100).toFixed(0)
@@ -27,6 +42,11 @@ export default function VIPWhaleTradeGuideCard({
       : netDirection === 'SHORT'
       ? '#3b82f6'
       : '#6b7280'
+
+  const displayColor =
+    isWhaleSampleInvalid
+      ? '#22d3ee'
+      : levelColor
 
   const strongFlow = ratio >= 0.7
   const mediumFlow = ratio >= 0.55
@@ -89,7 +109,7 @@ export default function VIPWhaleTradeGuideCard({
         y: 0,
       }}
       whileHover={{
-        borderColor: levelColor,
+        borderColor: displayColor,
       }}
       transition={{
         duration: 0.35,
@@ -97,13 +117,17 @@ export default function VIPWhaleTradeGuideCard({
       }}
       className="mt-4 rounded-xl border p-6 text-sm text-neutral-300 relative overflow-hidden"
       style={{
-        borderColor: strongFlow
+        borderColor: isWhaleSampleInvalid
+          ? `${displayColor}55`
+          : strongFlow
           ? `${levelColor}99`
           : `${levelColor}55`,
         background:
           'linear-gradient(145deg, rgba(12,12,12,0.96), rgba(3,3,3,0.98))',
         boxShadow:
-          strongFlow
+          isWhaleSampleInvalid
+            ? `0 14px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.035), 0 0 0 1px ${displayColor}10`
+            : strongFlow
             ? `0 18px 44px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.045), 0 0 0 1px ${levelColor}18`
             : `0 14px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.035)`,
       }}
@@ -114,7 +138,7 @@ export default function VIPWhaleTradeGuideCard({
         className="pointer-events-none absolute inset-0 opacity-70"
         style={{
           background:
-            `radial-gradient(circle at top right, ${levelColor}18, transparent 34%)`,
+            `radial-gradient(circle at top right, ${displayColor}18, transparent 34%)`,
         }}
       />
 
@@ -122,7 +146,7 @@ export default function VIPWhaleTradeGuideCard({
         className="pointer-events-none absolute left-6 right-6 top-0 h-px"
         style={{
           background:
-            `linear-gradient(90deg, transparent, ${levelColor}66, transparent)`,
+            `linear-gradient(90deg, transparent, ${displayColor}66, transparent)`,
         }}
       />
 
@@ -140,10 +164,48 @@ export default function VIPWhaleTradeGuideCard({
         </div>
 
         <div
-          className="px-3 py-1 text-xs rounded font-semibold text-black"
-          style={{ backgroundColor: levelColor }}
+          className={
+            isWhaleSampleInvalid
+              ? 'px-3 py-1 text-xs rounded font-semibold inline-flex items-center gap-2 whitespace-nowrap'
+              : 'px-3 py-1 text-xs rounded font-semibold text-black'
+          }
+          style={
+            isWhaleSampleInvalid
+              ? {
+                  color: displayColor,
+                  backgroundColor: `${displayColor}14`,
+                  border: `1px solid ${displayColor}55`,
+                }
+              : { backgroundColor: levelColor }
+          }
         >
-          {phase}
+          {isWhaleSampleInvalid ? (
+            <>
+              <motion.span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  backgroundColor: displayColor,
+                }}
+                animate={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        opacity: [0.45, 1, 0.45],
+                      }
+                }
+                transition={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        duration: 1.8,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }
+                }
+              />
+              <span>고래 체결 탐색 중</span>
+            </>
+          ) : phase}
         </div>
 
       </div>
@@ -153,8 +215,15 @@ export default function VIPWhaleTradeGuideCard({
 
         Whale Trade Ratio (시장 거래 중 대형 체결이 차지하는 실제 비중)
 
-        <span className="text-yellow-400 font-semibold ml-1">
-          {ratioPercent}%
+        <span
+          className="text-yellow-400 font-semibold ml-1"
+          style={
+            isWhaleSampleInvalid
+              ? { color: displayColor }
+              : undefined
+          }
+        >
+          {isWhaleSampleInvalid ? '—' : `${ratioPercent}%`}
         </span>
 
         <span className="mx-3 text-neutral-600">|</span>
@@ -162,10 +231,10 @@ export default function VIPWhaleTradeGuideCard({
         Whale Net Pressure (대형 체결 흐름의 매수·매도 방향 압력)
 
         <span
-          style={{ color: levelColor }}
+          style={{ color: displayColor }}
           className="font-semibold ml-1"
         >
-          {netPercent}%
+          {isWhaleSampleInvalid ? '—' : `${netPercent}%`}
         </span>
 
       </div>
@@ -173,9 +242,11 @@ export default function VIPWhaleTradeGuideCard({
       {/* 해석 */}
       <div
         className="relative z-10 mb-4 text-sm font-medium leading-relaxed"
-        style={{ color: levelColor }}
+        style={{ color: displayColor }}
       >
-        {interpretation}
+        {isWhaleSampleInvalid
+          ? '30초 롤링 스캔 · 유효 고래 체결을 탐색하고 있습니다.'
+          : interpretation}
       </div>
 
       {/* 트레이딩 가이드 */}
@@ -192,7 +263,48 @@ export default function VIPWhaleTradeGuideCard({
 
       {/* 상태 */}
       <div className="relative z-10 mt-5 text-center text-xs font-semibold text-white">
-        Observing trade participation and directional pressure : {status}
+        {isWhaleSampleInvalid ? (
+          <span className="inline-flex items-center justify-center gap-3 text-cyan-300">
+            <span className="inline-flex items-center gap-1">
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <motion.span
+                  key={index}
+                  className="h-1.5 w-3 rounded-sm"
+                  style={{
+                    backgroundColor: displayColor,
+                    opacity: shouldReduceMotion
+                      ? index === 2
+                        ? 0.85
+                        : 0.25
+                      : 0.25,
+                  }}
+                  animate={
+                    shouldReduceMotion
+                      ? undefined
+                      : {
+                          opacity: [0.25, 0.9, 0.25],
+                        }
+                  }
+                  transition={
+                    shouldReduceMotion
+                      ? undefined
+                      : {
+                          duration: 1.6,
+                          repeat: Infinity,
+                          delay: index * 0.22,
+                          ease: 'easeInOut',
+                        }
+                  }
+                />
+              ))}
+            </span>
+            <span className="text-cyan-300/80">
+              30초 롤링 스캔
+            </span>
+          </span>
+        ) : (
+          `Observing trade participation and directional pressure : ${status}`
+        )}
       </div>
 
     </motion.div>

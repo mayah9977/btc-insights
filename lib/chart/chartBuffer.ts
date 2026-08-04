@@ -1,3 +1,5 @@
+//lib/chart/chartBuffer.ts 
+
 /* =========================================================
    ChartBuffer
    High-performance circular buffer for realtime charts
