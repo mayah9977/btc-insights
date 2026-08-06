@@ -455,6 +455,11 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
           }
 
           if (result.finished) {
+            let institutionalStage:
+              | 'EVALUATION'
+              | 'FANOUT' =
+              'EVALUATION'
+
             try {
               const evaluation =
                 evaluateInstitutionalPatternAtClose(
@@ -462,16 +467,80 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
                   result.finished.closeTime,
                 )
 
+              console.info(
+                '[InstitutionalPattern] evaluation',
+                {
+                  confirmedCandleTs:
+                    evaluation.confirmedCandleTs,
+                  status:
+                    evaluation.status,
+                  confirmationAction:
+                    evaluation.confirmation1h
+                      ?.action ?? null,
+                  confirmationReason:
+                    evaluation.confirmation1h
+                      ?.reason ?? null,
+                },
+              )
+
               if (
                 evaluation.status ===
                 'READY'
               ) {
-                await fanoutInstitutionalPatternReady({
-                  symbol,
-                  evaluation,
-                })
+                institutionalStage =
+                  'FANOUT'
+
+                console.info(
+                  '[InstitutionalPattern] fanout-start',
+                  {
+                    confirmedCandleTs:
+                      evaluation.confirmedCandleTs,
+                  },
+                )
+
+                const fanoutResult =
+                  await fanoutInstitutionalPatternReady({
+                    symbol,
+                    evaluation,
+                  })
+
+                if (
+                  fanoutResult.status ===
+                  'COMPLETED'
+                ) {
+                  console.info(
+                    '[InstitutionalPattern] fanout-result',
+                    {
+                      status:
+                        fanoutResult.status,
+                      userCount:
+                        fanoutResult.userCount,
+                      deliveryCounts:
+                        fanoutResult.deliveryCounts,
+                    },
+                  )
+                } else {
+                  console.info(
+                    '[InstitutionalPattern] fanout-result',
+                    {
+                      status:
+                        fanoutResult.status,
+                    },
+                  )
+                }
               }
-            } catch {
+            } catch (error: unknown) {
+              console.error(
+                '[InstitutionalPattern] error',
+                {
+                  stage:
+                    institutionalStage,
+                  errorName:
+                    error instanceof Error
+                      ? error.name || 'Error'
+                      : typeof error,
+                },
+              )
             }
           }
 
