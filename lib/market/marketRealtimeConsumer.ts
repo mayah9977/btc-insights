@@ -69,6 +69,10 @@ import {
 } from '@/lib/market/institutional/server/institutionalPatternFanout'
 
 import {
+  applyInstitutionalNotificationNonReady,
+} from '@/lib/market/institutional/server/institutionalNotificationPhaseRepository'
+
+import {
   processInstitutionalPatternRetryBatch,
 } from '@/lib/market/institutional/server/institutionalPatternRetryConsumer'
 
@@ -599,6 +603,72 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
                         : typeof error,
                   },
                 )
+              }
+
+              if (
+                evaluation.status !==
+                'READY'
+              ) {
+                let phaseResetResult:
+                  Awaited<
+                    ReturnType<
+                      typeof applyInstitutionalNotificationNonReady
+                    >
+                  > | null =
+                  null
+
+                let phaseResetError:
+                  unknown =
+                  null
+
+                for (
+                  let attempt = 0;
+                  attempt < 3;
+                  attempt += 1
+                ) {
+                  try {
+                    phaseResetResult =
+                      await applyInstitutionalNotificationNonReady({
+                        symbol,
+                        confirmedCandleTs:
+                          evaluation.confirmedCandleTs,
+                      })
+
+                    phaseResetError =
+                      null
+
+                    break
+                  } catch (error: unknown) {
+                    phaseResetError =
+                      error
+                  }
+                }
+
+                if (phaseResetResult !== null) {
+                  console.info(
+                    '[InstitutionalPattern] phase-reset-result',
+                    {
+                      confirmedCandleTs:
+                        evaluation.confirmedCandleTs,
+                      status:
+                        phaseResetResult.status,
+                    },
+                  )
+                } else {
+                  console.error(
+                    '[InstitutionalPattern] phase-reset-error',
+                    {
+                      confirmedCandleTs:
+                        evaluation.confirmedCandleTs,
+                      evaluationStatus:
+                        evaluation.status,
+                      errorName:
+                        phaseResetError instanceof Error
+                          ? phaseResetError.name || 'Error'
+                          : typeof phaseResetError,
+                    },
+                  )
+                }
               }
 
               if (

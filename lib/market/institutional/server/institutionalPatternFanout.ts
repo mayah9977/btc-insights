@@ -16,6 +16,13 @@ import { saveNotificationDetailed } from '@/lib/notification/repository'
 import { sendPushDetailedToUser } from '@/lib/push/pushSender'
 import { redis } from '@/lib/redis'
 
+import {
+  abortInstitutionalNotificationReady,
+  commitInstitutionalNotificationReady,
+  renewInstitutionalNotificationReservation,
+  reserveInstitutionalNotificationReady,
+} from '@/lib/market/institutional/server/institutionalNotificationPhaseRepository'
+
 type InstitutionalPatternReadyEvaluation =
   Extract<
     InstitutionalPatternEvaluationResult,
@@ -140,6 +147,14 @@ export type InstitutionalPatternFanoutResult =
     }
   | {
       status: 'LEASE_BUSY'
+      eventId: string
+    }
+  | {
+      status: 'SUPPRESSED_PHASE_REPEAT'
+      eventId: string
+    }
+  | {
+      status: 'RESERVATION_BUSY'
       eventId: string
     }
 
@@ -702,13 +717,15 @@ async function recordSkippedChannels(params: {
     InstitutionalPatternDeliveryStatus,
     number
   >
-}) {
+}): Promise<number> {
   const {
     eventId,
     userId,
     channels,
     deliveryCounts,
   } = params
+
+  let existingDurableAttemptCount = 0
 
   for (const channel of channels) {
     const deliveryId =
@@ -722,6 +739,14 @@ async function recordSkippedChannels(params: {
       await getExistingDeliveryStatus(
         deliveryId,
       )
+
+    if (
+      existingStatus === 'SUCCEEDED' ||
+      existingStatus ===
+        'FAILED_RETRYABLE'
+    ) {
+      existingDurableAttemptCount += 1
+    }
 
     if (
       isDeliveryAlreadyHandled(
@@ -744,6 +769,8 @@ async function recordSkippedChannels(params: {
 
     deliveryCounts.SKIPPED_FINAL += 1
   }
+
+  return existingDurableAttemptCount
 }
 
 export async function fanoutInstitutionalPatternReady({
@@ -824,28 +851,478 @@ export async function fanoutInstitutionalPatternReady({
 
   let leaseHealthy = true
 
+  let phaseReservationActive = false
+  let phaseReservationHealthy = true
+  let phaseCommitted = false
+  let phaseToken: string | null = null
+  let lastPhaseReservationConfirmedAt = 0
+  let durableAttemptCount = 0
+  let phaseAbortAttempted = false
+
+  let heartbeatInFlight:
+    Promise<void> | null =
+    null
+
+  const renewPhaseReservationNow =
+    async (): Promise<void> => {
+      if (
+        phaseCommitted ||
+        !phaseReservationActive
+      ) {
+        return
+      }
+
+      const reservationToken =
+        phaseToken
+
+      if (reservationToken === null) {
+        phaseReservationHealthy = false
+        return
+      }
+
+      try {
+        const phaseRenewResult =
+          await renewInstitutionalNotificationReservation({
+            symbol,
+            eventId,
+            token: reservationToken,
+            confirmedCandleTs,
+          })
+
+        if (
+          phaseRenewResult.status ===
+          'RENEWED'
+        ) {
+          lastPhaseReservationConfirmedAt =
+            Date.now()
+          return
+        }
+
+        if (
+          phaseRenewResult.status ===
+          'ALREADY_COMMITTED'
+        ) {
+          phaseCommitted = true
+          phaseReservationActive = false
+          phaseReservationHealthy = true
+          return
+        }
+
+        if (
+          phaseRenewResult.status ===
+            'LOST_RESERVATION' ||
+          phaseRenewResult.status ===
+            'STALE'
+        ) {
+          if (!phaseCommitted) {
+            phaseReservationActive = false
+            phaseReservationHealthy = false
+          }
+          return
+        }
+
+        if (!phaseCommitted) {
+          phaseReservationHealthy = false
+        }
+      } catch (error: unknown) {
+        if (!phaseCommitted) {
+          phaseReservationHealthy = false
+        }
+      }
+    }
+
+  const runHeartbeat =
+    async (): Promise<void> => {
+      try {
+        const renewed =
+          await renewLease(
+            leaseKey,
+            token,
+          )
+
+        if (!renewed) {
+          leaseHealthy = false
+        }
+      } catch (error: unknown) {
+        leaseHealthy = false
+      }
+
+      if (
+        phaseReservationActive &&
+        !phaseCommitted
+      ) {
+        await renewPhaseReservationNow()
+      }
+    }
+
   const heartbeatTimer = setInterval(
     () => {
-      void renewLease(
-        leaseKey,
-        token,
-      )
-        .then(renewed => {
-          if (!renewed) {
-            leaseHealthy = false
-          }
-        })
-        .catch(() => {
-          leaseHealthy = false
-        })
+      if (heartbeatInFlight !== null) {
+        return
+      }
+
+      const heartbeatTask =
+        runHeartbeat()
+
+      heartbeatInFlight =
+        heartbeatTask
+
+      void heartbeatTask.finally(() => {
+        if (
+          heartbeatInFlight ===
+          heartbeatTask
+        ) {
+          heartbeatInFlight = null
+        }
+      })
     },
     LEASE_HEARTBEAT_INTERVAL_MS,
   )
+
+  const waitForHeartbeatCompletion =
+    async (): Promise<void> => {
+      const pendingHeartbeat =
+        heartbeatInFlight
+
+      if (pendingHeartbeat !== null) {
+        await pendingHeartbeat
+      }
+    }
+
+  const assertPhaseCanStartSideEffect =
+    async (): Promise<void> => {
+      if (phaseCommitted) {
+        return
+      }
+
+      await waitForHeartbeatCompletion()
+
+      if (phaseCommitted) {
+        return
+      }
+
+      if (
+        !phaseReservationActive ||
+        !phaseReservationHealthy
+      ) {
+        throw new Error(
+          'Institutional notification phase reservation lost before commit',
+        )
+      }
+
+      if (
+        Date.now() -
+          lastPhaseReservationConfirmedAt >=
+        LEASE_HEARTBEAT_INTERVAL_MS
+      ) {
+        await renewPhaseReservationNow()
+      }
+
+      if (phaseCommitted) {
+        return
+      }
+
+      if (
+        !phaseReservationActive ||
+        !phaseReservationHealthy
+      ) {
+        throw new Error(
+          'Institutional notification phase reservation lost before side effect',
+        )
+      }
+    }
+
+  const commitPhaseWithRetry =
+    async (): Promise<void> => {
+      if (phaseCommitted) {
+        return
+      }
+
+      await waitForHeartbeatCompletion()
+
+      if (phaseCommitted) {
+        return
+      }
+
+      const reservationToken =
+        phaseToken
+
+      if (
+        reservationToken === null ||
+        !phaseReservationActive
+      ) {
+        throw new Error(
+          'Institutional notification phase reservation unavailable for commit',
+        )
+      }
+
+      for (
+        let attempt = 0;
+        attempt < 3;
+        attempt += 1
+      ) {
+        let commitResult
+
+        try {
+          commitResult =
+            await commitInstitutionalNotificationReady({
+              symbol,
+              eventId,
+              token: reservationToken,
+              confirmedCandleTs,
+              pattern:
+                detectedPattern.type,
+              direction:
+                evaluation.confirmation1h
+                  .patternDirection,
+              risk:
+                detectedPattern.risk,
+              intensity:
+                detectedPattern.intensity,
+            })
+        } catch (error: unknown) {
+          if (attempt === 2) {
+            throw error
+          }
+
+          continue
+        }
+
+        if (
+          commitResult.status ===
+            'COMMITTED' ||
+          commitResult.status ===
+            'ALREADY_COMMITTED'
+        ) {
+          phaseCommitted = true
+          phaseReservationActive = false
+          phaseReservationHealthy = true
+          return
+        }
+
+        if (
+          commitResult.status ===
+          'LOST_RESERVATION'
+        ) {
+          phaseReservationActive = false
+          phaseReservationHealthy = false
+
+          throw new Error(
+            'Institutional notification phase commit lost reservation',
+          )
+        }
+
+        if (
+          commitResult.status ===
+          'STALE'
+        ) {
+          phaseReservationActive = false
+          phaseReservationHealthy = false
+
+          throw new Error(
+            'Institutional notification phase commit rejected as stale',
+          )
+        }
+
+        throw new Error(
+          'Unexpected institutional notification phase commit result',
+        )
+      }
+
+      throw new Error(
+        'Institutional notification phase commit retry exhausted',
+      )
+    }
+
+  const recoverCommitFromExistingStatus =
+    async (
+      status:
+        | InstitutionalPatternStoredDeliveryStatus
+        | null,
+    ): Promise<void> => {
+      if (
+        status !== 'SUCCEEDED' &&
+        status !== 'FAILED_RETRYABLE'
+      ) {
+        return
+      }
+
+      durableAttemptCount += 1
+
+      if (!phaseCommitted) {
+        await commitPhaseWithRetry()
+      }
+    }
+
+  const abortPhaseWithoutDurableAttempt =
+    async (): Promise<void> => {
+      if (
+        phaseCommitted ||
+        !phaseReservationActive
+      ) {
+        return
+      }
+
+      if (durableAttemptCount !== 0) {
+        throw new Error(
+          'Institutional notification phase cannot abort after durable attempt',
+        )
+      }
+
+      const reservationToken =
+        phaseToken
+
+      if (reservationToken === null) {
+        throw new Error(
+          'Institutional notification phase reservation unavailable for abort',
+        )
+      }
+
+      phaseAbortAttempted = true
+
+      const abortResult =
+        await abortInstitutionalNotificationReady({
+          symbol,
+          eventId,
+          token: reservationToken,
+          confirmedCandleTs,
+        })
+
+      if (
+        abortResult.status ===
+        'ABORTED'
+      ) {
+        phaseReservationActive = false
+        phaseReservationHealthy = true
+        return
+      }
+
+      if (
+        abortResult.status ===
+        'ALREADY_COMMITTED'
+      ) {
+        phaseCommitted = true
+        phaseReservationActive = false
+        phaseReservationHealthy = true
+        return
+      }
+
+      if (
+        abortResult.status ===
+        'LOST_RESERVATION'
+      ) {
+        phaseReservationActive = false
+        phaseReservationHealthy = false
+
+        throw new Error(
+          'Institutional notification phase abort lost reservation',
+        )
+      }
+
+      if (
+        abortResult.status ===
+        'STALE'
+      ) {
+        phaseReservationActive = false
+        phaseReservationHealthy = false
+
+        throw new Error(
+          'Institutional notification phase abort rejected as stale',
+        )
+      }
+
+      throw new Error(
+        'Unexpected institutional notification phase abort result',
+      )
+    }
 
   const deliveryCounts =
     createDeliveryCounts()
 
   try {
+    const reserveResult =
+      await reserveInstitutionalNotificationReady({
+        symbol,
+        eventId,
+        confirmedCandleTs,
+        pattern:
+          detectedPattern.type,
+        direction:
+          evaluation.confirmation1h
+            .patternDirection,
+        risk:
+          detectedPattern.risk,
+        intensity:
+          detectedPattern.intensity,
+      })
+
+    if (
+      reserveResult.status ===
+      'SUPPRESSED_PHASE_REPEAT'
+    ) {
+      await waitForHeartbeatCompletion()
+
+      await releaseLease(
+        leaseKey,
+        token,
+      )
+
+      return {
+        status:
+          'SUPPRESSED_PHASE_REPEAT',
+        eventId,
+      }
+    }
+
+    if (
+      reserveResult.status ===
+      'RESERVATION_BUSY'
+    ) {
+      await waitForHeartbeatCompletion()
+
+      await releaseLease(
+        leaseKey,
+        token,
+      )
+
+      return {
+        status: 'RESERVATION_BUSY',
+        eventId,
+      }
+    }
+
+    if (
+      reserveResult.status ===
+      'STALE'
+    ) {
+      await waitForHeartbeatCompletion()
+
+      await releaseLease(
+        leaseKey,
+        token,
+      )
+
+      throw new Error(
+        'Institutional notification phase reserve rejected as stale',
+      )
+    }
+
+    if (
+      reserveResult.status !==
+      'RESERVED'
+    ) {
+      throw new Error(
+        'Unexpected institutional notification phase reserve result',
+      )
+    }
+
+    phaseToken =
+      reserveResult.token
+    phaseReservationActive = true
+    phaseReservationHealthy = true
+    lastPhaseReservationConfirmedAt =
+      Date.now()
+
     const validVipUserIds =
       await getAllValidVIPUserIds()
 
@@ -895,6 +1372,8 @@ export async function fanoutInstitutionalPatternReady({
       }
 
     for (const userId of userIds) {
+      await assertPhaseCanStartSideEffect()
+
       const now = Date.now()
 
       const alertPayload:
@@ -951,6 +1430,10 @@ export async function fanoutInstitutionalPatternReady({
               deliveryId,
             )
 
+          await recoverCommitFromExistingStatus(
+            existingStatus,
+          )
+
           if (
             isDeliveryAlreadyHandled(
               existingStatus,
@@ -959,6 +1442,8 @@ export async function fanoutInstitutionalPatternReady({
             deliveryCounts.SKIPPED_ALREADY_DELIVERED += 1
             continue
           }
+
+          await assertPhaseCanStartSideEffect()
 
           const record:
             InstitutionalPatternDeliveryRecord = {
@@ -1022,6 +1507,11 @@ export async function fanoutInstitutionalPatternReady({
           })
 
           deliveryCounts.FAILED_RETRYABLE += 1
+          durableAttemptCount += 1
+
+          if (!phaseCommitted) {
+            await commitPhaseWithRetry()
+          }
         }
 
         continue
@@ -1032,16 +1522,27 @@ export async function fanoutInstitutionalPatternReady({
           .institutionalPatternEnabled ===
         false
       ) {
-        await recordSkippedChannels({
-          eventId,
-          userId,
-          channels: [
-            'STORAGE',
-            'SSE',
-            'FCM',
-          ],
-          deliveryCounts,
-        })
+        const existingDurableAttemptCount =
+          await recordSkippedChannels({
+            eventId,
+            userId,
+            channels: [
+              'STORAGE',
+              'SSE',
+              'FCM',
+            ],
+            deliveryCounts,
+          })
+
+        durableAttemptCount +=
+          existingDurableAttemptCount
+
+        if (
+          existingDurableAttemptCount > 0 &&
+          !phaseCommitted
+        ) {
+          await commitPhaseWithRetry()
+        }
 
         continue
       }
@@ -1051,16 +1552,27 @@ export async function fanoutInstitutionalPatternReady({
           'CRITICAL_ONLY' &&
         detectedPattern.risk !== 'HIGH'
       ) {
-        await recordSkippedChannels({
-          eventId,
-          userId,
-          channels: [
-            'STORAGE',
-            'SSE',
-            'FCM',
-          ],
-          deliveryCounts,
-        })
+        const existingDurableAttemptCount =
+          await recordSkippedChannels({
+            eventId,
+            userId,
+            channels: [
+              'STORAGE',
+              'SSE',
+              'FCM',
+            ],
+            deliveryCounts,
+          })
+
+        durableAttemptCount +=
+          existingDurableAttemptCount
+
+        if (
+          existingDurableAttemptCount > 0 &&
+          !phaseCommitted
+        ) {
+          await commitPhaseWithRetry()
+        }
 
         continue
       }
@@ -1082,6 +1594,10 @@ export async function fanoutInstitutionalPatternReady({
           storageDeliveryId,
         )
 
+      await recoverCommitFromExistingStatus(
+        existingStorageStatus,
+      )
+
       if (
         isDeliveryAlreadyHandled(
           existingStorageStatus,
@@ -1089,6 +1605,11 @@ export async function fanoutInstitutionalPatternReady({
       ) {
         deliveryCounts.SKIPPED_ALREADY_DELIVERED += 1
       } else {
+        await assertPhaseCanStartSideEffect()
+
+        let storageSucceededDurably =
+          false
+
         try {
           const storageResult =
             await saveNotificationDetailed(
@@ -1114,9 +1635,15 @@ export async function fanoutInstitutionalPatternReady({
           })
 
           deliveryCounts[storageStatus] += 1
+
+          storageSucceededDurably =
+            storageStatus ===
+            'SUCCEEDED'
         } catch (error: unknown) {
           const errorClass =
             normalizeErrorClass(error)
+
+          await assertPhaseCanStartSideEffect()
 
           const record:
             InstitutionalPatternDeliveryRecord = {
@@ -1152,8 +1679,23 @@ export async function fanoutInstitutionalPatternReady({
           })
 
           deliveryCounts.FAILED_RETRYABLE += 1
+          durableAttemptCount += 1
+
+          if (!phaseCommitted) {
+            await commitPhaseWithRetry()
+          }
+        }
+
+        if (storageSucceededDurably) {
+          durableAttemptCount += 1
+
+          if (!phaseCommitted) {
+            await commitPhaseWithRetry()
+          }
         }
       }
+
+      await assertPhaseCanStartSideEffect()
 
       const sseDeliveryId =
         getDeliveryId(
@@ -1166,6 +1708,10 @@ export async function fanoutInstitutionalPatternReady({
         await getExistingDeliveryStatus(
           sseDeliveryId,
         )
+
+      await recoverCommitFromExistingStatus(
+        existingSSEStatus,
+      )
 
       if (
         isDeliveryAlreadyHandled(
@@ -1190,6 +1736,11 @@ export async function fanoutInstitutionalPatternReady({
 
         deliveryCounts.SKIPPED_FINAL += 1
       } else {
+        await assertPhaseCanStartSideEffect()
+
+        let sseSucceededDurably =
+          false
+
         try {
           await redis.publish(
             ALERTS_CHANNEL,
@@ -1210,6 +1761,7 @@ export async function fanoutInstitutionalPatternReady({
           })
 
           deliveryCounts.SUCCEEDED += 1
+          sseSucceededDurably = true
         } catch (error: unknown) {
           await persistTerminalDelivery({
             version: 1,
@@ -1226,7 +1778,17 @@ export async function fanoutInstitutionalPatternReady({
 
           deliveryCounts.FAILED_FINAL += 1
         }
+
+        if (sseSucceededDurably) {
+          durableAttemptCount += 1
+
+          if (!phaseCommitted) {
+            await commitPhaseWithRetry()
+          }
+        }
       }
+
+      await assertPhaseCanStartSideEffect()
 
       const fcmDeliveryId =
         getDeliveryId(
@@ -1239,6 +1801,10 @@ export async function fanoutInstitutionalPatternReady({
         await getExistingDeliveryStatus(
           fcmDeliveryId,
         )
+
+      await recoverCommitFromExistingStatus(
+        existingFCMStatus,
+      )
 
       if (
         isDeliveryAlreadyHandled(
@@ -1263,6 +1829,13 @@ export async function fanoutInstitutionalPatternReady({
 
         deliveryCounts.SKIPPED_FINAL += 1
       } else {
+        await assertPhaseCanStartSideEffect()
+
+        let fcmSucceededDurably =
+          false
+        let fcmRetryableDurably =
+          false
+
         try {
           const fcmResult =
             await sendPushDetailedToUser({
@@ -1290,6 +1863,7 @@ export async function fanoutInstitutionalPatternReady({
             })
 
             deliveryCounts.SUCCEEDED += 1
+            fcmSucceededDurably = true
           } else if (
             fcmResult.status ===
             'SKIPPED_NO_TOKEN'
@@ -1325,6 +1899,8 @@ export async function fanoutInstitutionalPatternReady({
 
             deliveryCounts.FAILED_FINAL += 1
           } else {
+            await assertPhaseCanStartSideEffect()
+
             const errorClass =
               fcmResult.status ===
                 'FAILED_TOKEN_LOOKUP' ||
@@ -1369,8 +1945,11 @@ export async function fanoutInstitutionalPatternReady({
             })
 
             deliveryCounts.FAILED_RETRYABLE += 1
+            fcmRetryableDurably = true
           }
         } catch (error: unknown) {
+          await assertPhaseCanStartSideEffect()
+
           const record:
             InstitutionalPatternDeliveryRecord = {
               version: 1,
@@ -1406,9 +1985,39 @@ export async function fanoutInstitutionalPatternReady({
           })
 
           deliveryCounts.FAILED_RETRYABLE += 1
+          fcmRetryableDurably = true
+        }
+
+        if (
+          fcmSucceededDurably ||
+          fcmRetryableDurably
+        ) {
+          durableAttemptCount += 1
+
+          if (!phaseCommitted) {
+            await commitPhaseWithRetry()
+          }
         }
       }
     }
+
+    if (
+      durableAttemptCount > 0 &&
+      !phaseCommitted
+    ) {
+      throw new Error(
+        'Institutional notification durable attempt exists without phase commit',
+      )
+    }
+
+    if (
+      durableAttemptCount === 0 &&
+      !phaseCommitted
+    ) {
+      await abortPhaseWithoutDurableAttempt()
+    }
+
+    await waitForHeartbeatCompletion()
 
     if (!leaseHealthy) {
       throw new Error(
@@ -1434,7 +2043,36 @@ export async function fanoutInstitutionalPatternReady({
       userCount: userIds.length,
       deliveryCounts,
     }
+  } catch (error: unknown) {
+    if (
+      !phaseCommitted &&
+      phaseReservationActive &&
+      durableAttemptCount === 0 &&
+      !phaseAbortAttempted
+    ) {
+      try {
+        await abortPhaseWithoutDurableAttempt()
+      } catch (abortError: unknown) {
+        console.error(
+          '[InstitutionalPattern] phase-abort-error',
+          {
+            originalErrorName:
+              error instanceof Error
+                ? error.name || 'Error'
+                : typeof error,
+            abortErrorName:
+              abortError instanceof Error
+                ? abortError.name || 'Error'
+                : typeof abortError,
+          },
+        )
+      }
+    }
+
+    throw error
   } finally {
     clearInterval(heartbeatTimer)
+
+    await waitForHeartbeatCompletion()
   }
 }
