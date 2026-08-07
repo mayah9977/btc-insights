@@ -10,11 +10,19 @@ import type {
   InstitutionalEvidenceSnapshot1h,
 } from '@/lib/market/institutional/institutionalEvidenceSnapshot1h'
 
+import {
+  isInstitutionalLatestEvaluation,
+  type InstitutionalLatestEvaluation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
+
 const FINALIZED_SNAPSHOT_30M_KEY =
   'institutional:finalized:30m:BTCUSDT'
 
 const FINALIZED_SNAPSHOT_1H_KEY =
   'institutional:finalized:1h:BTCUSDT'
+
+const LATEST_EVALUATION_KEY =
+  'institutional:finalized:evaluation:BTCUSDT'
 
 type FinalizedSnapshot =
   | InstitutionalEvidenceSnapshot
@@ -25,10 +33,18 @@ function isZeroLikeFinalizedSnapshot(
 ): boolean {
   return (
     (snapshot.sampleCount ?? 0) <= 1 &&
-    Number(snapshot.oiDeltaAccum ?? 0) === 0 &&
-    Number(snapshot.fundingAccum ?? 0) === 0 &&
-    Number(snapshot.volumeRatioAccum ?? 0) === 0 &&
-    Number(snapshot.whaleIntensityAccum ?? 0) === 0
+    Number(
+      snapshot.oiDeltaAccum ?? 0,
+    ) === 0 &&
+    Number(
+      snapshot.fundingAccum ?? 0,
+    ) === 0 &&
+    Number(
+      snapshot.volumeRatioAccum ?? 0,
+    ) === 0 &&
+    Number(
+      snapshot.whaleIntensityAccum ?? 0,
+    ) === 0
   )
 }
 
@@ -38,16 +54,26 @@ async function saveFinalizedSnapshot(
   logLabel:
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_30M]'
     | '[FINALIZED_SNAPSHOT_REDIS_SAVE_1H]',
-) {
+): Promise<void> {
   try {
     const existingSnapshot =
-      await loadFinalizedSnapshot<FinalizedSnapshot>(
+      await loadFinalizedSnapshot<
+        FinalizedSnapshot
+      >(
         key,
         logLabel ===
           '[FINALIZED_SNAPSHOT_REDIS_SAVE_30M]'
           ? '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]'
           : '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
       )
+
+    if (
+      existingSnapshot &&
+      existingSnapshot.confirmedCandleTs >
+        snapshot.confirmedCandleTs
+    ) {
+      return
+    }
 
     if (
       existingSnapshot &&
@@ -76,7 +102,9 @@ async function saveFinalizedSnapshot(
 
     if (
       existingSnapshot &&
-      isZeroLikeFinalizedSnapshot(snapshot)
+      isZeroLikeFinalizedSnapshot(
+        snapshot,
+      )
     ) {
       console.log(
         '[FINALIZED_SNAPSHOT_REDIS_SAVE_SKIPPED_ZERO_LIKE_SNAPSHOT]',
@@ -147,7 +175,8 @@ async function loadFinalizedSnapshot<
   void logLabel
 
   try {
-    const raw = await redis.get(key)
+    const raw =
+      await redis.get(key)
 
     if (!raw) {
       return null
@@ -158,9 +187,10 @@ async function loadFinalizedSnapshot<
     }
 
     try {
-      const parsed = JSON.parse(
-        String(raw),
-      ) as TSnapshot
+      const parsed =
+        JSON.parse(
+          String(raw),
+        ) as TSnapshot
 
       return parsed
     } catch (error) {
@@ -188,6 +218,35 @@ async function loadFinalizedSnapshot<
   }
 }
 
+function parseLatestInstitutionalEvaluation(
+  raw: unknown,
+): InstitutionalLatestEvaluation | null {
+  if (
+    raw === null ||
+    raw === undefined
+  ) {
+    return null
+  }
+
+  let parsed: unknown =
+    raw
+
+  if (typeof raw === 'string') {
+    try {
+      parsed =
+        JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+
+  return isInstitutionalLatestEvaluation(
+    parsed,
+  )
+    ? parsed
+    : null
+}
+
 export async function saveFinalized30mSnapshot(
   snapshot: InstitutionalEvidenceSnapshot,
 ): Promise<void> {
@@ -209,15 +268,71 @@ export async function saveFinalized1hSnapshot(
 }
 
 export async function loadFinalized30mSnapshot(): Promise<InstitutionalEvidenceSnapshot | null> {
-  return loadFinalizedSnapshot<InstitutionalEvidenceSnapshot>(
+  return loadFinalizedSnapshot<
+    InstitutionalEvidenceSnapshot
+  >(
     FINALIZED_SNAPSHOT_30M_KEY,
     '[FINALIZED_SNAPSHOT_REDIS_LOAD_30M]',
   )
 }
 
 export async function loadFinalized1hSnapshot(): Promise<InstitutionalEvidenceSnapshot1h | null> {
-  return loadFinalizedSnapshot<InstitutionalEvidenceSnapshot1h>(
+  return loadFinalizedSnapshot<
+    InstitutionalEvidenceSnapshot1h
+  >(
     FINALIZED_SNAPSHOT_1H_KEY,
     '[FINALIZED_SNAPSHOT_REDIS_LOAD_1H]',
   )
+}
+
+export async function saveLatestInstitutionalEvaluation(
+  evaluation: InstitutionalLatestEvaluation,
+): Promise<void> {
+  if (
+    !isInstitutionalLatestEvaluation(
+      evaluation,
+    )
+  ) {
+    throw new Error(
+      'Invalid institutional latest evaluation',
+    )
+  }
+
+  const raw =
+    await redis.get(
+      LATEST_EVALUATION_KEY,
+    )
+
+  const existing =
+    parseLatestInstitutionalEvaluation(
+      raw,
+    )
+
+  if (
+    existing !== null &&
+    existing.confirmedCandleTs >
+      evaluation.confirmedCandleTs
+  ) {
+    return
+  }
+
+  await redis.set(
+    LATEST_EVALUATION_KEY,
+    JSON.stringify(evaluation),
+  )
+}
+
+export async function loadLatestInstitutionalEvaluation(): Promise<InstitutionalLatestEvaluation | null> {
+  try {
+    const raw =
+      await redis.get(
+        LATEST_EVALUATION_KEY,
+      )
+
+    return parseLatestInstitutionalEvaluation(
+      raw,
+    )
+  } catch {
+    return null
+  }
 }

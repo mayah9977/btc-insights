@@ -60,6 +60,8 @@ import {
   updateInstitutionalPatternLatestState,
   sampleInstitutionalEvidenceIfDue,
   evaluateInstitutionalPatternAtClose,
+  hydrateInstitutionalPattern1hSnapshot,
+  type InstitutionalPatternEvaluationResult,
 } from '@/lib/market/institutional/server/institutionalPatternRuntime'
 
 import {
@@ -69,6 +71,15 @@ import {
 import {
   processInstitutionalPatternRetryBatch,
 } from '@/lib/market/institutional/server/institutionalPatternRetryConsumer'
+
+import {
+  loadFinalized1hSnapshot,
+  saveLatestInstitutionalEvaluation,
+} from '@/lib/market/institutional/server/finalizedSnapshotRepository'
+
+import type {
+  InstitutionalLatestEvaluation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
 
 const RAW_CHANNEL =
   'realtime:raw'
@@ -88,10 +99,97 @@ const PRICE_PUBLISH_INTERVAL_MS =
 
 const g = globalThis as any
 
+function buildLatestInstitutionalEvaluation(
+  evaluation: InstitutionalPatternEvaluationResult,
+): InstitutionalLatestEvaluation {
+  const evaluatedAt =
+    Date.now()
+
+  if (
+    evaluation.status ===
+    'NO_PATTERN'
+  ) {
+    return {
+      status: 'NO_PATTERN',
+      confirmedCandleTs:
+        evaluation.confirmedCandleTs,
+      evaluatedAt,
+      confirmationAction: null,
+      confirmationReason: null,
+      readyPattern: null,
+    }
+  }
+
+  if (
+    evaluation.status ===
+    'BLOCKED_BY_1H'
+  ) {
+    const confirmationAction =
+      evaluation.confirmation1h.action
+
+    if (
+      confirmationAction ===
+      'ALLOW'
+    ) {
+      throw new Error(
+        'Unexpected institutional blocked confirmation action',
+      )
+    }
+
+    return {
+      status: 'BLOCKED_BY_1H',
+      confirmedCandleTs:
+        evaluation.confirmedCandleTs,
+      evaluatedAt,
+      confirmationAction,
+      confirmationReason:
+        evaluation.confirmation1h.reason,
+      readyPattern: null,
+    }
+  }
+
+  return {
+    status: 'READY',
+    confirmedCandleTs:
+      evaluation.confirmedCandleTs,
+    evaluatedAt,
+    confirmationAction:
+      'ALLOW',
+    confirmationReason:
+      evaluation.confirmation1h.reason,
+    readyPattern:
+      evaluation.detectedPattern,
+  }
+}
+
 if (!g.__MARKET_CONSUMER_STARTED__) {
 
   g.__MARKET_CONSUMER_STARTED__ =
     true
+
+  const institutionalPattern1hHydrationPromise =
+    loadFinalized1hSnapshot()
+      .then(snapshot => {
+        if (snapshot === null) {
+          return
+        }
+
+        hydrateInstitutionalPattern1hSnapshot(
+          'BTCUSDT',
+          snapshot,
+        )
+      })
+      .catch((error: unknown) => {
+        console.error(
+          '[InstitutionalPattern] hydration-error',
+          {
+            errorName:
+              error instanceof Error
+                ? error.name || 'Error'
+                : typeof error,
+          },
+        )
+      })
 
   const candle30mMap:
     Record<
@@ -461,6 +559,8 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
               'EVALUATION'
 
             try {
+              await institutionalPattern1hHydrationPromise
+
               const evaluation =
                 evaluateInstitutionalPatternAtClose(
                   symbol,
@@ -482,6 +582,24 @@ if (!g.__MARKET_CONSUMER_STARTED__) {
                       ?.reason ?? null,
                 },
               )
+
+              try {
+                await saveLatestInstitutionalEvaluation(
+                  buildLatestInstitutionalEvaluation(
+                    evaluation,
+                  ),
+                )
+              } catch (error: unknown) {
+                console.error(
+                  '[InstitutionalPattern] persistence-error',
+                  {
+                    errorName:
+                      error instanceof Error
+                        ? error.name || 'Error'
+                        : typeof error,
+                  },
+                )
+              }
 
               if (
                 evaluation.status ===

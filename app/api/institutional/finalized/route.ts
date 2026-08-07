@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import {
   loadFinalized30mSnapshot,
   loadFinalized1hSnapshot,
+  loadLatestInstitutionalEvaluation,
 } from '@/lib/market/institutional/server/finalizedSnapshotRepository'
 
 export const runtime = 'nodejs'
@@ -15,9 +16,11 @@ export async function GET() {
     const [
       snapshot30m,
       snapshot1h,
+      latestEvaluation,
     ] = await Promise.all([
       loadFinalized30mSnapshot(),
       loadFinalized1hSnapshot(),
+      loadLatestInstitutionalEvaluation(),
     ])
 
     return NextResponse.json(
@@ -25,6 +28,7 @@ export async function GET() {
         ok: true,
         snapshot30m,
         snapshot1h,
+        latestEvaluation,
         ts: Date.now(),
       },
       {
@@ -49,6 +53,7 @@ export async function GET() {
         ok: false,
         snapshot30m: null,
         snapshot1h: null,
+        latestEvaluation: null,
         ts: Date.now(),
       },
       {

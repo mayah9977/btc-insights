@@ -21,6 +21,11 @@ import {
   buildInstitutionalConfirmation1h,
 } from '@/lib/market/institutional/buildInstitutionalConfirmation1h'
 
+import {
+  isInstitutionalReadyPatternPresentation,
+  type InstitutionalReadyPatternPresentation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
+
 const INSTITUTIONAL_EVIDENCE_SAMPLE_INTERVAL_MS =
   30_000
 
@@ -221,9 +226,8 @@ export type InstitutionalPatternEvaluationResult =
       confirmedCandleTs: number
       snapshot30m: InstitutionalEvidenceSnapshot
       snapshot1h: InstitutionalEvidenceSnapshot1h | null
-      detectedPattern: ReturnType<
-        typeof detectInstitutionalPattern
-      >
+      detectedPattern:
+        InstitutionalReadyPatternPresentation
       confirmation1h: ReturnType<
         typeof buildInstitutionalConfirmation1h
       >
@@ -365,6 +369,37 @@ function getOrCreateRuntimeState(
   )
 
   return created
+}
+
+export function hydrateInstitutionalPattern1hSnapshot(
+  symbol: string,
+  snapshot: InstitutionalEvidenceSnapshot1h,
+): void {
+  if (
+    snapshot.timeframe !== '1h' ||
+    !Number.isFinite(
+      snapshot.confirmedCandleTs,
+    )
+  ) {
+    return
+  }
+
+  const state =
+    getOrCreateRuntimeState(symbol)
+
+  if (
+    state.lastFrozenCandleTs1h !== null &&
+    state.lastFrozenCandleTs1h >
+      snapshot.confirmedCandleTs
+  ) {
+    return
+  }
+
+  state.lastFrozenSnapshot1h =
+    snapshot
+
+  state.lastFrozenCandleTs1h =
+    snapshot.confirmedCandleTs
 }
 
 function hasLatestInputChanged(
@@ -1380,7 +1415,10 @@ export function evaluateInstitutionalPatternAtClose(
       confirmedCandleTs,
     )
 
-  const snapshot1h =
+  const state =
+    getOrCreateRuntimeState(symbol)
+
+  const candidateSnapshot1h =
     new Date(
       confirmedCandleTs,
     ).getUTCMinutes() === 0
@@ -1388,6 +1426,20 @@ export function evaluateInstitutionalPatternAtClose(
           symbol,
           confirmedCandleTs,
         )
+      : state.lastFrozenSnapshot1h
+
+  const snapshot1hAgeMs =
+    candidateSnapshot1h === null
+      ? null
+      : confirmedCandleTs -
+        candidateSnapshot1h.confirmedCandleTs
+
+  const confirmationSnapshot1h =
+    candidateSnapshot1h !== null &&
+    snapshot1hAgeMs !== null &&
+    snapshot1hAgeMs >= 0 &&
+    snapshot1hAgeMs < 60 * 60 * 1000
+      ? candidateSnapshot1h
       : null
 
   const detectedPattern =
@@ -1460,24 +1512,20 @@ export function evaluateInstitutionalPatternAtClose(
     })
 
   if (
-    !detectedPattern ||
-    detectedPattern.type === 'NONE'
+    !isInstitutionalReadyPatternPresentation(
+      detectedPattern,
+    )
   ) {
     return Object.freeze({
       status: 'NO_PATTERN',
       confirmedCandleTs,
       snapshot30m,
-      snapshot1h,
+      snapshot1h:
+        confirmationSnapshot1h,
       detectedPattern,
       confirmation1h: null,
     })
   }
-
-  const confirmationSnapshot1h =
-    snapshot1h?.confirmedCandleTs ===
-    confirmedCandleTs
-      ? snapshot1h
-      : null
 
   const confirmation1h =
     buildInstitutionalConfirmation1h(

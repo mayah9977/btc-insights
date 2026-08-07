@@ -5,6 +5,11 @@ import { randomUUID } from 'crypto'
 import type {
   InstitutionalPatternEvaluationResult,
 } from '@/lib/market/institutional/server/institutionalPatternRuntime'
+
+import type {
+  InstitutionalReadyPatternPresentation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
+
 import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore.server'
 import { saveNotificationDetailed } from '@/lib/notification/repository'
@@ -43,6 +48,8 @@ type InstitutionalPatternAlertPayload = {
   confirmedCandleTs: number
   ts: number
   userId: string
+  readyPattern?:
+    InstitutionalReadyPatternPresentation
 }
 
 type InstitutionalPatternNotificationPayload = {
@@ -756,14 +763,6 @@ export async function fanoutInstitutionalPatternReady({
     confirmedCandleTs,
   } = evaluation
 
-  if (
-    detectedPattern.type === 'NONE'
-  ) {
-    throw new Error(
-      'READY institutional pattern cannot be NONE',
-    )
-  }
-
   const eventId =
     `${symbol}:${detectedPattern.type}:${confirmedCandleTs}`
 
@@ -913,6 +912,8 @@ export async function fanoutInstitutionalPatternReady({
           confirmedCandleTs,
           ts: now,
           userId,
+          readyPattern:
+            detectedPattern,
         }
 
       let settings:

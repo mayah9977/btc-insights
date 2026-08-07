@@ -2,28 +2,15 @@
 
 'use client'
 
-import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 
-import { useFinalizedInstitutionalSnapshot } from '@/lib/market/institutional/useFinalizedInstitutionalSnapshot'
-
-import {
-  useInstitutionalEvidenceStore1h,
-} from '@/lib/market/institutional/institutionalEvidenceStore1h'
-
-import {
-  buildInstitutionalConfirmation1h,
-} from '@/lib/market/institutional/buildInstitutionalConfirmation1h'
-
-import {
-  detectInstitutionalPattern,
-  type InstitutionalPatternIntensity,
-  type InstitutionalPatternRisk,
+import type {
+  InstitutionalPatternIntensity,
+  InstitutionalPatternRisk,
 } from '@/lib/market/patterns/detectInstitutionalPattern'
 
 import {
   useRealtimeInstitutionalPatternStore,
-  type RealtimeInstitutionalPattern,
 } from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
 
 const riskClassMap: Record<
@@ -48,263 +35,17 @@ const intensityClassMap: Record<
   EXTREME: 'text-red-300',
 }
 
-function getRealtimeConfidencePercent(
-  risk: InstitutionalPatternRisk,
-) {
-  if (risk === 'HIGH') {
-    return 85
-  }
-
-  if (risk === 'MEDIUM') {
-    return 70
-  }
-
-  return 55
-}
-
-function formatRealtimePatternTitle(
-  pattern: string,
-) {
-  return pattern
-    .toLowerCase()
-    .split('_')
-    .map(
-      (word) =>
-        word.charAt(0).toUpperCase() +
-        word.slice(1),
-    )
-    .join(' ')
-}
-
-function getRealtimeDominantFlow(
-  pattern: string,
-) {
-  if (pattern === 'LONG_PRESSURE_BUILDING') {
-    return 'LONG'
-  }
-
-  if (pattern === 'SHORT_PRESSURE_BUILDING') {
-    return 'SHORT'
-  }
-
-  return 'NEUTRAL'
-}
-
-function buildRealtimePatternForCard(
-  realtimePattern: RealtimeInstitutionalPattern,
-) {
-  return {
-    type: realtimePattern.type,
-    title: formatRealtimePatternTitle(
-      realtimePattern.title || realtimePattern.pattern,
-    ),
-    summary: realtimePattern.summary,
-    intensity: realtimePattern.intensity,
-    risk: realtimePattern.risk,
-    confidencePercent:
-      getRealtimeConfidencePercent(
-        realtimePattern.risk,
-      ),
-    reasons: realtimePattern.summary
-      ? [realtimePattern.summary]
-      : [],
-    metrics: [
-      {
-        label: 'Dominant Flow',
-        value: getRealtimeDominantFlow(
-          realtimePattern.pattern,
-        ),
-        note: 'Realtime inferred dominant flow',
-      },
-      {
-        label: 'Signal Strength',
-        value: `${realtimePattern.risk} / ${realtimePattern.intensity}`,
-        note: 'Realtime risk / intensity',
-      },
-    ],
-  }
-}
-
 export function InstitutionalPatternAlertCard() {
-  const finalized =
-    useFinalizedInstitutionalSnapshot()
-
-  const finalizedConfirmedCandleTs =
-    finalized.confirmedCandleTs ?? 0
-
-  const realtimePattern =
+  const canonicalPattern =
     useRealtimeInstitutionalPatternStore(
       (state) => state.pattern,
     )
 
-  const snapshot1h =
-    useInstitutionalEvidenceStore1h(
-      (state) => state.snapshot,
-    )
+  const pattern =
+    canonicalPattern?.readyPattern ??
+    null
 
-  const finalizedPattern = useMemo(() => {
-    if (!finalized.snapshotReady) {
-      return null
-    }
-
-    const detected =
-      detectInstitutionalPattern({
-        snapshotReady: finalized.snapshotReady,
-
-        oiDeltaAverage:
-          finalized.oiDeltaAverage,
-
-        oiDeltaAccum:
-          finalized.oiDeltaAccum,
-
-        oiDirectionalPersistenceAverage:
-          finalized.oiDirectionalPersistenceAverage,
-
-        fundingAverage:
-          finalized.fundingAverage,
-
-        fundingState:
-          finalized.fundingState,
-
-        volumeRatioAverage:
-          finalized.volumeRatioAverage,
-
-        volumeState:
-          finalized.volumeState,
-
-        whaleIntensityAverage:
-          finalized.whaleIntensityAverage,
-
-        whaleBias:
-          finalized.whaleBias,
-
-        whaleBuyPressure:
-          finalized.whaleBuyPressure,
-
-        whaleSellPressure:
-          finalized.whaleSellPressure,
-
-        longLiquidationPressure:
-          finalized.longLiquidationPressure,
-
-        shortLiquidationPressure:
-          finalized.shortLiquidationPressure,
-
-        dominantFlow:
-          finalized.dominantFlow,
-
-        oiDirectionalPressure:
-          finalized.oiDirectionalPressure,
-
-        fmaiDirectionalPressure:
-          finalized.fmaiDirectionalPressure,
-
-        absorptionAccum:
-          finalized.absorptionAccum,
-
-        absorptionAverage:
-          finalized.absorptionAverage,
-
-        sweepAccum:
-          finalized.sweepAccum,
-
-        sweepAverage:
-          finalized.sweepAverage,
-
-        institutionalEvents:
-          finalized.institutionalEvents,
-      })
-
-    if (!detected || detected.type === 'NONE') {
-      return null
-    }
-
-    const confirmationSnapshot1h =
-      snapshot1h?.confirmedCandleTs ===
-      finalized.confirmedCandleTs
-        ? snapshot1h
-        : null
-
-    const confirmation1h =
-      buildInstitutionalConfirmation1h(
-        detected.type,
-        confirmationSnapshot1h,
-      )
-
-    if (confirmation1h.action !== 'ALLOW') {
-      return null
-    }
-
-    return detected
-  }, [
-    finalized.snapshotReady,
-    finalized.confirmedCandleTs,
-    finalized.sampleCount,
-    finalized.oiDeltaAverage,
-    finalized.oiDeltaAccum,
-    finalized.oiDirectionalPersistenceAverage,
-    finalized.fundingAverage,
-    finalized.fundingState,
-    finalized.volumeRatioAverage,
-    finalized.volumeState,
-    finalized.whaleIntensityAverage,
-    finalized.whaleBias,
-    finalized.whaleBuyPressure,
-    finalized.whaleSellPressure,
-    finalized.longLiquidationPressure,
-    finalized.shortLiquidationPressure,
-    finalized.dominantFlow,
-    finalized.oiDirectionalPressure,
-    finalized.fmaiDirectionalPressure,
-    finalized.absorptionAccum,
-    finalized.absorptionAverage,
-    finalized.sweepAccum,
-    finalized.sweepAverage,
-    finalized.institutionalEvents.whaleBurstCount,
-    finalized.institutionalEvents.longAggressionDuration,
-    finalized.institutionalEvents.shortAggressionDuration,
-    finalized.institutionalEvents.longAggressionPersistence,
-    finalized.institutionalEvents.shortAggressionPersistence,
-    finalized.institutionalEvents.fundingOverheatDuration,
-    finalized.institutionalEvents.oiExpansionEventCount,
-    finalized.institutionalEvents.whaleAbsorptionCount,
-    finalized.institutionalEvents.liquiditySweepCount,
-    finalized.institutionalEvents.volatilityShockCount,
-    snapshot1h?.confirmedCandleTs,
-    snapshot1h?.sampleCount,
-    snapshot1h?.oiDeltaAverage,
-    snapshot1h?.oiDeltaAccum,
-    snapshot1h?.dominantFlow,
-    snapshot1h?.whaleBias,
-    snapshot1h?.volumeState,
-    snapshot1h?.fundingState,
-    snapshot1h?.oiDirectionalPressure,
-    snapshot1h?.fmaiDirectionalPressure,
-  ])
-
-  const pattern = useMemo(() => {
-    if (
-      realtimePattern &&
-      (
-        !finalized.snapshotReady ||
-        realtimePattern.confirmedCandleTs >
-          finalizedConfirmedCandleTs
-      )
-    ) {
-      return buildRealtimePatternForCard(
-        realtimePattern,
-      )
-    }
-
-    return finalizedPattern
-  }, [
-    realtimePattern,
-    finalizedPattern,
-    finalized.snapshotReady,
-    finalizedConfirmedCandleTs,
-  ])
-
-  if (!pattern || pattern.type === 'NONE') {
+  if (!pattern) {
     return null
   }
 

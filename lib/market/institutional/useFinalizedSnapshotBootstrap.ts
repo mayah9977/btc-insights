@@ -20,6 +20,14 @@ import type {
   InstitutionalEvidenceSnapshot1h,
 } from '@/lib/market/institutional/institutionalEvidenceSnapshot1h'
 
+import {
+  isInstitutionalLatestEvaluation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
+
+import {
+  useRealtimeInstitutionalPatternStore,
+} from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
+
 type FinalizedSnapshotApiResponse = {
   ok: boolean
   snapshot30m:
@@ -28,6 +36,7 @@ type FinalizedSnapshotApiResponse = {
   snapshot1h:
     | InstitutionalEvidenceSnapshot1h
     | null
+  latestEvaluation?: unknown
   ts: number
 }
 
@@ -187,6 +196,13 @@ export function useFinalizedSnapshotBootstrap() {
         const snapshot1h =
           data?.snapshot1h ?? null
 
+        const latestEvaluation =
+          isInstitutionalLatestEvaluation(
+            data?.latestEvaluation,
+          )
+            ? data.latestEvaluation
+            : null
+
         const store30m =
           useInstitutionalEvidenceStore.getState()
 
@@ -342,6 +358,19 @@ export function useFinalizedSnapshotBootstrap() {
             },
           )
         }
+
+        useRealtimeInstitutionalPatternStore
+          .getState()
+          .applyBootstrapEvaluation({
+            latestEvaluation,
+            snapshot30mConfirmedCandleTs:
+              snapshot30m?.confirmedCandleTs ??
+              null,
+            ts:
+              Number.isFinite(data?.ts)
+                ? Number(data.ts)
+                : Date.now(),
+          })
       } catch (error) {
         console.error(
           '[FINALIZED_SNAPSHOT_BOOTSTRAP_ERROR]',
@@ -360,7 +389,10 @@ export function useFinalizedSnapshotBootstrap() {
       )
     }
 
-    if (finalizedSnapshotRefreshIntervalId === null) {
+    if (
+      finalizedSnapshotRefreshIntervalId ===
+      null
+    ) {
       finalizedSnapshotRefreshIntervalId =
         window.setInterval(() => {
           void fetchAndApplyFinalizedSnapshots(
@@ -370,12 +402,16 @@ export function useFinalizedSnapshotBootstrap() {
     }
 
     return () => {
-      if (finalizedSnapshotRefreshIntervalId !== null) {
+      if (
+        finalizedSnapshotRefreshIntervalId !==
+        null
+      ) {
         window.clearInterval(
           finalizedSnapshotRefreshIntervalId,
         )
 
-        finalizedSnapshotRefreshIntervalId = null
+        finalizedSnapshotRefreshIntervalId =
+          null
       }
     }
   }, [])

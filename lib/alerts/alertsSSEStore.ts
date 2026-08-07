@@ -18,8 +18,10 @@ import {
 } from '@/app/[locale]/alerts/components/AlertToastRenderer'
 import {
   useRealtimeInstitutionalPatternStore,
-  type RealtimeInstitutionalPattern,
 } from '@/lib/market/institutional/realtimeInstitutionalPatternStore'
+import {
+  isInstitutionalReadyPatternPresentation,
+} from '@/lib/market/institutional/institutionalLatestEvaluation'
 
 export type SystemRiskLevel =
   | 'SAFE'
@@ -161,35 +163,6 @@ function normalizeIndicatorType(
   }
 
   return null
-}
-
-function normalizeInstitutionalPatternIntensity(
-  value: unknown,
-): RealtimeInstitutionalPattern['intensity'] {
-  if (
-    value === 'WEAK' ||
-    value === 'BUILDING' ||
-    value === 'AGGRESSIVE' ||
-    value === 'EXTREME'
-  ) {
-    return value
-  }
-
-  return 'WEAK'
-}
-
-function normalizeInstitutionalPatternRisk(
-  value: unknown,
-): RealtimeInstitutionalPattern['risk'] {
-  if (
-    value === 'LOW' ||
-    value === 'MEDIUM' ||
-    value === 'HIGH'
-  ) {
-    return value
-  }
-
-  return 'LOW'
 }
 
 function buildAlertDedupeKey(
@@ -904,29 +877,12 @@ export const useAlertsSSEStore =
                 },
               )
 
-              if (
+              const duplicatedInstitutionalPattern =
                 markIfDuplicate(
                   runtime.processedEventMap,
                   dedupeKey,
                   CLIENT_DEDUPE_TTL_MS,
                 )
-              ) {
-                console.log(
-                  '[alerts-sse] duplicate institutional pattern ignored:',
-                  dedupeKey,
-                )
-
-                console.log(
-                  '[INSTITUTIONAL_PATTERN_REALTIME_ABORTED]',
-                  {
-                    ts: Date.now(),
-                    dedupeKey,
-                    reason: 'CLIENT_DEDUPE',
-                  },
-                )
-
-                return
-              }
 
               console.log(
                 'INSTITUTIONAL PATTERN SIGNAL:',
@@ -1039,35 +995,23 @@ export const useAlertsSSEStore =
                   Date.now(),
               }
 
+              const readyPattern =
+                isInstitutionalReadyPatternPresentation(
+                  data?.readyPattern,
+                )
+                  ? data.readyPattern
+                  : null
+
               useRealtimeInstitutionalPatternStore
                 .getState()
-                .setPattern({
-                  type: payload.pattern,
-
-                  pattern:
-                    payload.pattern,
-
-                  title:
-                    payload.pattern,
-
-                  summary:
-                    payload.summary,
-
-                  intensity:
-                    normalizeInstitutionalPatternIntensity(
-                      payload.intensity,
-                    ),
-
-                  risk:
-                    normalizeInstitutionalPatternRisk(
-                      payload.risk,
-                    ),
-
+                .applyLiveReadySignal({
+                  readyPattern,
                   confirmedCandleTs:
                     payload.confirmedCandleTs,
-
                   ts:
-                    payload.ts,
+                    Number(
+                      payload.ts,
+                    ),
                 })
 
               console.log(
@@ -1085,6 +1029,26 @@ export const useAlertsSSEStore =
                     payload.ts,
                 },
               )
+
+              if (
+                duplicatedInstitutionalPattern
+              ) {
+                console.log(
+                  '[alerts-sse] duplicate institutional pattern side effects ignored:',
+                  dedupeKey,
+                )
+
+                console.log(
+                  '[INSTITUTIONAL_PATTERN_REALTIME_ABORTED]',
+                  {
+                    ts: Date.now(),
+                    dedupeKey,
+                    reason: 'CLIENT_DEDUPE',
+                  },
+                )
+
+                return
+              }
 
               console.log(
                 '[INSTITUTIONAL_PATTERN_REALTIME_TOAST_ATTEMPT]',
