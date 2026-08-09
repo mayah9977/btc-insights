@@ -1,8 +1,9 @@
 // app/api/notification/register-push-token/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { claimUserPushToken } from '@/lib/push/pushStore'
+import { claimUserPushToken, getUserPushTokens } from '@/lib/push/pushStore'
 import { resolveNotificationPrincipal } from '@/lib/auth/notificationPrincipal'
+import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
 
 /**
  * Client → Server Push Token Register
@@ -30,7 +31,59 @@ export async function POST(req: NextRequest) {
       token.trim(),
     )
 
-    return NextResponse.json({ ok: true })
+    let institutionalFanoutTarget: boolean | null = null
+    let principalTokenCountAfterClaim: number | null = null
+
+    const [
+      institutionalFanoutTargetResult,
+      principalTokenCountAfterClaimResult,
+    ] = await Promise.allSettled([
+      (async () => {
+        const validVipUserIds =
+          await getAllValidVIPUserIds()
+        const adminUserIds =
+          (process.env.ADMIN_USER_IDS ?? '')
+            .split(',')
+            .map(userId => userId.trim())
+            .filter(Boolean)
+
+        return new Set([
+          ...validVipUserIds,
+          ...adminUserIds,
+        ]).has(principal.userId)
+      })(),
+      (async () => {
+        const tokens = await getUserPushTokens(
+          principal.userId,
+        )
+
+        return tokens.length
+      })(),
+    ])
+
+    if (
+      institutionalFanoutTargetResult.status ===
+      'fulfilled'
+    ) {
+      institutionalFanoutTarget =
+        institutionalFanoutTargetResult.value
+    }
+
+    if (
+      principalTokenCountAfterClaimResult.status ===
+      'fulfilled'
+    ) {
+      principalTokenCountAfterClaim =
+        principalTokenCountAfterClaimResult.value
+    }
+
+    return NextResponse.json({
+      ok: true,
+      principalKind: principal.kind,
+      institutionalFanoutTarget,
+      principalTokenCountAfterClaim,
+      claimedTokenOwnedByPrincipal: true,
+    })
   } catch (err) {
     console.error('[API] registerPushToken error', err)
 

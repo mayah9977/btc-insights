@@ -92,6 +92,10 @@ export async function registerPushToken(): Promise<string | null> {
     )
 
     let serverOk: boolean | null = null
+    let principalKind: 'authenticated' | 'anonymous' | null = null
+    let institutionalFanoutTarget: boolean | null = null
+    let principalTokenCountAfterClaim: number | null = null
+    let claimedTokenOwnedByPrincipal: boolean | null = null
 
     try {
       const responseBody: unknown =
@@ -109,6 +113,107 @@ export async function registerPushToken(): Promise<string | null> {
           responseBody as { ok: boolean }
         ).ok
       }
+
+      if (
+        responseBody !== null &&
+        typeof responseBody === 'object'
+      ) {
+        if (
+          'principalKind' in responseBody &&
+          (
+            (responseBody as { principalKind?: unknown }).principalKind ===
+              'authenticated' ||
+            (responseBody as { principalKind?: unknown }).principalKind ===
+              'anonymous'
+          )
+        ) {
+          principalKind = (
+            responseBody as {
+              principalKind: 'authenticated' | 'anonymous'
+            }
+          ).principalKind
+        }
+
+        if (
+          'institutionalFanoutTarget' in responseBody &&
+          (
+            typeof (
+              responseBody as {
+                institutionalFanoutTarget?: unknown
+              }
+            ).institutionalFanoutTarget === 'boolean' ||
+            (
+              responseBody as {
+                institutionalFanoutTarget?: unknown
+              }
+            ).institutionalFanoutTarget === null
+          )
+        ) {
+          institutionalFanoutTarget = (
+            responseBody as {
+              institutionalFanoutTarget: boolean | null
+            }
+          ).institutionalFanoutTarget
+        }
+
+        if (
+          'principalTokenCountAfterClaim' in responseBody &&
+          (
+            (
+              typeof (
+                responseBody as {
+                  principalTokenCountAfterClaim?: unknown
+                }
+              ).principalTokenCountAfterClaim === 'number' &&
+              Number.isInteger(
+                (
+                  responseBody as {
+                    principalTokenCountAfterClaim: number
+                  }
+                ).principalTokenCountAfterClaim,
+              ) &&
+              (
+                responseBody as {
+                  principalTokenCountAfterClaim: number
+                }
+              ).principalTokenCountAfterClaim >= 0
+            ) ||
+            (
+              responseBody as {
+                principalTokenCountAfterClaim?: unknown
+              }
+            ).principalTokenCountAfterClaim === null
+          )
+        ) {
+          principalTokenCountAfterClaim = (
+            responseBody as {
+              principalTokenCountAfterClaim: number | null
+            }
+          ).principalTokenCountAfterClaim
+        }
+
+        if (
+          'claimedTokenOwnedByPrincipal' in responseBody &&
+          (
+            typeof (
+              responseBody as {
+                claimedTokenOwnedByPrincipal?: unknown
+              }
+            ).claimedTokenOwnedByPrincipal === 'boolean' ||
+            (
+              responseBody as {
+                claimedTokenOwnedByPrincipal?: unknown
+              }
+            ).claimedTokenOwnedByPrincipal === null
+          )
+        ) {
+          claimedTokenOwnedByPrincipal = (
+            responseBody as {
+              claimedTokenOwnedByPrincipal: boolean | null
+            }
+          ).claimedTokenOwnedByPrincipal
+        }
+      }
     } catch {
       // Diagnostic JSON parsing must not affect registration.
     }
@@ -121,6 +226,10 @@ export async function registerPushToken(): Promise<string | null> {
           responseStatus: response.status,
           responseOk: response.ok,
           serverOk,
+          principalKind,
+          institutionalFanoutTarget,
+          principalTokenCountAfterClaim,
+          claimedTokenOwnedByPrincipal,
         },
       )
     } catch {
