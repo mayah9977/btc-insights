@@ -1845,6 +1845,41 @@ export async function fanoutInstitutionalPatternReady({
               data: pushPayload.data,
             })
 
+          try {
+            console.log(
+              '[InstitutionalPattern][FCM_DIAGNOSTIC]',
+              {
+                confirmedCandleTs,
+                pattern:
+                  detectedPattern.type,
+                detailedStatus:
+                  fcmResult.status,
+                tokenCount:
+                  fcmResult.tokenCount,
+                successCount:
+                  fcmResult.successCount,
+                retryableFailureCount:
+                  fcmResult.retryableFailureCount,
+                finalFailureCount:
+                  fcmResult.finalFailureCount,
+                errorCodeCounts: {
+                  ...fcmResult.errorCodeCounts,
+                },
+                cleanupAttemptedCount:
+                  fcmResult.cleanup.attemptedCount,
+                cleanupDeletedCount:
+                  fcmResult.cleanup.deletedCount,
+                cleanupOwnerMismatchOrNotRemovedCount:
+                  fcmResult.cleanup
+                    .ownerMismatchOrNotRemovedCount,
+                cleanupFailedCount:
+                  fcmResult.cleanup.failedCount,
+              },
+            )
+          } catch {
+            // Diagnostics must not affect fanout.
+          }
+
           if (
             fcmResult.status ===
               'SUCCEEDED_ALL' ||

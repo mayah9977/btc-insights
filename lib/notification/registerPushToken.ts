@@ -66,6 +66,18 @@ export async function registerPushToken(): Promise<string | null> {
       return null
     }
 
+    try {
+      console.log(
+        '[PUSH_TOKEN_REGISTER_DIAGNOSTIC]',
+        {
+          requestAttempted: true,
+          responseStatus: null,
+          responseOk: null,
+          serverOk: null,
+        },
+      )
+    } catch {}
+
     const response = await fetch(
       '/api/notification/register-push-token',
       {
@@ -78,6 +90,42 @@ export async function registerPushToken(): Promise<string | null> {
         }),
       },
     )
+
+    let serverOk: boolean | null = null
+
+    try {
+      const responseBody: unknown =
+        await response.clone().json()
+
+      if (
+        responseBody !== null &&
+        typeof responseBody === 'object' &&
+        'ok' in responseBody &&
+        typeof (
+          responseBody as { ok?: unknown }
+        ).ok === 'boolean'
+      ) {
+        serverOk = (
+          responseBody as { ok: boolean }
+        ).ok
+      }
+    } catch {
+      // Diagnostic JSON parsing must not affect registration.
+    }
+
+    try {
+      console.log(
+        '[PUSH_TOKEN_REGISTER_DIAGNOSTIC]',
+        {
+          requestAttempted: true,
+          responseStatus: response.status,
+          responseOk: response.ok,
+          serverOk,
+        },
+      )
+    } catch {
+      // Diagnostic logging must not affect registration.
+    }
 
     if (!response.ok) {
       throw new Error(

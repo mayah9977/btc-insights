@@ -113,12 +113,9 @@ export async function sendPush({
 }: SendPushInput): Promise<{ ok: boolean }> {
   const tokens = await getUserPushTokens(userId);
 
-  // ✅ 토큰 확인 로그
-  console.log("[PUSH][START]", userId, tokens);
-
   // ❗ 토큰 없는 경우
   if (!tokens.length) {
-    console.warn("[PUSH] No tokens", userId);
+    console.warn("[PUSH] No tokens");
     return { ok: false };
   }
 
@@ -142,14 +139,12 @@ export async function sendPush({
     // ❌ 실패 토큰 제거
     res.responses.forEach((r, idx) => {
       if (!r.success) {
-        console.warn("[PUSH][FAIL TOKEN]", tokens[idx]);
         removeUserPushToken(userId, tokens[idx]);
       }
     });
 
     // ✅ 성공 로그
     console.log("[PUSH SENT]", {
-      userId,
       success: res.successCount,
       failure: res.failureCount,
     });

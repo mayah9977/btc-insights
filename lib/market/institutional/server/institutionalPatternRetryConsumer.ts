@@ -991,6 +991,42 @@ async function processFCMRetry(params: {
           payload.payload.data,
       })
 
+    try {
+      console.log(
+        '[InstitutionalPattern][FCM_RETRY_DIAGNOSTIC]',
+        {
+          confirmedCandleTs:
+            payload.confirmedCandleTs,
+          pattern:
+            payload.patternType,
+          detailedStatus:
+            result.status,
+          tokenCount:
+            result.tokenCount,
+          successCount:
+            result.successCount,
+          retryableFailureCount:
+            result.retryableFailureCount,
+          finalFailureCount:
+            result.finalFailureCount,
+          errorCodeCounts: {
+            ...result.errorCodeCounts,
+          },
+          cleanupAttemptedCount:
+            result.cleanup.attemptedCount,
+          cleanupDeletedCount:
+            result.cleanup.deletedCount,
+          cleanupOwnerMismatchOrNotRemovedCount:
+            result.cleanup
+              .ownerMismatchOrNotRemovedCount,
+          cleanupFailedCount:
+            result.cleanup.failedCount,
+        },
+      )
+    } catch {
+      // Diagnostics must not affect retry processing.
+    }
+
     if (
       result.status ===
         'SUCCEEDED_ALL' ||
