@@ -11,6 +11,7 @@ import type {
 } from '@/lib/market/institutional/institutionalLatestEvaluation'
 
 import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
+import { resolveAdminNotificationTargetUserIds } from '@/lib/auth/adminNotificationTargetResolver'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore.server'
 import { saveNotificationDetailed } from '@/lib/notification/repository'
 import { sendPushDetailedToUser } from '@/lib/push/pushSender'
@@ -167,15 +168,6 @@ const RETRY_DELAY_MS = 30_000
 
 const RETRY_PENDING_ZSET_KEY =
   'institutional-pattern:retry:pending'
-
-function getAdminUserIds(): string[] {
-  return (
-    process.env.ADMIN_USER_IDS ?? ''
-  )
-    .split(',')
-    .map(userId => userId.trim())
-    .filter(Boolean)
-}
 
 const COMPARE_AND_DELETE_SCRIPT = `
 if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -1326,13 +1318,13 @@ export async function fanoutInstitutionalPatternReady({
     const validVipUserIds =
       await getAllValidVIPUserIds()
 
-    const adminUserIds =
-      getAdminUserIds()
+    const adminTargetResolution =
+      await resolveAdminNotificationTargetUserIds()
 
     const userIds = [
       ...new Set([
         ...validVipUserIds,
-        ...adminUserIds,
+        ...adminTargetResolution.userIds,
       ]),
     ]
 

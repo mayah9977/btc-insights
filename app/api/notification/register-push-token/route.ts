@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { claimUserPushToken, getUserPushTokens } from '@/lib/push/pushStore'
 import { resolveNotificationPrincipal } from '@/lib/auth/notificationPrincipal'
+import { resolveAdminNotificationTargetUserIds } from '@/lib/auth/adminNotificationTargetResolver'
 import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
 
 /**
@@ -41,15 +42,12 @@ export async function POST(req: NextRequest) {
       (async () => {
         const validVipUserIds =
           await getAllValidVIPUserIds()
-        const adminUserIds =
-          (process.env.ADMIN_USER_IDS ?? '')
-            .split(',')
-            .map(userId => userId.trim())
-            .filter(Boolean)
+        const adminTargetResolution =
+          await resolveAdminNotificationTargetUserIds()
 
         return new Set([
           ...validVipUserIds,
-          ...adminUserIds,
+          ...adminTargetResolution.userIds,
         ]).has(principal.userId)
       })(),
       (async () => {
