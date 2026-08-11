@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       principalKind: principal.kind,
+      principalIsAdmin:
+        principal.kind === 'authenticated'
+          ? principal.isAdmin
+          : false,
       institutionalFanoutTarget,
       principalTokenCountAfterClaim,
       claimedTokenOwnedByPrincipal: true,

@@ -93,6 +93,7 @@ export async function registerPushToken(): Promise<string | null> {
 
     let serverOk: boolean | null = null
     let principalKind: 'authenticated' | 'anonymous' | null = null
+    let principalIsAdmin: boolean | null = null
     let institutionalFanoutTarget: boolean | null = null
     let principalTokenCountAfterClaim: number | null = null
     let claimedTokenOwnedByPrincipal: boolean | null = null
@@ -132,6 +133,17 @@ export async function registerPushToken(): Promise<string | null> {
               principalKind: 'authenticated' | 'anonymous'
             }
           ).principalKind
+        }
+
+        if (
+          'principalIsAdmin' in responseBody &&
+          typeof (
+            responseBody as { principalIsAdmin?: unknown }
+          ).principalIsAdmin === 'boolean'
+        ) {
+          principalIsAdmin = (
+            responseBody as { principalIsAdmin: boolean }
+          ).principalIsAdmin
         }
 
         if (
@@ -227,6 +239,7 @@ export async function registerPushToken(): Promise<string | null> {
           responseOk: response.ok,
           serverOk,
           principalKind,
+          principalIsAdmin,
           institutionalFanoutTarget,
           principalTokenCountAfterClaim,
           claimedTokenOwnedByPrincipal,
