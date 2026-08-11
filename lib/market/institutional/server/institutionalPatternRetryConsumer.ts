@@ -7,6 +7,7 @@ import { getAllValidVIPUserIds } from '@/lib/vip/vipDB'
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore.server'
 import { saveNotificationDetailed } from '@/lib/notification/repository'
 import { sendPushDetailedToUser } from '@/lib/push/pushSender'
+import { isPushDeliveryDisabled } from '@/lib/push/pushDeliveryPolicy'
 
 export type ProcessInstitutionalPatternRetryBatchInput = {
   now?: number
@@ -1029,6 +1030,13 @@ async function processFCMRetry(params: {
 
     if (
       result.status ===
+      'SKIPPED_DELIVERY_DISABLED'
+    ) {
+      return 'SKIPPED' as const
+    }
+
+    if (
+      result.status ===
         'SUCCEEDED_ALL' ||
       result.status ===
         'SUCCEEDED_PARTIAL'
@@ -1113,14 +1121,14 @@ async function processFCMRetry(params: {
 
 async function processClaimedRetry(params: {
   deliveryId: string
-  validVIPUserIds: Set<string>
+  getValidVIPUserIds: () => Promise<Set<string>>
   now: number
   claimKey: string
   claimToken: string
 }) {
   const {
     deliveryId,
-    validVIPUserIds,
+    getValidVIPUserIds,
     now,
     claimKey,
     claimToken,
@@ -1294,6 +1302,18 @@ async function processClaimedRetry(params: {
 
   const payload =
     validation.payload
+
+  if (
+    payload.channel === 'FCM' &&
+    isPushDeliveryDisabled()
+  ) {
+    return {
+      status: 'SKIPPED' as const,
+    }
+  }
+
+  const validVIPUserIds =
+    await getValidVIPUserIds()
 
   if (
     !validVIPUserIds.has(
@@ -1478,10 +1498,21 @@ export async function processInstitutionalPatternRetryBatch(
       invalid: 0,
     }
 
-  const validVIPUserIds =
-    new Set(
-      await getAllValidVIPUserIds(),
-    )
+  let validVIPUserIdsPromise:
+    Promise<Set<string>> | null =
+    null
+
+  const getValidVIPUserIds =
+    (): Promise<Set<string>> => {
+      if (validVIPUserIdsPromise === null) {
+        validVIPUserIdsPromise =
+          getAllValidVIPUserIds().then(
+            userIds => new Set(userIds),
+          )
+      }
+
+      return validVIPUserIdsPromise
+    }
 
   const dueDeliveryIds =
     await redis.zrangebyscore(
@@ -1527,7 +1558,7 @@ export async function processInstitutionalPatternRetryBatch(
       const itemResult =
         await processClaimedRetry({
           deliveryId,
-          validVIPUserIds,
+          getValidVIPUserIds,
           now,
           claimKey,
           claimToken,
@@ -1548,6 +1579,11 @@ export async function processInstitutionalPatternRetryBatch(
         'FINALIZED'
       ) {
         result.finalized += 1
+      } else if (
+        itemResult.status ===
+        'SKIPPED'
+      ) {
+        // Policy-disabled FCM retry remains pending.
       } else {
         result.invalid += 1
       }
@@ -1561,3 +1597,4 @@ export async function processInstitutionalPatternRetryBatch(
 
   return result
 }
+

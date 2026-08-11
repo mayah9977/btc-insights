@@ -5,6 +5,7 @@ import {
   removeClaimedUserPushToken,
   removeUserPushToken,
 } from "./pushStore";
+import { isPushDeliveryDisabled } from "@/lib/push/pushDeliveryPolicy";
 
 export type SendPushInput = {
   userId: string;
@@ -41,7 +42,26 @@ type PushDetailedCounts = {
   cleanup: PushCleanupResult;
 };
 
+export type SendPushResult =
+  | {
+      ok: false;
+      status: "SKIPPED_DELIVERY_DISABLED";
+    }
+  | {
+      ok: boolean;
+      status?: never;
+    };
+
 export type SendPushDetailedResult =
+  | {
+      status: "SKIPPED_DELIVERY_DISABLED";
+      tokenCount: null;
+      successCount: 0;
+      retryableFailureCount: 0;
+      finalFailureCount: 0;
+      errorCodeCounts: Record<string, number>;
+      cleanup: PushCleanupResult;
+    }
   | {
       status: "FAILED_TOKEN_LOOKUP";
       userId: string;
@@ -110,7 +130,14 @@ export async function sendPush({
   title,
   body,
   data,
-}: SendPushInput): Promise<{ ok: boolean }> {
+}: SendPushInput): Promise<SendPushResult> {
+  if (isPushDeliveryDisabled()) {
+    return {
+      ok: false,
+      status: "SKIPPED_DELIVERY_DISABLED",
+    };
+  }
+
   const tokens = await getUserPushTokens(userId);
 
   // ❗ 토큰 없는 경우
@@ -162,6 +189,18 @@ export async function sendPushDetailedToUser({
   body,
   data,
 }: SendPushDetailedInput): Promise<SendPushDetailedResult> {
+  if (isPushDeliveryDisabled()) {
+    return {
+      status: "SKIPPED_DELIVERY_DISABLED",
+      tokenCount: null,
+      successCount: 0,
+      retryableFailureCount: 0,
+      finalFailureCount: 0,
+      errorCodeCounts: {},
+      cleanup: createEmptyCleanupResult(),
+    };
+  }
+
   let tokens: string[];
 
   try {

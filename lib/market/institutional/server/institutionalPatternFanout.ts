@@ -15,6 +15,7 @@ import { resolveAdminNotificationTargetUserIds } from '@/lib/auth/adminNotificat
 import { getUserNotificationSettings } from '@/lib/notification/settingsStore.server'
 import { saveNotificationDetailed } from '@/lib/notification/repository'
 import { sendPushDetailedToUser } from '@/lib/push/pushSender'
+import { isPushDeliveryDisabled } from '@/lib/push/pushDeliveryPolicy'
 import { redis } from '@/lib/redis'
 
 import {
@@ -156,6 +157,10 @@ export type InstitutionalPatternFanoutResult =
     }
   | {
       status: 'RESERVATION_BUSY'
+      eventId: string
+    }
+  | {
+      status: 'SKIPPED_DELIVERY_DISABLED'
       eventId: string
     }
 
@@ -784,6 +789,13 @@ export async function fanoutInstitutionalPatternReady({
 
   const eventId =
     `${symbol}:${detectedPattern.type}:${confirmedCandleTs}`
+
+  if (isPushDeliveryDisabled()) {
+    return {
+      status: 'SKIPPED_DELIVERY_DISABLED',
+      eventId,
+    }
+  }
 
   const leaseKey =
     getLeaseKey(
@@ -1891,6 +1903,12 @@ export async function fanoutInstitutionalPatternReady({
 
             deliveryCounts.SUCCEEDED += 1
             fcmSucceededDurably = true
+          } else if (
+            fcmResult.status ===
+            'SKIPPED_DELIVERY_DISABLED'
+          ) {
+            // Delivery was intentionally blocked by local policy.
+            // No persistence, retry, delivery count, or durable-attempt change.
           } else if (
             fcmResult.status ===
             'SKIPPED_NO_TOKEN'

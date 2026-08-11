@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { adminMessaging } from '@/lib/firebase-admin'
+import { isPushDeliveryDisabled } from '@/lib/push/pushDeliveryPolicy'
 
 /**
  * POST /api/push/send
@@ -17,6 +18,13 @@ export async function POST(req: Request) {
   if (process.env.NODE_ENV === 'production') {
     return new NextResponse(null, {
       status: 404,
+    })
+  }
+
+  if (isPushDeliveryDisabled()) {
+    return NextResponse.json({
+      ok: false,
+      status: 'SKIPPED_DELIVERY_DISABLED',
     })
   }
 

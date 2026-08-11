@@ -1,3 +1,5 @@
+//lib/push/sendWebPush.ts  
+
 import { sendPush } from '@/lib/push/pushSender'
 
 export type WebPushPayload = {
@@ -13,9 +15,14 @@ export type WebPushPayload = {
 export async function sendWebPush(payload: WebPushPayload) {
   const result = await sendPush(payload)
 
+  if (result.status === 'SKIPPED_DELIVERY_DISABLED') {
+    return
+  }
+
   if (!result.ok) {
     throw new Error('PUSH_SEND_FAILED')
   }
 
   return true
 }
+
