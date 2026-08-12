@@ -19,7 +19,6 @@ export async function POST() {
     ts: Date.now(),
   } as const // 🔥 핵심 (반드시 필요)
 
-  console.log('[TEST][E2E] payload', payload)
 
   // 1. Redis publish (UI 테스트)
   await redis.publish('realtime:alerts', JSON.stringify(payload))
@@ -27,7 +26,7 @@ export async function POST() {
   // 2. 모든 유저 push
   const userIds = await getAllUserIds()
 
-  console.log('[TEST][E2E] users', userIds)
+  console.log('[TEST][E2E] userCount', userIds.length)
 
   if (userIds.length) {
     await Promise.all(
@@ -46,7 +45,6 @@ export async function POST() {
 
   return NextResponse.json({
     ok: true,
-    payload,
-    users: userIds,
+    userCount: userIds.length,
   })
 }

@@ -1,7 +1,6 @@
 //app/api/push/send/route.ts
 
 import { NextResponse } from 'next/server'
-import { adminMessaging } from '@/lib/firebase-admin'
 import { isPushDeliveryDisabled } from '@/lib/push/pushDeliveryPolicy'
 
 /**
@@ -60,16 +59,16 @@ export async function POST(req: Request) {
       },
     }
 
-    const res = await adminMessaging.send(message)
+    const { adminMessaging } = await import('@/lib/firebase-admin')
+    await adminMessaging.send(message)
 
     return NextResponse.json({
       ok: true,
-      messageId: res,
     })
-  } catch (e: any) {
-    console.error('[FCM SEND ERROR]', e)
+  } catch {
+    console.error('[FCM SEND ERROR]')
     return NextResponse.json(
-      { ok: false, error: e?.message ?? 'UNKNOWN_ERROR' },
+      { ok: false, error: 'FCM_SEND_FAILED' },
       { status: 500 }
     )
   }

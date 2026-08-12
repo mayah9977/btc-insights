@@ -178,7 +178,7 @@ export async function sendPush({
 
     return { ok: res.successCount > 0 };
   } catch (err) {
-    console.error("[PUSH ERROR]", err);
+    console.error("[PUSH ERROR]");
     return { ok: false };
   }
 }
