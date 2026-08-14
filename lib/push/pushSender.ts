@@ -151,9 +151,14 @@ export async function sendPush({
     data: {
       title,
       body,
-      ...(data ?? {}),
       clickUrl: "/ko/alerts",
       requireInteraction: "true",
+      ...(data ?? {}),
+    },
+    webpush: {
+      headers: {
+        Urgency: "high",
+      },
     },
     tokens,
   };
@@ -238,9 +243,14 @@ export async function sendPushDetailedToUser({
     data: {
       title,
       body,
-      ...(data ?? {}),
       clickUrl: "/ko/alerts",
       requireInteraction: "true",
+      ...(data ?? {}),
+    },
+    webpush: {
+      headers: {
+        Urgency: "high",
+      },
     },
     tokens,
   };

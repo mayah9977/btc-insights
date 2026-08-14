@@ -87,13 +87,14 @@ self.addEventListener("push", (event) => {
         tag,
         renotify,
         requireInteraction,
+        vibrate: [200, 100, 200],
         data: {
           clickUrl,
           raw: d,
         },
         actions: [
-          { action: "open", title: d.actionOpenTitle || "Open" },
-          { action: "close", title: d.actionCloseTitle || "Close" },
+          { action: "open", title: d.actionOpenTitle || "열기" },
+          { action: "close", title: d.actionCloseTitle || "닫기" },
         ],
       };
 

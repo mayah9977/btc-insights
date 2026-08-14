@@ -1372,6 +1372,9 @@ export async function fanoutInstitutionalPatternReady({
             detectedPattern.summary,
           confirmedCandleTs:
             String(confirmedCandleTs),
+          tag: `institutional-${eventId}`,
+          renotify: "true",
+          clickUrl: "/ko/notifications",
         },
       }
 

@@ -42,6 +42,9 @@ export async function sendAlertNotification(
       symbol: alert.symbol,
       price: String(hitPrice),
       condition: alert.condition,
+      tag: `alert-${alert.id}`,
+      renotify: "true",
+      clickUrl: "/ko/alerts",
     },
   })
 }

@@ -198,6 +198,9 @@ export async function pushAlertTriggered(
       symbol,
       price: String(price),
       ts: String(ts),
+      tag: `alert-${alertId}`,
+      renotify: "true",
+      clickUrl: "/ko/alerts",
     },
   })
 }
@@ -291,6 +294,9 @@ export async function pushIndicatorTriggered(
       eventCandleTs: String(
         eventCandleTs ?? ts,
       ),
+      tag: `indicator-${symbol}-${indicator}-${normalizedTimeframe}-${eventCandleTs ?? ts}`,
+      renotify: "true",
+      clickUrl: "/ko/alerts",
       value: String(value),
       ts: String(ts),
     },
