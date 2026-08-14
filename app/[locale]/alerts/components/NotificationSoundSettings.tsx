@@ -22,6 +22,7 @@ import {
 import { getUserVIP } from '@/lib/auth/getUserVIP'
 
 import VIPUpgradeModal from './VIPUpgradeModal'
+import { useAlertsStore } from '../providers/alertsStore.zustand'
 
 const SOUND_OPTIONS: Array<{
   value: NotificationSound
@@ -166,10 +167,17 @@ export default function NotificationSoundSettings({
 }: {
   isVIP?: boolean
 } = {}) {
-  const [settings, setSettings] =
-    useState<NotificationSettings>(
-      defaultNotificationSettings,
-    )
+  const notificationSettings = useAlertsStore(
+    s => s.notificationSettings,
+  )
+
+  const setNotificationSettings = useAlertsStore(
+    s => s.setNotificationSettings,
+  )
+
+  const settings =
+    notificationSettings ??
+    defaultNotificationSettings
 
   const [
     settingsLoadState,
@@ -245,6 +253,11 @@ export default function NotificationSoundSettings({
       return
     }
 
+    if (notificationSettings) {
+      setSettingsLoadState('ready')
+      return
+    }
+
     let active = true
 
     setSettingsLoadState('loading')
@@ -258,7 +271,13 @@ export default function NotificationSoundSettings({
           return
         }
 
-        setSettings(current)
+        if (
+          !useAlertsStore.getState()
+            .notificationSettings
+        ) {
+          setNotificationSettings(current)
+        }
+
         setSettingsLoadState('ready')
       } catch (error) {
         if (!active) {
@@ -281,7 +300,12 @@ export default function NotificationSoundSettings({
     return () => {
       active = false
     }
-  }, [isVIP, vipResolved])
+  }, [
+    isVIP,
+    notificationSettings,
+    setNotificationSettings,
+    vipResolved,
+  ])
 
   const handleSettingsRequestError = (
     error: unknown,
@@ -294,8 +318,69 @@ export default function NotificationSoundSettings({
     setSettingsLoadState('unavailable')
   }
 
+  type SettingsPatch =
+    Parameters<
+      typeof saveNotificationSettings
+    >[0]
+
+  const mergeSettingsPatch = (
+    current: NotificationSettings,
+    patch: SettingsPatch,
+  ): NotificationSettings => {
+    const next = {
+      ...current,
+      ...patch,
+    } as NotificationSettings
+
+    if (patch.indicatorEnabled) {
+      next.indicatorEnabled = {
+        ...current.indicatorEnabled,
+      }
+
+      for (
+        const indicator of
+          ['RSI', 'MACD', 'EMA'] as const
+      ) {
+        const indicatorPatch =
+          patch.indicatorEnabled[
+            indicator
+          ]
+
+        if (
+          indicatorPatch === undefined
+        ) {
+          continue
+        }
+
+        if (
+          typeof indicatorPatch ===
+          'boolean'
+        ) {
+          next.indicatorEnabled[
+            indicator
+          ] = {
+            '15m': indicatorPatch,
+            '1h': indicatorPatch,
+          }
+          continue
+        }
+
+        next.indicatorEnabled[
+          indicator
+        ] = {
+          ...current.indicatorEnabled[
+            indicator
+          ],
+          ...indicatorPatch,
+        }
+      }
+    }
+
+    return next
+  }
+
   const updateSettings = async (
-    patch: Partial<NotificationSettings>,
+    patch: SettingsPatch,
   ) => {
     if (!settingsReady) {
       if (settingsLocked) {
@@ -305,17 +390,22 @@ export default function NotificationSoundSettings({
       return
     }
 
-    const next = {
-      ...settings,
-      ...patch,
-    }
-
     try {
       await saveNotificationSettings(
-        next,
+        patch,
       )
 
-      setSettings(next)
+      const latest =
+        useAlertsStore.getState()
+          .notificationSettings ??
+        settings
+
+      setNotificationSettings(
+        mergeSettingsPatch(
+          latest,
+          patch,
+        ),
+      )
     } catch (error) {
       handleSettingsRequestError(error)
     }
@@ -323,7 +413,7 @@ export default function NotificationSoundSettings({
 
   const updateVIPOnlySettings =
     async (
-      patch: Partial<NotificationSettings>,
+      patch: SettingsPatch,
     ) => {
       if (
         !isVIP ||
@@ -364,11 +454,7 @@ export default function NotificationSoundSettings({
 
       await updateSettings({
         indicatorEnabled: {
-          ...settings.indicatorEnabled,
           [indicator]: {
-            ...settings.indicatorEnabled[
-              indicator
-            ],
             [timeframe]: enabled,
           },
         },

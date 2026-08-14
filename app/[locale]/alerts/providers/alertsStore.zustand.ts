@@ -29,17 +29,6 @@ type AlertsState = {
   orderedIds: string[]
   indicatorSignals: IndicatorEvent[]
 
-  indicatorEnabled: {
-    RSI: boolean
-    MACD: boolean
-    EMA: boolean
-  }
-  setIndicatorEnabled: (v: {
-    RSI: boolean
-    MACD: boolean
-    EMA: boolean
-  }) => void
-
   notificationSettings?: NotificationSettings
   setNotificationSettings: (s: NotificationSettings) => void
 
@@ -90,13 +79,6 @@ export const useAlertsStore = create<AlertsState>()(
       alertsById: {},
       orderedIds: [],
       indicatorSignals: [],
-      indicatorEnabled: {
-        RSI: true,
-        MACD: true,
-        EMA: true,
-      },
-
-      setIndicatorEnabled: v => set({ indicatorEnabled: v }),
 
       notificationSettings: undefined,
 
@@ -110,16 +92,6 @@ export const useAlertsStore = create<AlertsState>()(
           .filter(Boolean),
 
       bootstrap: async () => {
-        try {
-          const resSettings = await fetch('/api/alerts/indicator-settings', {
-            cache: 'no-store',
-          })
-          const jsonSettings = await resSettings.json()
-          if (jsonSettings?.data) {
-            set({ indicatorEnabled: jsonSettings.data })
-          }
-        } catch {}
-
         const res = await fetch('/api/alerts', { cache: 'no-store' })
         const json = await res.json()
         if (!Array.isArray(json?.alerts)) return

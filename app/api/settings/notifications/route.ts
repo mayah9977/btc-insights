@@ -6,6 +6,7 @@ import {
 } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/getCurrentUser'
+import { isVIP } from '@/lib/vip/vipServer'
 
 import {
   getUserNotificationSettings,
@@ -23,6 +24,11 @@ const ALLOWED_FIELDS = new Set([
   'soundEnabled',
   'vibrationEnabled',
   'soundType',
+  'indicatorEnabled',
+  'institutionalPatternEnabled',
+])
+
+const VIP_ONLY_FIELDS = new Set([
   'indicatorEnabled',
   'institutionalPatternEnabled',
 ])
@@ -74,6 +80,14 @@ function hasOnlyAllowedKeys(
 ): boolean {
   return Object.keys(value).every(
     key => allowedKeys.has(key),
+  )
+}
+
+function hasVIPOnlyField(
+  value: JsonObject,
+): boolean {
+  return Object.keys(value).some(
+    key => VIP_ONLY_FIELDS.has(key),
   )
 }
 
@@ -486,6 +500,21 @@ export async function POST(
       },
       { status: 400 },
     )
+  }
+
+  if (hasVIPOnlyField(body)) {
+    const vipActive =
+      await isVIP(user.id)
+
+    if (!vipActive) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'VIP_REQUIRED',
+        },
+        { status: 403 },
+      )
+    }
   }
 
   const patch = buildSettingsPatch(body)
