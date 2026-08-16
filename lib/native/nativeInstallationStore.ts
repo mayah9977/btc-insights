@@ -170,6 +170,21 @@ function safeEqualHex(leftHex: string, rightHex: string): boolean {
   return timingSafeEqual(left, right)
 }
 
+export type NativeInstallationCredentialVerificationInput = {
+  installationKey: string
+  credentialHash: string
+}
+
+export function getNativeInstallationCredentialVerificationInput(
+  installationId: string,
+  installationCredential: string,
+): NativeInstallationCredentialVerificationInput {
+  return {
+    installationKey: installationKey(installationId),
+    credentialHash: sha256Hex(installationCredential),
+  }
+}
+
 export type CreateInstallationResult =
   | { status: 'CREATED'; credential: string }
   | { status: 'EXISTS' }
