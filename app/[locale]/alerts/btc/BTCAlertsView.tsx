@@ -13,6 +13,7 @@ import AlertCreateModal from '../components/AlertCreateModal'
 import AlertEditModal from '../components/AlertEditModal'
 import NotificationSoundSettings from '../components/NotificationSoundSettings'
 import NotificationStopButton from '../components/NotificationStopButton'
+import NativeHandoffButton from '../components/NativeHandoffButton'
 import VIPUpgradeModal from '../components/VIPUpgradeModal' // ✅ added
 
 import IndicatorCards from './IndicatorCards'
@@ -155,6 +156,8 @@ export default function BTCAlertsView() {
           <NotificationStopButton />
         </div>
       </div>
+
+      <NativeHandoffButton />
 
       <div className="relative z-10 mx-auto mt-10 w-full max-w-[420px] px-4 sm:max-w-5xl">
         <HeroMobile
