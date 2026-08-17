@@ -3,8 +3,13 @@
 import {
   getUserPushTokens,
   removeClaimedUserPushToken,
-  removeUserPushToken,
 } from "./pushStore";
+import {
+  getNativeInstallationFcmToken,
+  getNativeOwnerInstallationCandidates,
+  removeInvalidNativeFcmToken,
+  resolveNativeOwnerLookupForUserId,
+} from "@/lib/native/nativeInstallationStore";
 import { isPushDeliveryDisabled } from "@/lib/push/pushDeliveryPolicy";
 
 export type SendPushInput = {
@@ -120,34 +125,137 @@ const FINAL_PUSH_ERROR_CODES = new Set<string>([
   "messaging/invalid-registration-token",
 ]);
 
-/**
- * ALERT_TRIGGERED → FCM Push
- * - Toast 이후 Secondary UX
- * - 실패해도 시스템 흐름에 영향 없음
- */
-export async function sendPush({
-  userId,
-  title,
-  body,
-  data,
-}: SendPushInput): Promise<SendPushResult> {
-  if (isPushDeliveryDisabled()) {
+const MAX_MULTICAST_TOKENS = 500;
+
+const NATIVE_LOOKUP_ERROR_MESSAGE =
+  "NATIVE_RECIPIENT_LOOKUP_FAILED";
+const NATIVE_CLEANUP_ERROR_MESSAGE =
+  "NATIVE_PUSH_TOKEN_CLEANUP_FAILED";
+
+type WebPushRecipient = {
+  transport: "WEB";
+  token: string;
+};
+
+type NativePushRecipient = {
+  transport: "NATIVE";
+  installationId: string;
+  token: string;
+};
+
+type PushRecipient =
+  | WebPushRecipient
+  | NativePushRecipient;
+
+type NativeRecipientLookupResult =
+  | {
+      status: "OK";
+      recipients: NativePushRecipient[];
+    }
+  | {
+      status: "FAILED";
+      recipients: [];
+      error: Error;
+    };
+
+function createNativeLookupError(): Error {
+  return new Error(NATIVE_LOOKUP_ERROR_MESSAGE);
+}
+
+async function lookupNativeRecipients(
+  userId: string,
+): Promise<NativeRecipientLookupResult> {
+  try {
+    const ownerResolution =
+      await resolveNativeOwnerLookupForUserId(userId);
+
+    if (ownerResolution.status !== "RESOLVED") {
+      return {
+        status: "FAILED",
+        recipients: [],
+        error: createNativeLookupError(),
+      };
+    }
+
+    const ownerLookup =
+      await getNativeOwnerInstallationCandidates(
+        ownerResolution.owner,
+      );
+
+    if (ownerLookup.status !== "OK") {
+      return {
+        status: "FAILED",
+        recipients: [],
+        error: createNativeLookupError(),
+      };
+    }
+
+    const recipients: NativePushRecipient[] = [];
+
+    for (const installation of ownerLookup.installations) {
+      const token =
+        await getNativeInstallationFcmToken(
+          installation.installationId,
+        );
+
+      if (!token) {
+        continue;
+      }
+
+      recipients.push({
+        transport: "NATIVE",
+        installationId:
+          installation.installationId,
+        token,
+      });
+    }
+
     return {
-      ok: false,
-      status: "SKIPPED_DELIVERY_DISABLED",
+      status: "OK",
+      recipients,
+    };
+  } catch {
+    return {
+      status: "FAILED",
+      recipients: [],
+      error: createNativeLookupError(),
     };
   }
+}
 
-  const tokens = await getUserPushTokens(userId);
+function combineRecipients(
+  webTokens: string[],
+  nativeRecipients: NativePushRecipient[],
+): PushRecipient[] {
+  const byToken = new Map<string, PushRecipient>();
 
-  // ❗ 토큰 없는 경우
-  if (!tokens.length) {
-    console.warn("[PUSH] No tokens");
-    return { ok: false };
+  // Existing Web ownership wins exact-token collisions so
+  // permanent-invalid cleanup keeps the previous Web contract.
+  for (const token of webTokens) {
+    if (!byToken.has(token)) {
+      byToken.set(token, {
+        transport: "WEB",
+        token,
+      });
+    }
   }
 
-  // ✅ data-only FCM (foreground / background 공통)
-  const message = {
+  for (const recipient of nativeRecipients) {
+    if (!byToken.has(recipient.token)) {
+      byToken.set(recipient.token, recipient);
+    }
+  }
+
+  return [...byToken.values()];
+}
+
+function createMulticastMessage(
+  recipients: PushRecipient[],
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+) {
+  return {
     data: {
       title,
       body,
@@ -160,32 +268,94 @@ export async function sendPush({
         Urgency: "high",
       },
     },
-    tokens,
+    tokens: recipients.map(
+      recipient => recipient.token,
+    ),
   };
+}
+
+async function cleanupPermanentInvalidRecipient(
+  userId: string,
+  recipient: PushRecipient,
+  cleanup: PushCleanupResult,
+): Promise<void> {
+  cleanup.attemptedCount += 1;
 
   try {
-    const { adminMessaging } = await import("@/lib/firebase-admin");
+    if (recipient.transport === "WEB") {
+      const removed =
+        await removeClaimedUserPushToken(
+          userId,
+          recipient.token,
+        );
 
-    const res = await adminMessaging.sendEachForMulticast(message);
-
-    // ❌ 실패 토큰 제거
-    res.responses.forEach((r, idx) => {
-      if (!r.success) {
-        removeUserPushToken(userId, tokens[idx]);
+      if (removed) {
+        cleanup.deletedCount += 1;
+      } else {
+        cleanup.ownerMismatchOrNotRemovedCount += 1;
       }
-    });
 
-    // ✅ 성공 로그
-    console.log("[PUSH SENT]", {
-      success: res.successCount,
-      failure: res.failureCount,
-    });
+      return;
+    }
 
-    return { ok: res.successCount > 0 };
-  } catch (err) {
-    console.error("[PUSH ERROR]");
-    return { ok: false };
+    const result =
+      await removeInvalidNativeFcmToken(
+        recipient.installationId,
+        recipient.token,
+      );
+
+    if (result === "REMOVED") {
+      cleanup.deletedCount += 1;
+    } else {
+      cleanup.ownerMismatchOrNotRemovedCount += 1;
+    }
+  } catch (error: unknown) {
+    cleanup.failedCount += 1;
+
+    cleanup.errors.push({
+      error:
+        recipient.transport === "NATIVE"
+          ? new Error(NATIVE_CLEANUP_ERROR_MESSAGE)
+          : error,
+    });
   }
+}
+
+/**
+ * ALERT_TRIGGERED → FCM Push
+ * - Toast 이후 Secondary UX
+ * - 실패해도 시스템 흐름에 영향 없음
+ */
+export async function sendPush({
+  userId,
+  title,
+  body,
+  data,
+}: SendPushInput): Promise<SendPushResult> {
+  const result = await sendPushDetailedToUser({
+    userId,
+    title,
+    body,
+    data,
+  });
+
+  if (
+    result.status ===
+    "SKIPPED_DELIVERY_DISABLED"
+  ) {
+    return {
+      ok: false,
+      status: "SKIPPED_DELIVERY_DISABLED",
+    };
+  }
+
+  if (result.status === "SKIPPED_NO_TOKEN") {
+    console.warn("[PUSH] No tokens");
+  }
+
+  return {
+    ok: result.successCount > 0,
+  };
 }
 
 export async function sendPushDetailedToUser({
@@ -206,10 +376,10 @@ export async function sendPushDetailedToUser({
     };
   }
 
-  let tokens: string[];
+  let webTokens: string[];
 
   try {
-    tokens = await getUserPushTokens(userId);
+    webTokens = await getUserPushTokens(userId);
   } catch (error: unknown) {
     return {
       status: "FAILED_TOKEN_LOOKUP",
@@ -224,7 +394,36 @@ export async function sendPushDetailedToUser({
     };
   }
 
-  if (tokens.length === 0) {
+  const nativeLookup =
+    await lookupNativeRecipients(userId);
+  const nativeLookupFailed =
+    nativeLookup.status === "FAILED";
+
+  if (
+    nativeLookupFailed &&
+    webTokens.length === 0
+  ) {
+    return {
+      status: "FAILED_TOKEN_LOOKUP",
+      userId,
+      tokenCount: null,
+      successCount: 0,
+      retryableFailureCount: 0,
+      finalFailureCount: 0,
+      errorCodeCounts: {},
+      cleanup: createEmptyCleanupResult(),
+      error: nativeLookup.error,
+    };
+  }
+
+  const recipients = combineRecipients(
+    webTokens,
+    nativeLookup.status === "OK"
+      ? nativeLookup.recipients
+      : [],
+  );
+
+  if (recipients.length === 0) {
     return {
       status: "SKIPPED_NO_TOKEN",
       userId,
@@ -237,31 +436,26 @@ export async function sendPushDetailedToUser({
     };
   }
 
-  const tokenCount = tokens.length;
+  const tokenCount = recipients.length;
+  const cleanup = createEmptyCleanupResult();
 
-  const message = {
-    data: {
-      title,
-      body,
-      clickUrl: "/ko/alerts",
-      requireInteraction: "true",
-      ...(data ?? {}),
-    },
-    webpush: {
-      headers: {
-        Urgency: "high",
-      },
-    },
-    tokens,
-  };
+  let successCount = 0;
+  let retryableFailureCount = 0;
+  let finalFailureCount = 0;
+  let responseCount = 0;
+  let callFailureRecipientCount = 0;
+  let firstCallError: unknown = null;
 
-  let response;
+  const errorCodeCounts: Record<string, number> = {};
+  const finalFailureRecipients: PushRecipient[] = [];
+
+  let adminMessaging;
 
   try {
-    const { adminMessaging } = await import("@/lib/firebase-admin");
+    const firebaseAdmin =
+      await import("@/lib/firebase-admin");
 
-    response =
-      await adminMessaging.sendEachForMulticast(message);
+    adminMessaging = firebaseAdmin.adminMessaging;
   } catch (error: unknown) {
     return {
       status: "FAILED_CALL",
@@ -271,44 +465,100 @@ export async function sendPushDetailedToUser({
       retryableFailureCount: 0,
       finalFailureCount: 0,
       errorCodeCounts: {},
-      cleanup: createEmptyCleanupResult(),
+      cleanup,
       error,
     };
   }
 
-  let successCount = 0;
-  let retryableFailureCount = 0;
-  let finalFailureCount = 0;
+  for (
+    let start = 0;
+    start < recipients.length;
+    start += MAX_MULTICAST_TOKENS
+  ) {
+    const chunk = recipients.slice(
+      start,
+      start + MAX_MULTICAST_TOKENS,
+    );
 
-  const errorCodeCounts: Record<string, number> = {};
-  const finalFailureTokens: string[] = [];
+    try {
+      const response =
+        await adminMessaging.sendEachForMulticast(
+          createMulticastMessage(
+            chunk,
+            title,
+            body,
+            data,
+          ),
+        );
 
-  response.responses.forEach((tokenResponse, index) => {
-    if (tokenResponse.success) {
-      successCount += 1;
-      return;
-    }
+      response.responses.forEach(
+        (tokenResponse, index) => {
+          const recipient = chunk[index];
 
-    const errorCode =
-      tokenResponse.error?.code ?? "UNKNOWN";
+          if (!recipient) {
+            return;
+          }
 
-    errorCodeCounts[errorCode] =
-      (errorCodeCounts[errorCode] ?? 0) + 1;
+          responseCount += 1;
 
-    if (FINAL_PUSH_ERROR_CODES.has(errorCode)) {
-      finalFailureCount += 1;
+          if (tokenResponse.success) {
+            successCount += 1;
+            return;
+          }
 
-      const token = tokens[index];
+          const errorCode =
+            tokenResponse.error?.code ?? "UNKNOWN";
 
-      if (token !== undefined) {
-        finalFailureTokens.push(token);
+          errorCodeCounts[errorCode] =
+            (errorCodeCounts[errorCode] ?? 0) + 1;
+
+          if (
+            FINAL_PUSH_ERROR_CODES.has(errorCode)
+          ) {
+            finalFailureCount += 1;
+            finalFailureRecipients.push(recipient);
+            return;
+          }
+
+          retryableFailureCount += 1;
+        },
+      );
+    } catch (error: unknown) {
+      callFailureRecipientCount += chunk.length;
+      retryableFailureCount += chunk.length;
+
+      if (firstCallError === null) {
+        firstCallError = error;
       }
-
-      return;
     }
+  }
 
-    retryableFailureCount += 1;
-  });
+  for (const recipient of finalFailureRecipients) {
+    await cleanupPermanentInvalidRecipient(
+      userId,
+      recipient,
+      cleanup,
+    );
+  }
+
+  if (
+    responseCount === 0 &&
+    callFailureRecipientCount === tokenCount
+  ) {
+    return {
+      status: "FAILED_CALL",
+      userId,
+      tokenCount,
+      successCount,
+      retryableFailureCount,
+      finalFailureCount,
+      errorCodeCounts,
+      cleanup,
+      error:
+        firstCallError ??
+        new Error("PUSH_DELIVERY_CALL_FAILED"),
+    };
+  }
 
   let status:
     | "SUCCEEDED_ALL"
@@ -316,7 +566,23 @@ export async function sendPushDetailedToUser({
     | "FAILED_RETRYABLE"
     | "FAILED_FINAL";
 
-  if (successCount === tokenCount) {
+  if (nativeLookupFailed) {
+    if (
+      retryableFailureCount > 0 ||
+      callFailureRecipientCount > 0
+    ) {
+      status = "FAILED_RETRYABLE";
+    } else if (successCount > 0) {
+      status = "SUCCEEDED_PARTIAL";
+    } else {
+      status = "FAILED_RETRYABLE";
+    }
+  } else if (callFailureRecipientCount > 0) {
+    status =
+      successCount > 0
+        ? "SUCCEEDED_PARTIAL"
+        : "FAILED_RETRYABLE";
+  } else if (successCount === tokenCount) {
     status = "SUCCEEDED_ALL";
   } else if (successCount > 0) {
     status = "SUCCEEDED_PARTIAL";
@@ -326,32 +592,6 @@ export async function sendPushDetailedToUser({
     status = "FAILED_FINAL";
   } else {
     status = "FAILED_RETRYABLE";
-  }
-
-  const cleanup =
-    createEmptyCleanupResult();
-
-  for (const token of finalFailureTokens) {
-    cleanup.attemptedCount += 1;
-
-    try {
-      const removed =
-        await removeClaimedUserPushToken(
-          userId,
-          token,
-        );
-
-      if (removed) {
-        cleanup.deletedCount += 1;
-      } else {
-        cleanup.ownerMismatchOrNotRemovedCount += 1;
-      }
-    } catch (error: unknown) {
-      cleanup.failedCount += 1;
-      cleanup.errors.push({
-        error,
-      });
-    }
   }
 
   return {

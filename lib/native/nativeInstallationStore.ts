@@ -2,6 +2,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
+import { adminAuth } from '@/lib/firebase-admin'
 import { redis } from '@/lib/redis/index'
 
 const INSTALLATION_KEY_PREFIX = 'native:installation:'
@@ -669,6 +670,106 @@ export async function getNativeOwnerInstallationCandidates(
     status: 'OK',
     installations,
   }
+}
+
+
+const ANONYMOUS_OWNER_REF_PATTERN =
+  /^anon:[0-9a-f-]{36}$/i
+
+function isFirebaseUserNotFoundError(
+  error: unknown,
+): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code ===
+      'auth/user-not-found'
+  )
+}
+
+export type NativeOwnerResolutionResult =
+  | {
+      status: 'RESOLVED'
+      owner: NativeOwnerLookup
+    }
+  | {
+      status: 'LOOKUP_FAILED'
+    }
+
+export async function resolveNativeOwnerLookupForUserId(
+  userId: string,
+): Promise<NativeOwnerResolutionResult> {
+  if (!ANONYMOUS_OWNER_REF_PATTERN.test(userId)) {
+    return {
+      status: 'RESOLVED',
+      owner: {
+        kind: 'USER',
+        ref: userId,
+      },
+    }
+  }
+
+  try {
+    await adminAuth.getUser(userId)
+
+    return {
+      status: 'RESOLVED',
+      owner: {
+        kind: 'USER',
+        ref: userId,
+      },
+    }
+  } catch (error: unknown) {
+    if (!isFirebaseUserNotFoundError(error)) {
+      return {
+        status: 'LOOKUP_FAILED',
+      }
+    }
+  }
+
+  return {
+    status: 'RESOLVED',
+    owner: {
+      kind: 'ANONYMOUS_INSTALLATION',
+      ref: userId,
+    },
+  }
+}
+
+export async function getNativeInstallationFcmToken(
+  installationId: string,
+): Promise<string | null> {
+  const stored = await redis.hmget(
+    installationTokenKey(installationId),
+    'token',
+    'tokenHash',
+  )
+
+  const token = stored[0]
+  const tokenHash = stored[1]
+
+  if (!token && !tokenHash) {
+    return null
+  }
+
+  if (
+    !token ||
+    !tokenHash ||
+    sha256Hex(token) !== tokenHash
+  ) {
+    throw new Error('NATIVE_TOKEN_RECORD_INVALID')
+  }
+
+  const owner = await redis.get(
+    tokenOwnerKeyFromHash(tokenHash),
+  )
+
+  if (owner !== installationId) {
+    throw new Error('NATIVE_TOKEN_OWNER_INVALID')
+  }
+
+  return token
 }
 
 export type NativeRateLimitKind = 'register' | 'token'
