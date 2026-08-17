@@ -5,7 +5,6 @@
 import { useEffect, useRef, useState } from 'react'
 
 const HANDOFF_ENDPOINT = '/api/native/handoff'
-const ANDROID_REFERRER_PREFIX = 'android-app://com.thewhalesbtc.app'
 const REQUEST_TIMEOUT_MS = 10_000
 const LAUNCH_URL_LIFETIME_MS = 50_000
 
@@ -147,20 +146,7 @@ function isValidHandoffResponse(value: unknown): value is HandoffResponse {
 }
 
 function shouldShowHandoffUi(): boolean {
-  const isAndroid = /Android/i.test(navigator.userAgent)
-  if (!isAndroid) {
-    return false
-  }
-
-  const fromTrustedAndroidApp = document.referrer.startsWith(
-    ANDROID_REFERRER_PREFIX,
-  )
-
-  const standalone =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(display-mode: standalone)').matches
-
-  return fromTrustedAndroidApp || standalone
+  return /Android/i.test(navigator.userAgent)
 }
 
 export default function NativeHandoffButton() {
