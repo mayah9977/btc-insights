@@ -7,9 +7,15 @@ import { redis } from '@/lib/redis/index'
 const INSTALLATION_KEY_PREFIX = 'native:installation:'
 const INSTALLATION_TOKEN_KEY_PREFIX = 'native:installation-token:'
 const TOKEN_OWNER_KEY_PREFIX = 'native:token-owner:'
+const OWNER_USER_KEY_PREFIX = 'native:owner:user:'
+const OWNER_ANONYMOUS_KEY_PREFIX = 'native:owner:anonymous:'
+const SURFACE_KEY_PREFIX = 'native:web-surface:'
 const RATE_KEY_PREFIX = 'native:rate:'
 
-export const INSTALLATION_CREDENTIAL_TTL_SECONDS = 60 * 60 * 24 * 365
+export const INSTALLATION_CREDENTIAL_TTL_SECONDS =
+  60 * 60 * 24 * 365
+
+export const NATIVE_OWNER_DEVICE_CAP = 10
 
 export const REGISTER_RATE_LIMIT_WINDOW_SECONDS = 60
 export const REGISTER_RATE_LIMIT_MAX = 10
@@ -100,6 +106,127 @@ redis.call('EXPIRE', newTokenOwnerKey, ARGV[7])
 return 'UPDATED'
 `
 
+const REPAIR_OWNER_INDEXES_SCRIPT = `
+local installationKey = KEYS[1]
+local surfaceKey = KEYS[2]
+
+local installationId = ARGV[1]
+local nowMs = tonumber(ARGV[2])
+local newCredentialExpiresAt = tonumber(ARGV[3])
+local userPrefix = ARGV[4]
+local anonymousPrefix = ARGV[5]
+local expectedSurfaceRef = ARGV[6]
+
+local linkedAnonymousOwnerRef = redis.call(
+  'HGET',
+  installationKey,
+  'linkedAnonymousOwnerRef'
+)
+
+if linkedAnonymousOwnerRef then
+  local anonymousKey = anonymousPrefix .. linkedAnonymousOwnerRef
+  redis.call('ZREMRANGEBYSCORE', anonymousKey, '-inf', nowMs)
+  redis.call(
+    'ZADD',
+    anonymousKey,
+    newCredentialExpiresAt,
+    installationId
+  )
+end
+
+local activeOwnerKind = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerKind'
+)
+local activeOwnerRef = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerRef'
+)
+
+if activeOwnerKind ~= 'USER' or not activeOwnerRef then
+  return 'REPAIRED'
+end
+
+local userKey = userPrefix .. activeOwnerRef
+redis.call('ZREMRANGEBYSCORE', userKey, '-inf', nowMs)
+
+local boundSurfaceRef = redis.call(
+  'HGET',
+  installationKey,
+  'boundSurfaceRef'
+)
+local installationGeneration = redis.call(
+  'HGET',
+  installationKey,
+  'surfaceBindingGeneration'
+)
+local surfaceBindingExpiresAt = redis.call(
+  'HGET',
+  installationKey,
+  'surfaceBindingExpiresAt'
+)
+
+if
+  not boundSurfaceRef or
+  not installationGeneration or
+  not surfaceBindingExpiresAt or
+  boundSurfaceRef ~= expectedSurfaceRef or
+  tonumber(surfaceBindingExpiresAt) <= nowMs or
+  surfaceKey == ''
+then
+  redis.call('ZREM', userKey, installationId)
+  return 'REPAIRED'
+end
+
+local surfaceInstallationId = redis.call(
+  'HGET',
+  surfaceKey,
+  'boundInstallationId'
+)
+local surfaceGeneration = redis.call(
+  'HGET',
+  surfaceKey,
+  'bindingGeneration'
+)
+local surfaceExpiresAt = redis.call(
+  'HGET',
+  surfaceKey,
+  'expiresAt'
+)
+
+if
+  surfaceInstallationId ~= installationId or
+  surfaceGeneration ~= installationGeneration or
+  not surfaceExpiresAt or
+  tonumber(surfaceExpiresAt) <= nowMs
+then
+  redis.call('ZREM', userKey, installationId)
+  return 'REPAIRED'
+end
+
+local effectiveExpiry = math.min(
+  newCredentialExpiresAt,
+  tonumber(surfaceBindingExpiresAt),
+  tonumber(surfaceExpiresAt)
+)
+
+if effectiveExpiry <= nowMs then
+  redis.call('ZREM', userKey, installationId)
+  return 'REPAIRED'
+end
+
+redis.call(
+  'HSET',
+  installationKey,
+  'ownerAssociationExpiresAt', tostring(effectiveExpiry)
+)
+redis.call('ZADD', userKey, effectiveExpiry, installationId)
+
+return 'REPAIRED'
+`
+
 const REMOVE_INVALID_NATIVE_TOKEN_SCRIPT = `
 local installationTokenKey = KEYS[1]
 local tokenOwnerKey = KEYS[2]
@@ -136,23 +263,50 @@ end
 return current
 `
 
-function installationKey(installationId: string): string {
+function installationKey(
+  installationId: string,
+): string {
   return `${INSTALLATION_KEY_PREFIX}${installationId}`
 }
 
-function installationTokenKey(installationId: string): string {
+function installationTokenKey(
+  installationId: string,
+): string {
   return `${INSTALLATION_TOKEN_KEY_PREFIX}${installationId}`
 }
 
-function sha256Hex(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex')
+function nativeSurfaceKey(
+  surfaceRef: string,
+): string {
+  return `${SURFACE_KEY_PREFIX}${surfaceRef}`
 }
 
-function tokenOwnerKeyFromHash(tokenHash: string): string {
+function ownerUserKey(userId: string): string {
+  return `${OWNER_USER_KEY_PREFIX}${userId}`
+}
+
+function ownerAnonymousKey(
+  anonymousOwnerRef: string,
+): string {
+  return `${OWNER_ANONYMOUS_KEY_PREFIX}${anonymousOwnerRef}`
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256')
+    .update(value, 'utf8')
+    .digest('hex')
+}
+
+function tokenOwnerKeyFromHash(
+  tokenHash: string,
+): string {
   return `${TOKEN_OWNER_KEY_PREFIX}${tokenHash}`
 }
 
-function safeEqualHex(leftHex: string, rightHex: string): boolean {
+function safeEqualHex(
+  leftHex: string,
+  rightHex: string,
+): boolean {
   if (
     leftHex.length !== SHA256_HEX_LENGTH ||
     rightHex.length !== SHA256_HEX_LENGTH
@@ -192,10 +346,12 @@ export type CreateInstallationResult =
 export async function createInstallationCredential(
   installationId: string,
 ): Promise<CreateInstallationResult> {
-  const credential = randomBytes(CREDENTIAL_BYTES).toString('base64url')
+  const credential = randomBytes(CREDENTIAL_BYTES)
+    .toString('base64url')
   const credentialHash = sha256Hex(credential)
   const nowMs = Date.now()
-  const expiresAtMs = nowMs + INSTALLATION_CREDENTIAL_TTL_SECONDS * 1000
+  const expiresAtMs =
+    nowMs + INSTALLATION_CREDENTIAL_TTL_SECONDS * 1000
 
   const result = await redis.eval(
     CREATE_INSTALLATION_SCRIPT,
@@ -257,15 +413,23 @@ export async function replaceNativeFcmToken(
   installationCredential: string,
   token: string,
 ): Promise<ReplaceNativeTokenResult> {
-  const credentialHash = sha256Hex(installationCredential)
+  const credentialHash = sha256Hex(
+    installationCredential,
+  )
 
-  if (!(await verifyInstallationCredential(installationId, installationCredential))) {
+  if (
+    !(await verifyInstallationCredential(
+      installationId,
+      installationCredential,
+    ))
+  ) {
     return 'AUTH_FAILED'
   }
 
   const tokenHash = sha256Hex(token)
   const nowMs = Date.now()
-  const expiresAtMs = nowMs + INSTALLATION_CREDENTIAL_TTL_SECONDS * 1000
+  const expiresAtMs =
+    nowMs + INSTALLATION_CREDENTIAL_TTL_SECONDS * 1000
 
   const result = await redis.eval(
     REPLACE_NATIVE_TOKEN_SCRIPT,
@@ -284,15 +448,40 @@ export async function replaceNativeFcmToken(
   )
 
   if (
-    result === 'UPDATED' ||
-    result === 'IDEMPOTENT' ||
-    result === 'AUTH_FAILED' ||
-    result === 'TOKEN_CONFLICT'
+    result !== 'UPDATED' &&
+    result !== 'IDEMPOTENT' &&
+    result !== 'AUTH_FAILED' &&
+    result !== 'TOKEN_CONFLICT'
   ) {
-    return result
+    throw new Error('NATIVE_TOKEN_REPLACE_FAILED')
   }
 
-  throw new Error('NATIVE_TOKEN_REPLACE_FAILED')
+  if (result === 'UPDATED' || result === 'IDEMPOTENT') {
+    const binding = await redis.hmget(
+      installationKey(installationId),
+      'boundSurfaceRef',
+    )
+
+    const surfaceRef = binding[0] || ''
+    const repairResult = await redis.eval(
+      REPAIR_OWNER_INDEXES_SCRIPT,
+      2,
+      installationKey(installationId),
+      surfaceRef ? nativeSurfaceKey(surfaceRef) : '',
+      installationId,
+      String(nowMs),
+      String(expiresAtMs),
+      OWNER_USER_KEY_PREFIX,
+      OWNER_ANONYMOUS_KEY_PREFIX,
+      surfaceRef,
+    )
+
+    if (repairResult !== 'REPAIRED') {
+      throw new Error('NATIVE_OWNER_INDEX_REPAIR_FAILED')
+    }
+  }
+
+  return result
 }
 
 export type RemoveInvalidNativeTokenResult =
@@ -326,6 +515,160 @@ export async function removeInvalidNativeFcmToken(
   }
 
   throw new Error('NATIVE_TOKEN_REMOVE_FAILED')
+}
+
+export type NativeOwnerLookup =
+  | {
+      kind: 'USER'
+      ref: string
+    }
+  | {
+      kind: 'ANONYMOUS_INSTALLATION'
+      ref: string
+    }
+
+export type NativeOwnerInstallationCandidate = {
+  installationId: string
+  credentialExpiresAt: number
+  ownerAssociationExpiresAt: number
+}
+
+export type NativeOwnerLookupResult =
+  | {
+      status: 'OK'
+      installations: NativeOwnerInstallationCandidate[]
+    }
+  | {
+      status: 'OWNER_INDEX_OVERFLOW'
+      installations: []
+    }
+
+export async function getNativeOwnerInstallationCandidates(
+  owner: NativeOwnerLookup,
+): Promise<NativeOwnerLookupResult> {
+  const nowMs = Date.now()
+  const indexKey =
+    owner.kind === 'USER'
+      ? ownerUserKey(owner.ref)
+      : ownerAnonymousKey(owner.ref)
+
+  await redis.zremrangebyscore(
+    indexKey,
+    '-inf',
+    nowMs,
+  )
+
+  const count = Number(await redis.zcard(indexKey))
+  if (
+    !Number.isFinite(count) ||
+    count > NATIVE_OWNER_DEVICE_CAP
+  ) {
+    return {
+      status: 'OWNER_INDEX_OVERFLOW',
+      installations: [],
+    }
+  }
+
+  const installationIds = await redis.zrange(
+    indexKey,
+    0,
+    -1,
+  )
+
+  if (installationIds.length > NATIVE_OWNER_DEVICE_CAP) {
+    return {
+      status: 'OWNER_INDEX_OVERFLOW',
+      installations: [],
+    }
+  }
+
+  const installations: NativeOwnerInstallationCandidate[] = []
+
+  for (const installationId of installationIds) {
+    const fields = await redis.hmget(
+      installationKey(installationId),
+      'credentialExpiresAt',
+      'activeOwnerKind',
+      'activeOwnerRef',
+      'linkedAnonymousOwnerRef',
+      'ownerAssociationExpiresAt',
+      'boundSurfaceRef',
+      'surfaceBindingGeneration',
+      'surfaceBindingExpiresAt',
+    )
+
+    const credentialExpiresAt = Number(fields[0])
+    if (
+      !Number.isFinite(credentialExpiresAt) ||
+      credentialExpiresAt <= nowMs
+    ) {
+      continue
+    }
+
+    if (owner.kind === 'ANONYMOUS_INSTALLATION') {
+      if (fields[3] !== owner.ref) {
+        continue
+      }
+
+      installations.push({
+        installationId,
+        credentialExpiresAt,
+        ownerAssociationExpiresAt: credentialExpiresAt,
+      })
+      continue
+    }
+
+    if (
+      fields[1] !== 'USER' ||
+      fields[2] !== owner.ref
+    ) {
+      continue
+    }
+
+    const ownerAssociationExpiresAt = Number(fields[4])
+    const surfaceRef = fields[5]
+    const generation = fields[6]
+    const surfaceBindingExpiresAt = Number(fields[7])
+
+    if (
+      !Number.isFinite(ownerAssociationExpiresAt) ||
+      ownerAssociationExpiresAt <= nowMs ||
+      !surfaceRef ||
+      !generation ||
+      !Number.isFinite(surfaceBindingExpiresAt) ||
+      surfaceBindingExpiresAt <= nowMs
+    ) {
+      continue
+    }
+
+    const surfaceFields = await redis.hmget(
+      nativeSurfaceKey(surfaceRef),
+      'boundInstallationId',
+      'bindingGeneration',
+      'expiresAt',
+    )
+
+    const surfaceExpiresAt = Number(surfaceFields[2])
+    if (
+      surfaceFields[0] !== installationId ||
+      surfaceFields[1] !== generation ||
+      !Number.isFinite(surfaceExpiresAt) ||
+      surfaceExpiresAt <= nowMs
+    ) {
+      continue
+    }
+
+    installations.push({
+      installationId,
+      credentialExpiresAt,
+      ownerAssociationExpiresAt,
+    })
+  }
+
+  return {
+    status: 'OK',
+    installations,
+  }
 }
 
 export type NativeRateLimitKind = 'register' | 'token'

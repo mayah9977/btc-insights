@@ -15,6 +15,8 @@ export const NATIVE_SURFACE_RATE_LIMIT_MAX = 30
 
 const SURFACE_KEY_PREFIX = 'native:web-surface:'
 const SURFACE_RATE_KEY_PREFIX = 'native:web-surface-rate:'
+const INSTALLATION_KEY_PREFIX = 'native:installation:'
+const OWNER_USER_KEY_PREFIX = 'native:owner:user:'
 const SURFACE_CREDENTIAL_BYTES = 32
 const SURFACE_CREDENTIAL_LENGTH = 43
 const SURFACE_CREATE_ATTEMPTS = 3
@@ -40,10 +42,7 @@ return 'CREATED'
 
 const REFRESH_SURFACE_SCRIPT = `
 local surfaceKey = KEYS[1]
-
-if redis.call('EXISTS', surfaceKey) ~= 1 then
-  return 'NOT_FOUND'
-end
+local installationKey = KEYS[2]
 
 local createdAt = redis.call('HGET', surfaceKey, 'createdAt')
 local expiresAt = redis.call('HGET', surfaceKey, 'expiresAt')
@@ -64,6 +63,91 @@ redis.call(
   'expiresAt', ARGV[2]
 )
 redis.call('EXPIRE', surfaceKey, ARGV[3])
+
+local boundInstallationId = redis.call(
+  'HGET',
+  surfaceKey,
+  'boundInstallationId'
+)
+local bindingGeneration = redis.call(
+  'HGET',
+  surfaceKey,
+  'bindingGeneration'
+)
+
+if not boundInstallationId or not bindingGeneration then
+  return 'REFRESHED'
+end
+
+if installationKey == '' then
+  return 'REFRESHED'
+end
+
+local installationBoundSurfaceRef = redis.call(
+  'HGET',
+  installationKey,
+  'boundSurfaceRef'
+)
+local installationGeneration = redis.call(
+  'HGET',
+  installationKey,
+  'surfaceBindingGeneration'
+)
+
+if
+  installationBoundSurfaceRef ~= ARGV[4] or
+  installationGeneration ~= bindingGeneration
+then
+  return 'REFRESHED'
+end
+
+redis.call(
+  'HSET',
+  installationKey,
+  'surfaceBindingExpiresAt', ARGV[2],
+  'updatedAt', ARGV[1]
+)
+
+local activeOwnerKind = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerKind'
+)
+local activeOwnerRef = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerRef'
+)
+local credentialExpiresAt = redis.call(
+  'HGET',
+  installationKey,
+  'credentialExpiresAt'
+)
+
+if
+  activeOwnerKind == 'USER' and
+  activeOwnerRef and
+  credentialExpiresAt
+then
+  local effectiveExpiry = math.min(
+    tonumber(credentialExpiresAt),
+    tonumber(ARGV[2])
+  )
+
+  if effectiveExpiry > tonumber(ARGV[1]) then
+    redis.call(
+      'HSET',
+      installationKey,
+      'ownerAssociationExpiresAt', tostring(effectiveExpiry)
+    )
+    redis.call(
+      'ZADD',
+      ARGV[5] .. activeOwnerRef,
+      effectiveExpiry,
+      boundInstallationId
+    )
+  end
+end
 
 return 'REFRESHED'
 `
@@ -92,17 +176,29 @@ export type NativeSurfaceBootstrapResult =
     status: 'CREATED' | 'REFRESHED'
   }
 
+export type NativeValidatedSurface = NativeSurfaceBindingLease
+
 function sha256Hex(value: string): string {
   return createHash('sha256')
     .update(value, 'utf8')
     .digest('hex')
 }
 
-function surfaceKey(surfaceRef: string): string {
+export function nativeSurfaceKey(
+  surfaceRef: string,
+): string {
   return `${SURFACE_KEY_PREFIX}${surfaceRef}`
 }
 
-function isValidRawSurfaceCredential(value: string): boolean {
+function installationKey(
+  installationId: string,
+): string {
+  return `${INSTALLATION_KEY_PREFIX}${installationId}`
+}
+
+function isValidRawSurfaceCredential(
+  value: string,
+): boolean {
   if (
     value.length !== SURFACE_CREDENTIAL_LENGTH ||
     !/^[A-Za-z0-9_-]{43}$/.test(value)
@@ -140,6 +236,35 @@ export function resolveNativeUserAssociationExpiresAt({
   )
 }
 
+export async function getValidatedNativeSurface(
+  credential: string | null | undefined,
+): Promise<NativeValidatedSurface | null> {
+  if (!credential || !isValidRawSurfaceCredential(credential)) {
+    return null
+  }
+
+  const surfaceRef = sha256Hex(credential)
+  const stored = await redis.hmget(
+    nativeSurfaceKey(surfaceRef),
+    'createdAt',
+    'expiresAt',
+  )
+
+  if (!stored[0] || !stored[1]) {
+    return null
+  }
+
+  const expiresAt = Number(stored[1])
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return null
+  }
+
+  return {
+    surfaceRef,
+    surfaceBindingExpiresAt: expiresAt,
+  }
+}
+
 async function refreshExistingSurface(
   credential: string,
   nowMs: number,
@@ -149,15 +274,36 @@ async function refreshExistingSurface(
   }
 
   const surfaceRef = sha256Hex(credential)
+  const current = await redis.hmget(
+    nativeSurfaceKey(surfaceRef),
+    'expiresAt',
+    'boundInstallationId',
+  )
+
+  const currentExpiresAt = Number(current[0])
+  if (
+    !current[0] ||
+    !Number.isFinite(currentExpiresAt) ||
+    currentExpiresAt <= nowMs
+  ) {
+    return null
+  }
+
+  const boundInstallationId = current[1] || ''
   const expiresAt = getNextExpiry(nowMs)
 
   const result = await redis.eval(
     REFRESH_SURFACE_SCRIPT,
-    1,
-    surfaceKey(surfaceRef),
+    2,
+    nativeSurfaceKey(surfaceRef),
+    boundInstallationId
+      ? installationKey(boundInstallationId)
+      : '',
     String(nowMs),
     String(expiresAt),
     String(NATIVE_SURFACE_TTL_SECONDS),
+    surfaceRef,
+    OWNER_USER_KEY_PREFIX,
   )
 
   if (result === 'REFRESHED') {
@@ -170,7 +316,6 @@ async function refreshExistingSurface(
   }
 
   if (
-    result === 'NOT_FOUND' ||
     result === 'INVALID' ||
     result === 'EXPIRED'
   ) {
@@ -196,7 +341,7 @@ async function createNewSurface(
     const result = await redis.eval(
       CREATE_SURFACE_SCRIPT,
       1,
-      surfaceKey(surfaceRef),
+      nativeSurfaceKey(surfaceRef),
       String(nowMs),
       String(expiresAt),
       String(NATIVE_SURFACE_TTL_SECONDS),
