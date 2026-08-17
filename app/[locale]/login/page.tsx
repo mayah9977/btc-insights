@@ -145,8 +145,6 @@ export default function LoginPage() {
     try {
       const auth = getAuth()
 
-      await signOut(auth)
-
       const logoutRes = await fetch('/api/logout', {
         method: 'POST',
 
@@ -160,6 +158,8 @@ export default function LoginPage() {
         alert('로그아웃 실패')
         return
       }
+
+      await signOut(auth)
 
       sseManager.usePublicRealtime()
 

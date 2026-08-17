@@ -264,8 +264,6 @@ export default function VIPLoginPage() {
     try {
       const auth = getAuth()
 
-      await signOut(auth)
-
       const logoutRes = await fetch('/api/logout', {
         method: 'POST',
         credentials: 'include',
@@ -275,6 +273,8 @@ export default function VIPLoginPage() {
         setErr('로그아웃 실패')
         return
       }
+
+      await signOut(auth)
 
       sseManager.usePublicRealtime()
 
@@ -286,9 +286,7 @@ export default function VIPLoginPage() {
       setMessage('로그아웃 완료')
 
       router.refresh()
-    } catch (error) {
-      console.error('[VIP_LOGIN] logout failed', error)
-
+    } catch {
       setErr('로그아웃 실패')
     } finally {
       setLogoutLoading(false)

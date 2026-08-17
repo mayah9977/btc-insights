@@ -21,6 +21,8 @@ const SURFACE_CREDENTIAL_BYTES = 32
 const SURFACE_CREDENTIAL_LENGTH = 43
 const SURFACE_CREATE_ATTEMPTS = 3
 
+export const NATIVE_SURFACE_ROTATION_ATTEMPTS = 3
+
 const CREATE_SURFACE_SCRIPT = `
 local surfaceKey = KEYS[1]
 
@@ -43,6 +45,11 @@ return 'CREATED'
 const REFRESH_SURFACE_SCRIPT = `
 local surfaceKey = KEYS[1]
 local installationKey = KEYS[2]
+
+local revokedAt = redis.call('HGET', surfaceKey, 'revokedAt')
+if revokedAt then
+  return 'REVOKED'
+end
 
 local createdAt = redis.call('HGET', surfaceKey, 'createdAt')
 local expiresAt = redis.call('HGET', surfaceKey, 'expiresAt')
@@ -178,6 +185,11 @@ export type NativeSurfaceBootstrapResult =
 
 export type NativeValidatedSurface = NativeSurfaceBindingLease
 
+export type NativeSurfaceRotationCandidate =
+  NativeSurfaceBindingLease & {
+    credential: string
+  }
+
 function sha256Hex(value: string): string {
   return createHash('sha256')
     .update(value, 'utf8')
@@ -222,6 +234,19 @@ function createRawSurfaceCredential(): string {
     .toString('base64url')
 }
 
+export function getNativeSurfaceRefFromCredential(
+  credential: string | null | undefined,
+): string | null {
+  if (
+    !credential ||
+    !isValidRawSurfaceCredential(credential)
+  ) {
+    return null
+  }
+
+  return sha256Hex(credential)
+}
+
 function getNextExpiry(nowMs: number): number {
   return nowMs + NATIVE_SURFACE_TTL_SECONDS * 1000
 }
@@ -236,6 +261,18 @@ export function resolveNativeUserAssociationExpiresAt({
   )
 }
 
+export function createNativeSurfaceRotationCandidate(
+  nowMs = Date.now(),
+): NativeSurfaceRotationCandidate {
+  const credential = createRawSurfaceCredential()
+
+  return {
+    credential,
+    surfaceRef: sha256Hex(credential),
+    surfaceBindingExpiresAt: getNextExpiry(nowMs),
+  }
+}
+
 export async function getValidatedNativeSurface(
   credential: string | null | undefined,
 ): Promise<NativeValidatedSurface | null> {
@@ -248,9 +285,14 @@ export async function getValidatedNativeSurface(
     nativeSurfaceKey(surfaceRef),
     'createdAt',
     'expiresAt',
+    'revokedAt',
   )
 
-  if (!stored[0] || !stored[1]) {
+  if (
+    !stored[0] ||
+    !stored[1] ||
+    stored[2]
+  ) {
     return null
   }
 
@@ -278,11 +320,13 @@ async function refreshExistingSurface(
     nativeSurfaceKey(surfaceRef),
     'expiresAt',
     'boundInstallationId',
+    'revokedAt',
   )
 
   const currentExpiresAt = Number(current[0])
   if (
     !current[0] ||
+    current[2] ||
     !Number.isFinite(currentExpiresAt) ||
     currentExpiresAt <= nowMs
   ) {

@@ -545,6 +545,323 @@ end
 return 'LINKED_USER'
 `
 
+
+const LOGOUT_NATIVE_SURFACE_SCRIPT = `
+local sessionKey = KEYS[1]
+local oldSurfaceKey = KEYS[2]
+local newSurfaceKey = KEYS[3]
+local generationKey = KEYS[4]
+
+local nowMs = tonumber(ARGV[1])
+local oldSurfaceRef = ARGV[2]
+local newSurfaceRef = ARGV[3]
+local installationPrefix = ARGV[4]
+local userPrefix = ARGV[5]
+local anonymousPrefix = ARGV[6]
+local cap = tonumber(ARGV[7])
+local newSurfaceExpiresAt = tonumber(ARGV[8])
+local newSurfaceTtlMs = tonumber(ARGV[9])
+
+if
+  not nowMs or
+  not cap or
+  not newSurfaceExpiresAt or
+  newSurfaceExpiresAt <= nowMs or
+  not newSurfaceTtlMs or
+  newSurfaceTtlMs <= 0
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local oldBoundInstallationId = redis.call(
+  'HGET',
+  oldSurfaceKey,
+  'boundInstallationId'
+)
+local oldBindingGeneration = redis.call(
+  'HGET',
+  oldSurfaceKey,
+  'bindingGeneration'
+)
+local oldRevokedAt = redis.call(
+  'HGET',
+  oldSurfaceKey,
+  'revokedAt'
+)
+
+local hasInstallationBinding =
+  oldBoundInstallationId ~= false and
+  oldBoundInstallationId ~= nil
+local hasGenerationBinding =
+  oldBindingGeneration ~= false and
+  oldBindingGeneration ~= nil
+
+if not hasInstallationBinding and not hasGenerationBinding then
+  redis.call('DEL', sessionKey)
+  return 'LOGGED_OUT_UNBOUND'
+end
+
+if
+  not hasInstallationBinding or
+  not hasGenerationBinding or
+  oldRevokedAt
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local oldSurfaceTtlMs = redis.call(
+  'PTTL',
+  oldSurfaceKey
+)
+
+if not oldSurfaceTtlMs or oldSurfaceTtlMs <= 0 then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local oldSurfaceExpiresAt = tonumber(
+  redis.call(
+    'HGET',
+    oldSurfaceKey,
+    'expiresAt'
+  ) or ''
+)
+
+if
+  not oldSurfaceExpiresAt or
+  oldSurfaceExpiresAt <= nowMs
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local rawSession = redis.call(
+  'GET',
+  sessionKey
+)
+
+if not rawSession then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local sessionOk, sessionValue = pcall(
+  cjson.decode,
+  rawSession
+)
+
+if
+  not sessionOk or
+  type(sessionValue) ~= 'table' or
+  type(sessionValue.userId) ~= 'string' or
+  sessionValue.userId == ''
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local sessionUserId = sessionValue.userId
+
+if redis.call('EXISTS', newSurfaceKey) == 1 then
+  return 'NEW_SURFACE_CONFLICT'
+end
+
+local installationKey =
+  installationPrefix .. oldBoundInstallationId
+
+if redis.call('EXISTS', installationKey) ~= 1 then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local installationBoundSurfaceRef = redis.call(
+  'HGET',
+  installationKey,
+  'boundSurfaceRef'
+)
+local installationGeneration = redis.call(
+  'HGET',
+  installationKey,
+  'surfaceBindingGeneration'
+)
+
+if
+  installationBoundSurfaceRef ~= oldSurfaceRef or
+  installationGeneration ~= oldBindingGeneration
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local credentialHash = redis.call(
+  'HGET',
+  installationKey,
+  'credentialHash'
+)
+local credentialExpiresAt = tonumber(
+  redis.call(
+    'HGET',
+    installationKey,
+    'credentialExpiresAt'
+  ) or ''
+)
+local surfaceBindingExpiresAt = tonumber(
+  redis.call(
+    'HGET',
+    installationKey,
+    'surfaceBindingExpiresAt'
+  ) or ''
+)
+
+if
+  not credentialHash or
+  not credentialExpiresAt or
+  credentialExpiresAt <= nowMs or
+  not surfaceBindingExpiresAt or
+  surfaceBindingExpiresAt <= nowMs
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local activeOwnerKind = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerKind'
+)
+local activeOwnerRef = redis.call(
+  'HGET',
+  installationKey,
+  'activeOwnerRef'
+)
+
+if
+  activeOwnerKind ~= 'USER' or
+  activeOwnerRef ~= sessionUserId
+then
+  return 'BOUND_VERIFICATION_FAILED'
+end
+
+local linkedAnonymousOwnerRef = redis.call(
+  'HGET',
+  installationKey,
+  'linkedAnonymousOwnerRef'
+)
+
+if linkedAnonymousOwnerRef then
+  local anonymousOwnerKey =
+    anonymousPrefix .. linkedAnonymousOwnerRef
+
+  redis.call(
+    'ZREMRANGEBYSCORE',
+    anonymousOwnerKey,
+    '-inf',
+    nowMs
+  )
+
+  local existingAnonymousMember = redis.call(
+    'ZSCORE',
+    anonymousOwnerKey,
+    oldBoundInstallationId
+  )
+
+  if not existingAnonymousMember then
+    local anonymousCount = redis.call(
+      'ZCARD',
+      anonymousOwnerKey
+    )
+
+    if anonymousCount >= cap then
+      return 'OWNER_DEVICE_LIMIT_REACHED'
+    end
+  end
+end
+
+redis.call(
+  'ZREM',
+  userPrefix .. sessionUserId,
+  oldBoundInstallationId
+)
+
+if linkedAnonymousOwnerRef then
+  redis.call(
+    'ZADD',
+    anonymousPrefix .. linkedAnonymousOwnerRef,
+    credentialExpiresAt,
+    oldBoundInstallationId
+  )
+  redis.call(
+    'HSET',
+    installationKey,
+    'activeOwnerKind', 'ANONYMOUS_INSTALLATION',
+    'activeOwnerRef', linkedAnonymousOwnerRef,
+    'ownerAssociationExpiresAt', tostring(credentialExpiresAt),
+    'ownerLinkedAt', tostring(nowMs),
+    'updatedAt', tostring(nowMs)
+  )
+else
+  redis.call(
+    'HSET',
+    installationKey,
+    'activeOwnerKind', 'UNASSOCIATED',
+    'updatedAt', tostring(nowMs)
+  )
+  redis.call(
+    'HDEL',
+    installationKey,
+    'activeOwnerRef',
+    'ownerAssociationExpiresAt',
+    'ownerLinkedAt'
+  )
+end
+
+local newGeneration = redis.call(
+  'INCR',
+  generationKey
+)
+local newGenerationText =
+  tostring(newGeneration)
+
+redis.call(
+  'HSET',
+  newSurfaceKey,
+  'createdAt', tostring(nowMs),
+  'updatedAt', tostring(nowMs),
+  'expiresAt', tostring(newSurfaceExpiresAt),
+  'boundInstallationId', oldBoundInstallationId,
+  'bindingGeneration', newGenerationText
+)
+redis.call(
+  'PEXPIRE',
+  newSurfaceKey,
+  newSurfaceTtlMs
+)
+
+redis.call(
+  'HSET',
+  installationKey,
+  'boundSurfaceRef', newSurfaceRef,
+  'surfaceBindingGeneration', newGenerationText,
+  'surfaceBindingExpiresAt', tostring(newSurfaceExpiresAt),
+  'updatedAt', tostring(nowMs)
+)
+
+redis.call(
+  'HDEL',
+  oldSurfaceKey,
+  'boundInstallationId',
+  'bindingGeneration'
+)
+redis.call(
+  'HSET',
+  oldSurfaceKey,
+  'revokedAt', tostring(nowMs),
+  'updatedAt', tostring(nowMs)
+)
+redis.call(
+  'PEXPIRE',
+  oldSurfaceKey,
+  oldSurfaceTtlMs
+)
+
+redis.call('DEL', sessionKey)
+
+return 'LOGGED_OUT_ROTATED'
+`
+
 const RATE_LIMIT_SCRIPT = `
 local current = redis.call('INCR', KEYS[1])
 if current == 1 then
@@ -688,6 +1005,78 @@ export async function redeemNativeHandoff(
   }
 
   throw new Error('NATIVE_HANDOFF_REDEEM_FAILED')
+}
+
+
+export type NativeLogoutResult =
+  | 'LOGGED_OUT_UNBOUND'
+  | 'LOGGED_OUT_ROTATED'
+  | 'BOUND_VERIFICATION_FAILED'
+  | 'OWNER_DEVICE_LIMIT_REACHED'
+  | 'NEW_SURFACE_CONFLICT'
+
+export type NativeLogoutRotationInput = {
+  sessionId: string | null
+  oldSurfaceRef: string
+  newSurfaceRef: string
+  newSurfaceExpiresAt: number
+  newSurfaceTtlSeconds: number
+}
+
+function sessionKey(
+  sessionId: string | null,
+): string {
+  return `session:${sessionId ?? ''}`
+}
+
+export async function logoutWebSessionOnly(
+  sessionId: string | null,
+): Promise<'LOGGED_OUT_UNBOUND'> {
+  if (sessionId) {
+    await redis.del(sessionKey(sessionId))
+  }
+
+  return 'LOGGED_OUT_UNBOUND'
+}
+
+export async function logoutNativeSurfaceSession({
+  sessionId,
+  oldSurfaceRef,
+  newSurfaceRef,
+  newSurfaceExpiresAt,
+  newSurfaceTtlSeconds,
+}: NativeLogoutRotationInput): Promise<NativeLogoutResult> {
+  const nowMs = Date.now()
+
+  const result = await redis.eval(
+    LOGOUT_NATIVE_SURFACE_SCRIPT,
+    4,
+    sessionKey(sessionId),
+    surfaceKey(oldSurfaceRef),
+    surfaceKey(newSurfaceRef),
+    SURFACE_GENERATION_KEY,
+    String(nowMs),
+    oldSurfaceRef,
+    newSurfaceRef,
+    INSTALLATION_KEY_PREFIX,
+    OWNER_USER_KEY_PREFIX,
+    OWNER_ANONYMOUS_KEY_PREFIX,
+    String(NATIVE_OWNER_DEVICE_CAP),
+    String(newSurfaceExpiresAt),
+    String(newSurfaceTtlSeconds * 1000),
+  )
+
+  if (
+    result === 'LOGGED_OUT_UNBOUND' ||
+    result === 'LOGGED_OUT_ROTATED' ||
+    result === 'BOUND_VERIFICATION_FAILED' ||
+    result === 'OWNER_DEVICE_LIMIT_REACHED' ||
+    result === 'NEW_SURFACE_CONFLICT'
+  ) {
+    return result
+  }
+
+  throw new Error('NATIVE_LOGOUT_FAILED')
 }
 
 export type NativeHandoffRateLimitKind =
