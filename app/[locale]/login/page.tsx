@@ -1,4 +1,5 @@
 // app/[locale]/login/page.tsx
+
 'use client'
 
 import React, { useState } from 'react'
@@ -49,6 +50,15 @@ function mapFirebaseError(error: unknown): string {
   }
 }
 
+async function rollbackFirebaseLogin(): Promise<void> {
+  try {
+    const auth = getAuth()
+    await signOut(auth)
+  } catch {
+    return
+  }
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
@@ -71,43 +81,48 @@ export default function LoginPage() {
     try {
       const auth = getAuth()
 
-      /** 🔥 수정 이유:
-       * Firebase 로그인 성공 결과에서 uid를 가져와 Redis session userId로 저장
-       * 기존 email-only 구조에서는 /api/login에서 userId 누락 가능성이 있음
-       */
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        pw,
-      )
+      const userCredential =
+        await signInWithEmailAndPassword(
+          auth,
+          email,
+          pw,
+        )
 
       const firebaseUser = userCredential.user
-      const normalizedEmail =
-        firebaseUser.email?.trim().toLowerCase() ||
-        email.trim().toLowerCase()
+
+      let idToken: string
+      try {
+        idToken = await firebaseUser.getIdToken(true)
+      } catch {
+        await rollbackFirebaseLogin()
+        setErr('로그인 처리 중 오류가 발생했습니다.')
+        return
+      }
+
+      let loginRes: Response
+      try {
+        loginRes = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            idToken,
+          }),
+        })
+      } catch {
+        await rollbackFirebaseLogin()
+        setErr('로그인 처리 중 오류가 발생했습니다.')
+        return
+      }
 
       /** 🔥 수정 이유:
-       * Firebase uid + email을 /api/login으로 전달하여
-       * Redis session에 실제 Firebase user.uid가 저장되도록 함
-       */
-      const loginRes = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-
-        credentials: 'include',
-
-        body: JSON.stringify({
-          userId: firebaseUser.uid,
-          email: normalizedEmail,
-        }),
-      })
-
-      /** 🔥 수정 이유:
-       * /api/login 실패 시 잘못된 session 상태로 이동하지 않도록 차단
+       * /api/login 실패 시 Firebase client auth를 rollback하여
+       * server session과 client session의 불일치를 남기지 않음
        */
       if (!loginRes.ok) {
+        await rollbackFirebaseLogin()
         setErr('로그인 처리 중 오류가 발생했습니다.')
         return
       }
@@ -117,13 +132,8 @@ export default function LoginPage() {
       router.push('/ko/casino')
     } catch (error) {
       /** 🔥 수정 이유:
-       * console.error 금지 (overlay 원인)
-       * 개발 디버깅은 console.log만 사용
-       */
-      console.log('[LOGIN_FAIL_SAFE]', error)
-
-      /** 🔥 수정 이유:
-       * 사용자에게는 한글 메시지만 노출
+       * raw Firebase error를 console에 출력하지 않음
+       * 사용자에게는 안전한 한글 메시지만 노출
        */
       setErr(mapFirebaseError(error))
     } finally {
@@ -275,7 +285,10 @@ export default function LoginPage() {
         </div>
 
         {/* ✅ 기존 form 유지 */}
-        <form onSubmit={onSubmit} className="relative space-y-4">
+        <form
+          onSubmit={onSubmit}
+          className="relative space-y-4"
+        >
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-300">
               이메일
@@ -342,7 +355,10 @@ export default function LoginPage() {
         {/* 🔥 DEV LOGIN 유지 */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6">
-            <button onClick={handleDevLogin} className="w-full">
+            <button
+              onClick={handleDevLogin}
+              className="w-full"
+            >
               ⚡ 개발자 로그인
             </button>
           </div>
@@ -350,7 +366,10 @@ export default function LoginPage() {
 
         {/* ✅ 기존 로그아웃 유지 */}
         <div className="mt-6">
-          <button onClick={handleLogout} className="w-full">
+          <button
+            onClick={handleLogout}
+            className="w-full"
+          >
             로그아웃
           </button>
         </div>
