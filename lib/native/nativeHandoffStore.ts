@@ -279,6 +279,7 @@ then
           'ZCARD',
           oldAnonymousKey
         )
+
         if oldAnonymousCount >= cap then
           return 'OWNER_DEVICE_LIMIT_REACHED'
         end
@@ -545,7 +546,6 @@ end
 return 'LINKED_USER'
 `
 
-
 const LOGOUT_NATIVE_SURFACE_SCRIPT = `
 local sessionKey = KEYS[1]
 local oldSurfaceKey = KEYS[2]
@@ -570,7 +570,7 @@ if
   not newSurfaceTtlMs or
   newSurfaceTtlMs <= 0
 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_INPUT'
 end
 
 local oldBoundInstallationId = redis.call(
@@ -603,10 +603,13 @@ end
 
 if
   not hasInstallationBinding or
-  not hasGenerationBinding or
-  oldRevokedAt
+  not hasGenerationBinding
 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_SURFACE_FIELDS_MISSING'
+end
+
+if oldRevokedAt then
+  return 'BOUND_FAIL_SURFACE_REVOKED'
 end
 
 local oldSurfaceTtlMs = redis.call(
@@ -615,7 +618,7 @@ local oldSurfaceTtlMs = redis.call(
 )
 
 if not oldSurfaceTtlMs or oldSurfaceTtlMs <= 0 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_SURFACE_TTL'
 end
 
 local oldSurfaceExpiresAt = tonumber(
@@ -630,7 +633,7 @@ if
   not oldSurfaceExpiresAt or
   oldSurfaceExpiresAt <= nowMs
 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_SURFACE_EXPIRED'
 end
 
 local rawSession = redis.call(
@@ -639,7 +642,7 @@ local rawSession = redis.call(
 )
 
 if not rawSession then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_SESSION_MISSING'
 end
 
 local sessionOk, sessionValue = pcall(
@@ -649,11 +652,16 @@ local sessionOk, sessionValue = pcall(
 
 if
   not sessionOk or
-  type(sessionValue) ~= 'table' or
+  type(sessionValue) ~= 'table'
+then
+  return 'BOUND_FAIL_SESSION_JSON'
+end
+
+if
   type(sessionValue.userId) ~= 'string' or
   sessionValue.userId == ''
 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_SESSION_USER'
 end
 
 local sessionUserId = sessionValue.userId
@@ -666,7 +674,7 @@ local installationKey =
   installationPrefix .. oldBoundInstallationId
 
 if redis.call('EXISTS', installationKey) ~= 1 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_INSTALLATION_MISSING'
 end
 
 local installationBoundSurfaceRef = redis.call(
@@ -680,11 +688,12 @@ local installationGeneration = redis.call(
   'surfaceBindingGeneration'
 )
 
-if
-  installationBoundSurfaceRef ~= oldSurfaceRef or
-  installationGeneration ~= oldBindingGeneration
-then
-  return 'BOUND_VERIFICATION_FAILED'
+if installationBoundSurfaceRef ~= oldSurfaceRef then
+  return 'BOUND_FAIL_REVERSE_SURFACE'
+end
+
+if installationGeneration ~= oldBindingGeneration then
+  return 'BOUND_FAIL_GENERATION'
 end
 
 local credentialHash = redis.call(
@@ -707,14 +716,19 @@ local surfaceBindingExpiresAt = tonumber(
   ) or ''
 )
 
+if not credentialHash or not credentialExpiresAt then
+  return 'BOUND_FAIL_CREDENTIAL'
+end
+
+if credentialExpiresAt <= nowMs then
+  return 'BOUND_FAIL_CREDENTIAL_EXPIRED'
+end
+
 if
-  not credentialHash or
-  not credentialExpiresAt or
-  credentialExpiresAt <= nowMs or
   not surfaceBindingExpiresAt or
   surfaceBindingExpiresAt <= nowMs
 then
-  return 'BOUND_VERIFICATION_FAILED'
+  return 'BOUND_FAIL_BINDING_LEASE'
 end
 
 local activeOwnerKind = redis.call(
@@ -728,11 +742,12 @@ local activeOwnerRef = redis.call(
   'activeOwnerRef'
 )
 
-if
-  activeOwnerKind ~= 'USER' or
-  activeOwnerRef ~= sessionUserId
-then
-  return 'BOUND_VERIFICATION_FAILED'
+if activeOwnerKind ~= 'USER' then
+  return 'BOUND_FAIL_ACTIVE_OWNER_KIND'
+end
+
+if activeOwnerRef ~= sessionUserId then
+  return 'BOUND_FAIL_ACTIVE_OWNER_REF'
 end
 
 local linkedAnonymousOwnerRef = redis.call(
@@ -1007,11 +1022,28 @@ export async function redeemNativeHandoff(
   throw new Error('NATIVE_HANDOFF_REDEEM_FAILED')
 }
 
+export type NativeLogoutBoundFailureResult =
+  | 'BOUND_FAIL_INPUT'
+  | 'BOUND_FAIL_SURFACE_FIELDS_MISSING'
+  | 'BOUND_FAIL_SURFACE_REVOKED'
+  | 'BOUND_FAIL_SURFACE_TTL'
+  | 'BOUND_FAIL_SURFACE_EXPIRED'
+  | 'BOUND_FAIL_SESSION_MISSING'
+  | 'BOUND_FAIL_SESSION_JSON'
+  | 'BOUND_FAIL_SESSION_USER'
+  | 'BOUND_FAIL_INSTALLATION_MISSING'
+  | 'BOUND_FAIL_REVERSE_SURFACE'
+  | 'BOUND_FAIL_GENERATION'
+  | 'BOUND_FAIL_CREDENTIAL'
+  | 'BOUND_FAIL_CREDENTIAL_EXPIRED'
+  | 'BOUND_FAIL_BINDING_LEASE'
+  | 'BOUND_FAIL_ACTIVE_OWNER_KIND'
+  | 'BOUND_FAIL_ACTIVE_OWNER_REF'
 
 export type NativeLogoutResult =
   | 'LOGGED_OUT_UNBOUND'
   | 'LOGGED_OUT_ROTATED'
-  | 'BOUND_VERIFICATION_FAILED'
+  | NativeLogoutBoundFailureResult
   | 'OWNER_DEVICE_LIMIT_REACHED'
   | 'NEW_SURFACE_CONFLICT'
 
@@ -1037,6 +1069,29 @@ export async function logoutWebSessionOnly(
   }
 
   return 'LOGGED_OUT_UNBOUND'
+}
+
+function isNativeLogoutBoundFailureResult(
+  result: unknown,
+): result is NativeLogoutBoundFailureResult {
+  return (
+    result === 'BOUND_FAIL_INPUT' ||
+    result === 'BOUND_FAIL_SURFACE_FIELDS_MISSING' ||
+    result === 'BOUND_FAIL_SURFACE_REVOKED' ||
+    result === 'BOUND_FAIL_SURFACE_TTL' ||
+    result === 'BOUND_FAIL_SURFACE_EXPIRED' ||
+    result === 'BOUND_FAIL_SESSION_MISSING' ||
+    result === 'BOUND_FAIL_SESSION_JSON' ||
+    result === 'BOUND_FAIL_SESSION_USER' ||
+    result === 'BOUND_FAIL_INSTALLATION_MISSING' ||
+    result === 'BOUND_FAIL_REVERSE_SURFACE' ||
+    result === 'BOUND_FAIL_GENERATION' ||
+    result === 'BOUND_FAIL_CREDENTIAL' ||
+    result === 'BOUND_FAIL_CREDENTIAL_EXPIRED' ||
+    result === 'BOUND_FAIL_BINDING_LEASE' ||
+    result === 'BOUND_FAIL_ACTIVE_OWNER_KIND' ||
+    result === 'BOUND_FAIL_ACTIVE_OWNER_REF'
+  )
 }
 
 export async function logoutNativeSurfaceSession({
@@ -1069,7 +1124,7 @@ export async function logoutNativeSurfaceSession({
   if (
     result === 'LOGGED_OUT_UNBOUND' ||
     result === 'LOGGED_OUT_ROTATED' ||
-    result === 'BOUND_VERIFICATION_FAILED' ||
+    isNativeLogoutBoundFailureResult(result) ||
     result === 'OWNER_DEVICE_LIMIT_REACHED' ||
     result === 'NEW_SURFACE_CONFLICT'
   ) {

@@ -6,6 +6,7 @@ import { cookies } from 'next/headers'
 import {
   logoutNativeSurfaceSession,
   logoutWebSessionOnly,
+  type NativeLogoutBoundFailureResult,
   type NativeLogoutResult,
 } from '@/lib/native/nativeHandoffStore'
 import {
@@ -66,6 +67,20 @@ function assertNever(value: never): never {
   throw new Error('UNHANDLED_NATIVE_LOGOUT_RESULT')
 }
 
+function boundFailureResponse(
+  result: NativeLogoutBoundFailureResult,
+): NextResponse {
+  void result
+
+  return json(
+    {
+      ok: false,
+      error: 'BOUND_LOGOUT_VERIFICATION_FAILED',
+    },
+    409,
+  )
+}
+
 function failureResponse(
   result: Exclude<
     NativeLogoutResult,
@@ -73,14 +88,23 @@ function failureResponse(
   >,
 ): NextResponse {
   switch (result) {
-    case 'BOUND_VERIFICATION_FAILED':
-      return json(
-        {
-          ok: false,
-          error: 'BOUND_LOGOUT_VERIFICATION_FAILED',
-        },
-        409,
-      )
+    case 'BOUND_FAIL_INPUT':
+    case 'BOUND_FAIL_SURFACE_FIELDS_MISSING':
+    case 'BOUND_FAIL_SURFACE_REVOKED':
+    case 'BOUND_FAIL_SURFACE_TTL':
+    case 'BOUND_FAIL_SURFACE_EXPIRED':
+    case 'BOUND_FAIL_SESSION_MISSING':
+    case 'BOUND_FAIL_SESSION_JSON':
+    case 'BOUND_FAIL_SESSION_USER':
+    case 'BOUND_FAIL_INSTALLATION_MISSING':
+    case 'BOUND_FAIL_REVERSE_SURFACE':
+    case 'BOUND_FAIL_GENERATION':
+    case 'BOUND_FAIL_CREDENTIAL':
+    case 'BOUND_FAIL_CREDENTIAL_EXPIRED':
+    case 'BOUND_FAIL_BINDING_LEASE':
+    case 'BOUND_FAIL_ACTIVE_OWNER_KIND':
+    case 'BOUND_FAIL_ACTIVE_OWNER_REF':
+      return boundFailureResponse(result)
 
     case 'OWNER_DEVICE_LIMIT_REACHED':
       return json(
