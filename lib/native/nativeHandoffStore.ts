@@ -741,86 +741,99 @@ local activeOwnerRef = redis.call(
   installationKey,
   'activeOwnerRef'
 )
-
-if activeOwnerKind ~= 'USER' then
-  return 'BOUND_FAIL_ACTIVE_OWNER_KIND'
-end
-
-if activeOwnerRef ~= sessionUserId then
-  return 'BOUND_FAIL_ACTIVE_OWNER_REF'
-end
-
 local linkedAnonymousOwnerRef = redis.call(
   'HGET',
   installationKey,
   'linkedAnonymousOwnerRef'
 )
 
-if linkedAnonymousOwnerRef then
-  local anonymousOwnerKey =
-    anonymousPrefix .. linkedAnonymousOwnerRef
-
-  redis.call(
-    'ZREMRANGEBYSCORE',
-    anonymousOwnerKey,
-    '-inf',
-    nowMs
-  )
-
-  local existingAnonymousMember = redis.call(
-    'ZSCORE',
-    anonymousOwnerKey,
-    oldBoundInstallationId
-  )
-
-  if not existingAnonymousMember then
-    local anonymousCount = redis.call(
-      'ZCARD',
-      anonymousOwnerKey
-    )
-
-    if anonymousCount >= cap then
-      return 'OWNER_DEVICE_LIMIT_REACHED'
-    end
+if activeOwnerKind == 'USER' then
+  if activeOwnerRef ~= sessionUserId then
+    return 'BOUND_FAIL_ACTIVE_OWNER_REF'
   end
+elseif activeOwnerKind == 'ANONYMOUS_INSTALLATION' then
+  if
+    not activeOwnerRef or
+    not linkedAnonymousOwnerRef or
+    activeOwnerRef ~= linkedAnonymousOwnerRef
+  then
+    return 'BOUND_FAIL_ACTIVE_OWNER_REF'
+  end
+elseif activeOwnerKind == 'UNASSOCIATED' then
+  if activeOwnerRef or linkedAnonymousOwnerRef then
+    return 'BOUND_FAIL_ACTIVE_OWNER_REF'
+  end
+else
+  return 'BOUND_FAIL_ACTIVE_OWNER_KIND'
 end
 
-redis.call(
-  'ZREM',
-  userPrefix .. sessionUserId,
-  oldBoundInstallationId
-)
+if activeOwnerKind == 'USER' then
+  if linkedAnonymousOwnerRef then
+    local anonymousOwnerKey =
+      anonymousPrefix .. linkedAnonymousOwnerRef
 
-if linkedAnonymousOwnerRef then
+    redis.call(
+      'ZREMRANGEBYSCORE',
+      anonymousOwnerKey,
+      '-inf',
+      nowMs
+    )
+
+    local existingAnonymousMember = redis.call(
+      'ZSCORE',
+      anonymousOwnerKey,
+      oldBoundInstallationId
+    )
+
+    if not existingAnonymousMember then
+      local anonymousCount = redis.call(
+        'ZCARD',
+        anonymousOwnerKey
+      )
+
+      if anonymousCount >= cap then
+        return 'OWNER_DEVICE_LIMIT_REACHED'
+      end
+    end
+  end
+
   redis.call(
-    'ZADD',
-    anonymousPrefix .. linkedAnonymousOwnerRef,
-    credentialExpiresAt,
+    'ZREM',
+    userPrefix .. sessionUserId,
     oldBoundInstallationId
   )
-  redis.call(
-    'HSET',
-    installationKey,
-    'activeOwnerKind', 'ANONYMOUS_INSTALLATION',
-    'activeOwnerRef', linkedAnonymousOwnerRef,
-    'ownerAssociationExpiresAt', tostring(credentialExpiresAt),
-    'ownerLinkedAt', tostring(nowMs),
-    'updatedAt', tostring(nowMs)
-  )
-else
-  redis.call(
-    'HSET',
-    installationKey,
-    'activeOwnerKind', 'UNASSOCIATED',
-    'updatedAt', tostring(nowMs)
-  )
-  redis.call(
-    'HDEL',
-    installationKey,
-    'activeOwnerRef',
-    'ownerAssociationExpiresAt',
-    'ownerLinkedAt'
-  )
+
+  if linkedAnonymousOwnerRef then
+    redis.call(
+      'ZADD',
+      anonymousPrefix .. linkedAnonymousOwnerRef,
+      credentialExpiresAt,
+      oldBoundInstallationId
+    )
+    redis.call(
+      'HSET',
+      installationKey,
+      'activeOwnerKind', 'ANONYMOUS_INSTALLATION',
+      'activeOwnerRef', linkedAnonymousOwnerRef,
+      'ownerAssociationExpiresAt', tostring(credentialExpiresAt),
+      'ownerLinkedAt', tostring(nowMs),
+      'updatedAt', tostring(nowMs)
+    )
+  else
+    redis.call(
+      'HSET',
+      installationKey,
+      'activeOwnerKind', 'UNASSOCIATED',
+      'updatedAt', tostring(nowMs)
+    )
+    redis.call(
+      'HDEL',
+      installationKey,
+      'activeOwnerRef',
+      'ownerAssociationExpiresAt',
+      'ownerLinkedAt'
+    )
+  end
 end
 
 local newGeneration = redis.call(
