@@ -19,6 +19,10 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+type LogoutLogResult =
+  | NativeLogoutResult
+  | 'EXCEPTION'
+
 function json(
   body: Record<string, unknown>,
   status = 200,
@@ -102,6 +106,8 @@ function failureResponse(
 }
 
 export async function POST() {
+  let finalResult: LogoutLogResult = 'EXCEPTION'
+
   try {
     const cookieStore = await cookies()
     const sessionId =
@@ -115,7 +121,8 @@ export async function POST() {
       )
 
     if (!oldSurfaceRef) {
-      await logoutWebSessionOnly(sessionId)
+      finalResult =
+        await logoutWebSessionOnly(sessionId)
 
       const res = json({ ok: true })
       clearSessionCookie(res)
@@ -144,6 +151,8 @@ export async function POST() {
         continue
       }
 
+      finalResult = result
+
       if (result === 'LOGGED_OUT_UNBOUND') {
         const res = json({ ok: true })
         clearSessionCookie(res)
@@ -165,11 +174,18 @@ export async function POST() {
       return failureResponse(result)
     }
 
+    finalResult = 'NEW_SURFACE_CONFLICT'
     return failureResponse('NEW_SURFACE_CONFLICT')
   } catch {
+    finalResult = 'EXCEPTION'
+
     return json(
       { ok: false, message: '로그아웃 실패' },
       500,
+    )
+  } finally {
+    console.info(
+      `[NATIVE_LOGOUT_RESULT] ${finalResult}`,
     )
   }
 }
