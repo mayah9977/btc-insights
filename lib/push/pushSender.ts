@@ -381,6 +381,9 @@ function createMulticastMessage(
         Urgency: "high",
       },
     },
+    android: {
+      priority: "high" as const,
+    },
     tokens: recipients.map(
       recipient => recipient.token,
     ),
