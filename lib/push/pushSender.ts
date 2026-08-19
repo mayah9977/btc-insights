@@ -151,12 +151,110 @@ type NativeRecipientLookupResult =
   | {
       status: "OK";
       recipients: NativePushRecipient[];
+      candidateCount: number;
+      tokenCount: number;
     }
   | {
       status: "FAILED";
       recipients: [];
+      candidateCount: number;
+      tokenCount: number;
       error: Error;
     };
+
+type PushDeliveryAggregate = {
+  webTokenCount: number;
+  nativeCandidateCount: number;
+  nativeTokenCount: number;
+  webSelectedCount: number;
+  nativeSelectedCount: number;
+  dedupedTotalCount: number;
+  webSuccessCount: number;
+  webFinalFailureCount: number;
+  webRetryableFailureCount: number;
+  webCallFailureCount: number;
+  nativeSuccessCount: number;
+  nativeFinalFailureCount: number;
+  nativeRetryableFailureCount: number;
+  nativeCallFailureCount: number;
+  nativeLookupFailed: boolean;
+};
+
+function createPushDeliveryAggregate(): PushDeliveryAggregate {
+  return {
+    webTokenCount: 0,
+    nativeCandidateCount: 0,
+    nativeTokenCount: 0,
+    webSelectedCount: 0,
+    nativeSelectedCount: 0,
+    dedupedTotalCount: 0,
+    webSuccessCount: 0,
+    webFinalFailureCount: 0,
+    webRetryableFailureCount: 0,
+    webCallFailureCount: 0,
+    nativeSuccessCount: 0,
+    nativeFinalFailureCount: 0,
+    nativeRetryableFailureCount: 0,
+    nativeCallFailureCount: 0,
+    nativeLookupFailed: false,
+  };
+}
+
+function createAggregateEmitter(
+  aggregate: PushDeliveryAggregate,
+) {
+  let emitted = false;
+
+  return (
+    finalDeliveryStatus:
+      SendPushDetailedResult["status"],
+  ): void => {
+    if (emitted) {
+      return;
+    }
+
+    emitted = true;
+
+    try {
+      console.info("[PUSH_DELIVERY_AGGREGATE]", {
+        WEB_TOKEN_COUNT:
+          aggregate.webTokenCount,
+        NATIVE_CANDIDATE_COUNT:
+          aggregate.nativeCandidateCount,
+        NATIVE_TOKEN_COUNT:
+          aggregate.nativeTokenCount,
+        WEB_SELECTED_COUNT:
+          aggregate.webSelectedCount,
+        NATIVE_SELECTED_COUNT:
+          aggregate.nativeSelectedCount,
+        DEDUPED_TOTAL_COUNT:
+          aggregate.dedupedTotalCount,
+        WEB_SUCCESS_COUNT:
+          aggregate.webSuccessCount,
+        WEB_FINAL_FAILURE_COUNT:
+          aggregate.webFinalFailureCount,
+        WEB_RETRYABLE_FAILURE_COUNT:
+          aggregate.webRetryableFailureCount,
+        WEB_CALL_FAILURE_COUNT:
+          aggregate.webCallFailureCount,
+        NATIVE_SUCCESS_COUNT:
+          aggregate.nativeSuccessCount,
+        NATIVE_FINAL_FAILURE_COUNT:
+          aggregate.nativeFinalFailureCount,
+        NATIVE_RETRYABLE_FAILURE_COUNT:
+          aggregate.nativeRetryableFailureCount,
+        NATIVE_CALL_FAILURE_COUNT:
+          aggregate.nativeCallFailureCount,
+        NATIVE_LOOKUP_FAILED:
+          aggregate.nativeLookupFailed,
+        FINAL_DELIVERY_STATUS:
+          finalDeliveryStatus,
+      });
+    } catch {
+      // Diagnostics must not affect delivery.
+    }
+  };
+}
 
 function createNativeLookupError(): Error {
   return new Error(NATIVE_LOOKUP_ERROR_MESSAGE);
@@ -165,6 +263,9 @@ function createNativeLookupError(): Error {
 async function lookupNativeRecipients(
   userId: string,
 ): Promise<NativeRecipientLookupResult> {
+  let candidateCount = 0;
+  let tokenCount = 0;
+
   try {
     const ownerResolution =
       await resolveNativeOwnerLookupForUserId(userId);
@@ -173,6 +274,8 @@ async function lookupNativeRecipients(
       return {
         status: "FAILED",
         recipients: [],
+        candidateCount,
+        tokenCount,
         error: createNativeLookupError(),
       };
     }
@@ -186,9 +289,14 @@ async function lookupNativeRecipients(
       return {
         status: "FAILED",
         recipients: [],
+        candidateCount,
+        tokenCount,
         error: createNativeLookupError(),
       };
     }
+
+    candidateCount =
+      ownerLookup.installations.length;
 
     const recipients: NativePushRecipient[] = [];
 
@@ -208,16 +316,21 @@ async function lookupNativeRecipients(
           installation.installationId,
         token,
       });
+      tokenCount += 1;
     }
 
     return {
       status: "OK",
       recipients,
+      candidateCount,
+      tokenCount,
     };
   } catch {
     return {
       status: "FAILED",
       recipients: [],
+      candidateCount,
+      tokenCount,
       error: createNativeLookupError(),
     };
   }
@@ -364,7 +477,13 @@ export async function sendPushDetailedToUser({
   body,
   data,
 }: SendPushDetailedInput): Promise<SendPushDetailedResult> {
+  const aggregate = createPushDeliveryAggregate();
+  const emitAggregateOnce =
+    createAggregateEmitter(aggregate);
+
   if (isPushDeliveryDisabled()) {
+    emitAggregateOnce("SKIPPED_DELIVERY_DISABLED");
+
     return {
       status: "SKIPPED_DELIVERY_DISABLED",
       tokenCount: null,
@@ -380,7 +499,10 @@ export async function sendPushDetailedToUser({
 
   try {
     webTokens = await getUserPushTokens(userId);
+    aggregate.webTokenCount = webTokens.length;
   } catch (error: unknown) {
+    emitAggregateOnce("FAILED_TOKEN_LOOKUP");
+
     return {
       status: "FAILED_TOKEN_LOOKUP",
       userId,
@@ -399,10 +521,19 @@ export async function sendPushDetailedToUser({
   const nativeLookupFailed =
     nativeLookup.status === "FAILED";
 
+  aggregate.nativeCandidateCount =
+    nativeLookup.candidateCount;
+  aggregate.nativeTokenCount =
+    nativeLookup.tokenCount;
+  aggregate.nativeLookupFailed =
+    nativeLookupFailed;
+
   if (
     nativeLookupFailed &&
     webTokens.length === 0
   ) {
+    emitAggregateOnce("FAILED_TOKEN_LOOKUP");
+
     return {
       status: "FAILED_TOKEN_LOOKUP",
       userId,
@@ -423,7 +554,20 @@ export async function sendPushDetailedToUser({
       : [],
   );
 
+  aggregate.webSelectedCount =
+    recipients.filter(
+      recipient => recipient.transport === "WEB",
+    ).length;
+  aggregate.nativeSelectedCount =
+    recipients.filter(
+      recipient => recipient.transport === "NATIVE",
+    ).length;
+  aggregate.dedupedTotalCount =
+    recipients.length;
+
   if (recipients.length === 0) {
+    emitAggregateOnce("SKIPPED_NO_TOKEN");
+
     return {
       status: "SKIPPED_NO_TOKEN",
       userId,
@@ -457,6 +601,13 @@ export async function sendPushDetailedToUser({
 
     adminMessaging = firebaseAdmin.adminMessaging;
   } catch (error: unknown) {
+    aggregate.webCallFailureCount +=
+      aggregate.webSelectedCount;
+    aggregate.nativeCallFailureCount +=
+      aggregate.nativeSelectedCount;
+
+    emitAggregateOnce("FAILED_CALL");
+
     return {
       status: "FAILED_CALL",
       userId,
@@ -503,6 +654,13 @@ export async function sendPushDetailedToUser({
 
           if (tokenResponse.success) {
             successCount += 1;
+
+            if (recipient.transport === "WEB") {
+              aggregate.webSuccessCount += 1;
+            } else {
+              aggregate.nativeSuccessCount += 1;
+            }
+
             return;
           }
 
@@ -517,15 +675,36 @@ export async function sendPushDetailedToUser({
           ) {
             finalFailureCount += 1;
             finalFailureRecipients.push(recipient);
+
+            if (recipient.transport === "WEB") {
+              aggregate.webFinalFailureCount += 1;
+            } else {
+              aggregate.nativeFinalFailureCount += 1;
+            }
+
             return;
           }
 
           retryableFailureCount += 1;
+
+          if (recipient.transport === "WEB") {
+            aggregate.webRetryableFailureCount += 1;
+          } else {
+            aggregate.nativeRetryableFailureCount += 1;
+          }
         },
       );
     } catch (error: unknown) {
       callFailureRecipientCount += chunk.length;
       retryableFailureCount += chunk.length;
+
+      for (const recipient of chunk) {
+        if (recipient.transport === "WEB") {
+          aggregate.webCallFailureCount += 1;
+        } else {
+          aggregate.nativeCallFailureCount += 1;
+        }
+      }
 
       if (firstCallError === null) {
         firstCallError = error;
@@ -545,6 +724,8 @@ export async function sendPushDetailedToUser({
     responseCount === 0 &&
     callFailureRecipientCount === tokenCount
   ) {
+    emitAggregateOnce("FAILED_CALL");
+
     return {
       status: "FAILED_CALL",
       userId,
@@ -593,6 +774,8 @@ export async function sendPushDetailedToUser({
   } else {
     status = "FAILED_RETRYABLE";
   }
+
+  emitAggregateOnce(status);
 
   return {
     status,
